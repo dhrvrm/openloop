@@ -1,0 +1,19 @@
+.DS_Store
+.worktrees/
+.build/
+.swiftpm/
+build/
+DerivedData/
+
+# Private evaluation inputs must never enter version control.
+Fixtures/audio/
+Fixtures/private/
+
+# Downloaded model weights and local runtime state.
+Models/
+RuntimeData/
+
+# Signing and notarization secrets or exported certificates.
+*.p12
+*.provisionprofile
+*.mobileprovision
