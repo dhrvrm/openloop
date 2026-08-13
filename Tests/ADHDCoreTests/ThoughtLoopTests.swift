@@ -1,0 +1,80 @@
+import Foundation
+import Testing
+@testable import ADHDCore
+
+private actor MemoryRepository: ThoughtRepository {
+    var captures: [UUID: RawCapture] = [:]
+    var intentions: [UUID: Intention] = [:]
+
+    func save(capture: RawCapture) async throws { captures[capture.id] = capture }
+    func save(intention: Intention) async throws { intentions[intention.id] = intention }
+    func intention(id: UUID) async throws -> Intention? { intentions[id] }
+    func openIntentions() async throws -> [Intention] {
+        intentions.values.filter { $0.state != .closed && $0.state != .released }
+    }
+
+    func captureCount() -> Int { captures.count }
+}
+
+private struct FixedClarifier: ClarificationProvider {
+    func propose(for capture: RawCapture) async throws -> ClarificationProposal {
+        try ClarificationProposal(
+            captureID: capture.id,
+            disposition: .action,
+            desiredOutcome: "Reply to Riya",
+            nextAction: "Open Riya's latest message",
+            confidence: 1
+        )
+    }
+}
+
+private struct FailingClarifier: ClarificationProvider {
+    struct Failure: Error {}
+
+    func propose(for capture: RawCapture) async throws -> ClarificationProposal {
+        throw Failure()
+    }
+}
+
+@Test func capturePersistsBeforeItBecomesAnIntention() async throws {
+    let repository = MemoryRepository()
+    let loop = ThoughtLoop(repository: repository, clarifier: FixedClarifier())
+
+    let result = try await loop.capture(text: "reply to Riya", at: .now)
+
+    #expect(await repository.captures[result.capture.id] != nil)
+    #expect(result.intention?.nextAction == "Open Riya's latest message")
+    #expect(try await repository.openIntentions().count == 1)
+}
+
+@Test func captureRemainsSavedWhenClarificationFails() async {
+    let repository = MemoryRepository()
+    let loop = ThoughtLoop(repository: repository, clarifier: FailingClarifier())
+
+    await #expect(throws: FailingClarifier.Failure.self) {
+        try await loop.capture(text: "keep this thought", at: .now)
+    }
+    #expect(await repository.captureCount() == 1)
+}
+
+@Test func lifecycleTransitionsArePersistedThroughTheLoop() async throws {
+    let repository = MemoryRepository()
+    let loop = ThoughtLoop(repository: repository, clarifier: FixedClarifier())
+    let result = try await loop.capture(text: "reply to Riya", at: .now)
+    let id = try #require(result.intention?.id)
+
+    _ = try await loop.start(id)
+    let packet = try ReturnPacket(
+        capturedAt: .now,
+        justCompleted: "Opened the message",
+        nextAction: "Draft the first sentence",
+        blocker: nil,
+        references: []
+    )
+    _ = try await loop.interrupt(id, with: packet)
+    _ = try await loop.resume(id)
+    let closed = try await loop.close(id)
+
+    #expect(closed.state == .closed)
+    #expect(try await repository.intention(id: id)?.state == .closed)
+}
