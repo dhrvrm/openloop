@@ -1,4 +1,5 @@
 import ADHDCore
+import Darwin
 import Foundation
 import LocalStore
 import RuleClarifier
@@ -36,7 +37,9 @@ struct ThoughtLoopCommand {
         do {
             try await run(Array(CommandLine.arguments.dropFirst()))
         } catch {
-            print("Error: \(error.localizedDescription)")
+            let message = "Error: \(error.localizedDescription)\n"
+            FileHandle.standardError.write(Data(message.utf8))
+            exit(EXIT_FAILURE)
         }
     }
 
@@ -131,6 +134,6 @@ struct ThoughtLoopCommand {
     private static func printState(_ intention: Intention) {
         print("ID: \(intention.id.uuidString)")
         print("State: \(intention.state.rawValue)")
-        print("Next: \(intention.nextAction)")
+        print("Next: \(intention.returnPacket?.nextAction ?? intention.nextAction)")
     }
 }

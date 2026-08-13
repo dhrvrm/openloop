@@ -89,3 +89,28 @@ with text. Ambient speech and local semantic memory arrive later.
 4. Add local voice capture and benchmark speech recognition.
 5. Add evidence-backed compressed memory.
 6. Add ambient context only when it improves the ADHD loop.
+
+## Development verification
+
+Run `Scripts/verify.sh` to execute the core tests and create a release build.
+`Scripts/test.sh` includes the framework-path workaround required by the current
+Command Line Tools installation.
+
+Try the first local behavior with:
+
+```bash
+swift run thought-loop capture "todo: open the latest design"
+swift run thought-loop list
+```
+
+An action can be moved through the complete durable loop with:
+
+```bash
+swift run thought-loop start <id>
+swift run thought-loop interrupt <id> "write the first sentence"
+swift run thought-loop resume <id>
+swift run thought-loop close <id>
+```
+
+Set `OPENLOOP_DATA_DIR` to use an isolated development vault. Without it, the
+CLI stores data in `~/Library/Application Support/OpenLoopADHD`.

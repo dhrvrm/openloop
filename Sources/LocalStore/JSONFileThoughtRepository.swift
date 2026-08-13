@@ -22,10 +22,11 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         fileURL = directory.appendingPathComponent("thought-loop.json")
 
         if FileManager.default.fileExists(atPath: fileURL.path) {
+            let data = try Data(contentsOf: fileURL)
             do {
                 snapshot = try JSONDecoder().decode(
                     Snapshot.self,
-                    from: Data(contentsOf: fileURL)
+                    from: data
                 )
             } catch {
                 throw JSONFileThoughtRepositoryError.corruptSnapshot
