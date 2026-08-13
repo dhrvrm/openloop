@@ -8,11 +8,16 @@ let package = Package(
         .library(name: "ADHDCore", targets: ["ADHDCore"]),
         .library(name: "LocalStore", targets: ["LocalStore"]),
         .library(name: "RuleClarifier", targets: ["RuleClarifier"]),
+        .executable(name: "thought-loop", targets: ["ThoughtLoopCLI"]),
     ],
     targets: [
         .target(name: "ADHDCore"),
         .target(name: "LocalStore", dependencies: ["ADHDCore"]),
         .target(name: "RuleClarifier", dependencies: ["ADHDCore"]),
+        .executableTarget(
+            name: "ThoughtLoopCLI",
+            dependencies: ["ADHDCore", "LocalStore", "RuleClarifier"]
+        ),
         .testTarget(name: "ADHDCoreTests", dependencies: ["ADHDCore"]),
         .testTarget(name: "LocalStoreTests", dependencies: ["ADHDCore", "LocalStore"]),
         .testTarget(name: "RuleClarifierTests", dependencies: ["ADHDCore", "RuleClarifier"]),
