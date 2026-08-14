@@ -149,23 +149,23 @@ Commit: `feat: project focused Now and exact Return packets`.
 - Modify: `Sources/OpenLoopApp/OpenLoopApp.swift`
 - Create: `Tests/OpenLoopAppTests/FrontmostApplicationReferenceProviderTests.swift`
 
-- [ ] **Step 1: Test the local reference adapter seam**
+- [x] **Step 1: Test the local reference adapter seam**
 
 Inject a frontmost-application lookup closure and verify a named application becomes one readable reference while missing data yields none. Production uses `NSWorkspace.shared.frontmostApplication`; no Accessibility or Automation permission is requested.
 
-- [ ] **Step 2: Extend `AppModel` commands**
+- [x] **Step 2: Extend `AppModel` commands**
 
 Publish Return items and command errors. Add start, pause, continue, interrupt, resume, and finish methods that call `FocusLoop` then refresh. Keep capture acceptance and clarification behavior unchanged.
 
-- [ ] **Step 3: Build interactive Now and interruption capture**
+- [x] **Step 3: Build interactive Now and interruption capture**
 
 Now shows only outcome, exact next action, a neutral elapsed cue, and controls appropriate to the current focus state. Interrupt opens a compact sheet for just completed, exact next action, blocker, and newline-separated references; its next action defaults to the current one.
 
-- [ ] **Step 4: Build Return and menu controls**
+- [x] **Step 4: Build Return and menu controls**
 
 Add Return between Now and Later. Each packet displays all available recovery fields and Resume/Finish actions. The status menu exposes Capture, Now, Pause/Continue when applicable, Return, Later, a visible Private Mode item explaining that no sensing is active, and Quit.
 
-- [ ] **Step 5: Wire production services and run tests**
+- [x] **Step 5: Wire production services and run tests**
 
 Create `FocusLoop` with the encrypted repository and frontmost-app provider. Run `Scripts/test.sh --filter OpenLoopAppTests && Scripts/test.sh && swift build -c release`.
 

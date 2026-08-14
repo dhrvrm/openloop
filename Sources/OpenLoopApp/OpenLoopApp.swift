@@ -7,11 +7,13 @@ import RuleClarifier
 import VaultStore
 
 @MainActor
-private final class AppDelegate: NSObject, NSApplicationDelegate {
+private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var quickCapture: QuickCaptureController?
     private var mainWindow: MainWindowController?
     private var hotKey: GlobalHotKey?
+    private var model: AppModel?
+    private var pauseMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { await start() }
@@ -28,9 +30,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 keyProvider: keyProvider
             )
             let loop = ThoughtLoop(repository: repository, clarifier: RuleClarificationProvider())
+            let focusLoop = FocusLoop(
+                repository: repository,
+                composer: InterruptionSnapshotComposer(
+                    contextProvider: FrontmostApplicationReferenceProvider()
+                )
+            )
             let model = AppModel(
                 loop: loop,
-                readModels: ThoughtReadModels(repository: repository)
+                readModels: ThoughtReadModels(repository: repository),
+                focusLoop: focusLoop
             )
             _ = try await DevelopmentStoreMigrator().migrateIfNeeded(
                 from: directory,
@@ -52,6 +61,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             let mainWindow = MainWindowController(model: model)
             self.quickCapture = quickCapture
             self.mainWindow = mainWindow
+            self.model = model
             configureMenu(quickCapture: quickCapture, mainWindow: mainWindow)
             hotKey = try GlobalHotKey { [weak quickCapture] startedAt in
                 quickCapture?.show(startedAt: startedAt)
@@ -141,7 +151,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showCapture() { quickCapture?.show() }
     @objc private func showNow() { mainWindow?.show(tab: 0) }
-    @objc private func showLater() { mainWindow?.show(tab: 1) }
+    @objc private func showReturn() { mainWindow?.show(tab: 1) }
+    @objc private func showLater() { mainWindow?.show(tab: 2) }
+    @objc private func pauseOrContinue() {
+        guard let model, let item = model.now, let focus = item.focus else { return }
+        Task {
+            if focus.state == .paused {
+                await model.continueFocus(item.intentionID)
+            } else if focus.state == .active {
+                await model.pauseFocus(item.intentionID)
+            }
+        }
+    }
     @objc private func quit() { NSApp.terminate(nil) }
 
     private func configureMenu(
@@ -151,14 +172,47 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "OpenLoop")
         let menu = NSMenu()
+        menu.delegate = self
         menu.addItem(withTitle: "Capture", action: #selector(showCapture), keyEquivalent: "")
         menu.addItem(withTitle: "Now", action: #selector(showNow), keyEquivalent: "")
+        let pauseItem = menu.addItem(
+            withTitle: "Pause",
+            action: #selector(pauseOrContinue),
+            keyEquivalent: ""
+        )
+        pauseItem.isEnabled = false
+        pauseMenuItem = pauseItem
+        menu.addItem(withTitle: "Return", action: #selector(showReturn), keyEquivalent: "")
         menu.addItem(withTitle: "Later", action: #selector(showLater), keyEquivalent: "")
+        menu.addItem(.separator())
+        let privateMode = NSMenuItem(
+            title: "Private Mode — no sensing active",
+            action: nil,
+            keyEquivalent: ""
+        )
+        privateMode.state = .on
+        privateMode.isEnabled = false
+        menu.addItem(privateMode)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit OpenLoop", action: #selector(quit), keyEquivalent: "q")
         menu.items.forEach { $0.target = self }
         item.menu = menu
         statusItem = item
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard let pauseMenuItem else { return }
+        switch model?.now?.focus?.state {
+        case .active:
+            pauseMenuItem.title = "Pause"
+            pauseMenuItem.isEnabled = true
+        case .paused:
+            pauseMenuItem.title = "Continue"
+            pauseMenuItem.isEnabled = true
+        default:
+            pauseMenuItem.title = "Pause"
+            pauseMenuItem.isEnabled = false
+        }
     }
 
     private func dataDirectory() -> URL {
