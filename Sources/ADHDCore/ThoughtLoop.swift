@@ -23,12 +23,29 @@ public struct ThoughtLoop: Sendable {
     }
 
     public func capture(text: String, at date: Date) async throws -> CaptureResult {
+        let capture = try await accept(text: text, at: date)
+        return try await clarify(capture)
+    }
+
+    public func accept(text: String, at date: Date) async throws -> RawCapture {
         let capture = try RawCapture(createdAt: date, text: text)
         try await repository.save(capture: capture)
+        return capture
+    }
+
+    public func clarify(_ capture: RawCapture) async throws -> CaptureResult {
         let proposal = try await clarifier.propose(for: capture)
         try await repository.save(proposal: proposal)
 
-        let intention: Intention?
+        let intention = try await makeIntention(from: proposal, capture: capture)
+
+        return CaptureResult(capture: capture, proposal: proposal, intention: intention)
+    }
+
+    private func makeIntention(
+        from proposal: ClarificationProposal,
+        capture: RawCapture
+    ) async throws -> Intention? {
         if proposal.disposition == .action,
            let outcome = proposal.desiredOutcome,
            let nextAction = proposal.nextAction {
@@ -38,16 +55,13 @@ public struct ThoughtLoop: Sendable {
                 desiredOutcome: outcome,
                 nextAction: nextAction,
                 state: .open,
-                createdAt: date,
+                createdAt: capture.createdAt,
                 returnPacket: nil
             )
             try await repository.save(intention: value)
-            intention = value
-        } else {
-            intention = nil
+            return value
         }
-
-        return CaptureResult(capture: capture, proposal: proposal, intention: intention)
+        return nil
     }
 
     public func start(_ id: UUID) async throws -> Intention {

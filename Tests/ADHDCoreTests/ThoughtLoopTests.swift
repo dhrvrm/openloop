@@ -42,6 +42,42 @@ private struct FailingClarifier: ClarificationProvider {
     }
 }
 
+private actor CountingClarifier: ClarificationProvider {
+    private(set) var callCount = 0
+
+    func propose(for capture: RawCapture) async throws -> ClarificationProposal {
+        callCount += 1
+        return try ClarificationProposal(
+            captureID: capture.id,
+            disposition: .unclear,
+            desiredOutcome: nil,
+            nextAction: nil,
+            confidence: 1
+        )
+    }
+}
+
+@Test func acceptanceDoesNotWaitForClarification() async throws {
+    let repository = MemoryRepository()
+    let clarifier = CountingClarifier()
+    let loop = ThoughtLoop(repository: repository, clarifier: clarifier)
+
+    let capture = try await loop.accept(text: "keep this thought", at: .now)
+
+    #expect(await repository.captures[capture.id] == capture)
+    #expect(await clarifier.callCount == 0)
+}
+
+@Test func clarificationPersistsItsDecision() async throws {
+    let repository = MemoryRepository()
+    let loop = ThoughtLoop(repository: repository, clarifier: FixedClarifier())
+    let capture = try await loop.accept(text: "reply to Riya", at: .now)
+
+    let result = try await loop.clarify(capture)
+
+    #expect(try await repository.proposal(captureID: capture.id) == result.proposal)
+}
+
 @Test func capturePersistsBeforeItBecomesAnIntention() async throws {
     let repository = MemoryRepository()
     let loop = ThoughtLoop(repository: repository, clarifier: FixedClarifier())
