@@ -49,18 +49,20 @@ private struct MainView: View {
 @MainActor
 final class MainWindowController {
     private let window: NSWindow
-    private let view: MainView
+    private let model: AppModel
+    private let hostingController: NSHostingController<MainView>
 
     init(model: AppModel) {
-        view = MainView(model: model)
-        window = NSWindow(contentViewController: NSHostingController(rootView: view))
+        self.model = model
+        hostingController = NSHostingController(rootView: MainView(model: model))
+        window = NSWindow(contentViewController: hostingController)
         window.title = "OpenLoop ADHD"
         window.setContentSize(NSSize(width: 560, height: 420))
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
     }
 
     func show(tab: Int) {
-        view.selection = tab
+        hostingController.rootView = MainView(model: model, selection: tab)
         window.center()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)

@@ -35,17 +35,25 @@ public struct ThoughtLoop: Sendable {
 
     public func clarify(_ capture: RawCapture) async throws -> CaptureResult {
         let proposal = try await clarifier.propose(for: capture)
-        try await repository.save(proposal: proposal)
-
-        let intention = try await makeIntention(from: proposal, capture: capture)
+        let intention = makeIntention(from: proposal, capture: capture)
+        try await repository.save(proposal: proposal, intention: intention)
 
         return CaptureResult(capture: capture, proposal: proposal, intention: intention)
+    }
+
+    public func recoverUnclarifiedCaptures() async -> Int {
+        guard let captures = try? await repository.unclarifiedCaptures() else { return 0 }
+        var recovered = 0
+        for capture in captures {
+            if (try? await clarify(capture)) != nil { recovered += 1 }
+        }
+        return recovered
     }
 
     private func makeIntention(
         from proposal: ClarificationProposal,
         capture: RawCapture
-    ) async throws -> Intention? {
+    ) -> Intention? {
         if proposal.disposition == .action,
            let outcome = proposal.desiredOutcome,
            let nextAction = proposal.nextAction {
@@ -58,7 +66,6 @@ public struct ThoughtLoop: Sendable {
                 createdAt: capture.createdAt,
                 returnPacket: nil
             )
-            try await repository.save(intention: value)
             return value
         }
         return nil

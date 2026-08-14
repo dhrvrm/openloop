@@ -27,10 +27,12 @@ private struct Snapshot: Codable {
 
 public enum JSONFileThoughtRepositoryError: Error, Equatable {
     case corruptSnapshot
+    case storeMigrated
 }
 
 public actor JSONFileThoughtRepository: ThoughtRepository {
     private let fileURL: URL
+    private let storeLock: DevelopmentStoreLock
     private var snapshot: Snapshot
 
     public init(directory: URL) throws {
@@ -39,6 +41,7 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
             withIntermediateDirectories: true
         )
         fileURL = directory.appendingPathComponent("thought-loop.json")
+        storeLock = try DevelopmentStoreLock(directory: directory)
 
         if FileManager.default.fileExists(atPath: fileURL.path) {
             let data = try Data(contentsOf: fileURL)
@@ -65,6 +68,12 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         try persist()
     }
 
+    public func save(proposal: ClarificationProposal, intention: Intention?) async throws {
+        snapshot.proposals[proposal.captureID] = proposal
+        if let intention { snapshot.intentions[intention.id] = intention }
+        try persist()
+    }
+
     public func save(intention: Intention) async throws {
         snapshot.intentions[intention.id] = intention
         try persist()
@@ -83,6 +92,12 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
                 }
                 return $0.createdAt < $1.createdAt
             }
+    }
+
+    public func unclarifiedCaptures() async throws -> [RawCapture] {
+        snapshot.captures.values
+            .filter { snapshot.proposals[$0.id] == nil }
+            .sorted(by: Self.captureOrder)
     }
 
     public func intention(id: UUID) async throws -> Intention? {
@@ -113,6 +128,13 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
     }
 
     private func persist() throws {
+        try storeLock.lockExclusive()
+        defer { storeLock.unlock() }
+        let marker = fileURL.deletingLastPathComponent()
+            .appendingPathComponent("thought-loop.migrated")
+        guard FileManager.default.fileExists(atPath: marker.path) == false else {
+            throw JSONFileThoughtRepositoryError.storeMigrated
+        }
         let data = try JSONEncoder().encode(snapshot)
         try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
     }

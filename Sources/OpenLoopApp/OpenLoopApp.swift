@@ -36,7 +36,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 from: directory,
                 to: repository
             )
-            await model.refresh()
+            await model.recoverPendingClarification()
 
             if try await runDiagnosticIfRequested(
                 directory: directory,
@@ -99,8 +99,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             let count = diagnosticCount(arguments)
             let controller = QuickCaptureController(model: model)
             for _ in 0..<count {
+                let previousCount = controller.latency.samples.count
                 controller.show()
+                guard await controller.waitForSample(after: previousCount) else {
+                    print("capture-visible-timeout=true")
+                    exit(EXIT_FAILURE)
+                }
                 controller.hide()
+                guard await controller.waitUntilHidden() else {
+                    print("capture-hidden-timeout=true")
+                    exit(EXIT_FAILURE)
+                }
             }
             let p95 = controller.latency.p95 ?? .infinity
             print("capture-visible-p95-ms=\(p95)")

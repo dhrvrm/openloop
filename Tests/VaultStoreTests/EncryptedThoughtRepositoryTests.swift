@@ -100,6 +100,12 @@ private func temporaryDirectory() -> URL {
     #expect(FileManager.default.fileExists(
         atPath: legacyDirectory.appendingPathComponent("thought-loop.json").path
     ) == false)
+    #expect(FileManager.default.fileExists(
+        atPath: legacyDirectory.appendingPathComponent("thought-loop.migrated").path
+    ))
+    await #expect(throws: JSONFileThoughtRepositoryError.storeMigrated) {
+        try await legacy.save(capture: RawCapture(createdAt: .now, text: "too late"))
+    }
     let reopened = try EncryptedThoughtRepository(directory: vaultDirectory, keyData: fixedKey)
     #expect(try await reopened.captures(disposition: .memory) == [capture])
     #expect(try await DevelopmentStoreMigrator().migrateIfNeeded(
@@ -147,6 +153,32 @@ private func temporaryDirectory() -> URL {
     #expect(result == .vaultAlreadyInitialized)
     #expect(FileManager.default.fileExists(atPath: legacyFile.path))
     #expect(try await vault.empty() == false)
+}
+
+@Test func interruptedMigrationFinishesWhenVaultAlreadyContainsLegacySnapshot() async throws {
+    let root = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let legacyDirectory = root.appendingPathComponent("legacy", isDirectory: true)
+    let legacy = try JSONFileThoughtRepository(directory: legacyDirectory)
+    let capture = try RawCapture(createdAt: .now, text: "already imported")
+    try await legacy.save(capture: capture)
+    let snapshot = await legacy.developmentSnapshot()
+    let vault = try EncryptedThoughtRepository(
+        directory: root.appendingPathComponent("vault"),
+        keyData: fixedKey
+    )
+    try await vault.importDevelopmentSnapshot(snapshot)
+
+    let result = try await DevelopmentStoreMigrator().migrateIfNeeded(
+        from: legacyDirectory,
+        to: vault
+    )
+
+    #expect(result == .imported(count: 1))
+    #expect(FileManager.default.fileExists(
+        atPath: legacyDirectory.appendingPathComponent("thought-loop.json").path
+    ) == false)
+    #expect(try await vault.persistedDevelopmentSnapshot().captures == [capture])
 }
 
 @Test func twoRepositoryInstancesDoNotLoseUpdates() async throws {

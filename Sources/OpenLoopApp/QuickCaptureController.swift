@@ -7,6 +7,7 @@ final class QuickCaptureController: NSObject, NSTextFieldDelegate {
     private let status = NSTextField(labelWithString: "")
     private let model: AppModel
     private(set) var latency = CaptureLatency()
+    private var visibilityTask: Task<Void, Never>?
 
     init(model: AppModel) {
         self.model = model
@@ -26,13 +27,35 @@ final class QuickCaptureController: NSObject, NSTextFieldDelegate {
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         panel.makeFirstResponder(field)
-        let elapsed = startedAt.duration(to: .now)
-        let milliseconds = Double(elapsed.components.seconds) * 1_000
-            + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000
-        latency.record(milliseconds: milliseconds)
+        visibilityTask?.cancel()
+        let windowNumber = CGWindowID(panel.windowNumber)
+        visibilityTask = Task { [weak self] in
+            for _ in 0..<1_000 {
+                guard Task.isCancelled == false else { return }
+                if Self.isOnscreen(windowNumber) {
+                    let elapsed = startedAt.duration(to: .now)
+                    let milliseconds = Double(elapsed.components.seconds) * 1_000
+                        + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000
+                    self?.latency.record(milliseconds: milliseconds)
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(1))
+            }
+        }
     }
 
-    func hide() { panel.orderOut(nil) }
+    func hide() {
+        visibilityTask?.cancel()
+        panel.orderOut(nil)
+    }
+
+    func waitForSample(after previousCount: Int) async -> Bool {
+        for _ in 0..<1_000 {
+            if latency.samples.count > previousCount { return true }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        return false
+    }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         if selector == #selector(NSResponder.insertNewline(_:)) {
@@ -50,6 +73,7 @@ final class QuickCaptureController: NSObject, NSTextFieldDelegate {
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
+        panel.animationBehavior = .none
         panel.level = .floating
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
@@ -76,14 +100,42 @@ final class QuickCaptureController: NSObject, NSTextFieldDelegate {
     }
 
     private func submit() {
-        let text = field.stringValue
         Task {
-            if await model.submitCapture(text) {
-                field.stringValue = ""
-                hide()
-            } else {
-                status.stringValue = model.captureError ?? "Could not save."
-            }
+            _ = await submitCurrentText()
         }
+    }
+
+    @discardableResult
+    func submitCurrentText() async -> Bool {
+        if await model.submitCapture(field.stringValue) {
+            field.stringValue = ""
+            hide()
+            return true
+        }
+        status.stringValue = model.captureError ?? "Could not save."
+        return false
+    }
+
+    var textForTesting: String {
+        get { field.stringValue }
+        set { field.stringValue = newValue }
+    }
+
+    func waitUntilHidden() async -> Bool {
+        let windowNumber = CGWindowID(panel.windowNumber)
+        for _ in 0..<1_000 {
+            if Self.isOnscreen(windowNumber) == false { return true }
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        return false
+    }
+
+    private static func isOnscreen(_ windowNumber: CGWindowID) -> Bool {
+        guard let windows = CGWindowListCopyWindowInfo(
+            [.optionIncludingWindow],
+            windowNumber
+        ) as? [[String: Any]],
+        let window = windows.first else { return false }
+        return window[kCGWindowIsOnscreen as String] as? Bool == true
     }
 }

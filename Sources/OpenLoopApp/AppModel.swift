@@ -30,6 +30,7 @@ final class AppModel: ObservableObject {
                     await refresh()
                 } catch {
                     captureError = "Saved, but clarification is waiting."
+                    await refresh()
                 }
             }
             return true
@@ -38,6 +39,11 @@ final class AppModel: ObservableObject {
             captureError = "Could not save. Your text is still here."
             return false
         }
+    }
+
+    func recoverPendingClarification() async {
+        _ = await loop.recoverUnclarifiedCaptures()
+        await refresh()
     }
 
     func refresh() async {

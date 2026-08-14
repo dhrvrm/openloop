@@ -34,7 +34,9 @@ public struct ThoughtReadModels: Sendable {
     }
 
     public func later() async throws -> [LaterItem] {
-        var items: [LaterItem] = []
+        var items = try await repository.unclarifiedCaptures().map {
+            LaterItem(id: $0.id, createdAt: $0.createdAt, text: $0.text, disposition: .unclear)
+        }
         for disposition in [Disposition.later, .memory, .unclear] {
             for capture in try await repository.captures(disposition: disposition) {
                 guard try await repository.proposal(captureID: capture.id) != nil else { continue }

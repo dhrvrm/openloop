@@ -14,6 +14,9 @@ private actor MemoryRepository: ThoughtRepository {
     func captures(disposition: Disposition) async throws -> [RawCapture] {
         captures.values.filter { proposals[$0.id]?.disposition == disposition }
     }
+    func unclarifiedCaptures() async throws -> [RawCapture] {
+        captures.values.filter { proposals[$0.id] == nil }
+    }
     func intention(id: UUID) async throws -> Intention? { intentions[id] }
     func openIntentions() async throws -> [Intention] {
         intentions.values.filter { $0.state != .closed && $0.state != .released }
@@ -76,6 +79,18 @@ private actor CountingClarifier: ClarificationProvider {
     let result = try await loop.clarify(capture)
 
     #expect(try await repository.proposal(captureID: capture.id) == result.proposal)
+}
+
+@Test func acceptedCaptureIsClarifiedDuringRecovery() async throws {
+    let repository = MemoryRepository()
+    let loop = ThoughtLoop(repository: repository, clarifier: FixedClarifier())
+    let capture = try await loop.accept(text: "reply later", at: .now)
+
+    let recovered = await loop.recoverUnclarifiedCaptures()
+
+    #expect(recovered == 1)
+    #expect(try await repository.proposal(captureID: capture.id) != nil)
+    #expect(try await repository.openIntentions().count == 1)
 }
 
 @Test func capturePersistsBeforeItBecomesAnIntention() async throws {

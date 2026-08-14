@@ -59,6 +59,13 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         try update { $0.proposals[proposal.captureID] = proposal }
     }
 
+    public func save(proposal: ClarificationProposal, intention: Intention?) async throws {
+        try update {
+            $0.proposals[proposal.captureID] = proposal
+            if let intention { $0.intentions[intention.id] = intention }
+        }
+    }
+
     public func save(intention: Intention) async throws {
         try update { $0.intentions[intention.id] = intention }
     }
@@ -72,6 +79,13 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         try synchronize()
         return snapshot.captures.values
             .filter { snapshot.proposals[$0.id]?.disposition == disposition }
+            .sorted(by: Self.captureOrder)
+    }
+
+    public func unclarifiedCaptures() async throws -> [RawCapture] {
+        try synchronize()
+        return snapshot.captures.values
+            .filter { snapshot.proposals[$0.id] == nil }
             .sorted(by: Self.captureOrder)
     }
 
@@ -135,15 +149,6 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
     public func persistedDevelopmentSnapshot() throws -> DevelopmentStoreSnapshot {
         let value = try withLock(exclusive: false) { try loadLatest() }
         return Self.developmentSnapshot(value)
-    }
-
-    public func rollbackMigration() throws {
-        try withLock(exclusive: true) {
-            snapshot = VaultSnapshot()
-            if FileManager.default.fileExists(atPath: fileURL.path) {
-                try FileManager.default.removeItem(at: fileURL)
-            }
-        }
     }
 
     private func persist(_ value: VaultSnapshot) throws {

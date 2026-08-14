@@ -18,6 +18,9 @@ private actor ReadRepository: ThoughtRepository {
     func captures(disposition: Disposition) async throws -> [RawCapture] {
         storedCaptures.values.filter { storedProposals[$0.id]?.disposition == disposition }
     }
+    func unclarifiedCaptures() async throws -> [RawCapture] {
+        storedCaptures.values.filter { storedProposals[$0.id] == nil }
+    }
     func intention(id: UUID) async throws -> Intention? { storedIntentions[id] }
     func openIntentions() async throws -> [Intention] {
         storedIntentions.values.filter { $0.state != .closed && $0.state != .released }
@@ -51,6 +54,12 @@ private actor ReadRepository: ThoughtRepository {
     let models = ThoughtReadModels(repository: repository)
     let dispositions: [Disposition] = [.later, .memory, .unclear, .release]
 
+    let pending = try RawCapture(
+        createdAt: Date(timeIntervalSince1970: -1),
+        text: "pending clarification"
+    )
+    try await repository.save(capture: pending)
+
     for (index, disposition) in dispositions.enumerated() {
         let capture = try RawCapture(
             createdAt: Date(timeIntervalSince1970: Double(index)),
@@ -66,6 +75,6 @@ private actor ReadRepository: ThoughtRepository {
 
     let items = try await models.later()
 
-    #expect(items.map(\.disposition) == [.later, .memory, .unclear])
-    #expect(items.map(\.text) == ["later", "memory", "unclear"])
+    #expect(items.map(\.disposition) == [.unclear, .later, .memory, .unclear])
+    #expect(items.map(\.text) == ["pending clarification", "later", "memory", "unclear"])
 }
