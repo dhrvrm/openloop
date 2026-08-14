@@ -5,11 +5,13 @@ private struct Snapshot: Codable {
     var captures: [UUID: RawCapture] = [:]
     var proposals: [UUID: ClarificationProposal] = [:]
     var intentions: [UUID: Intention] = [:]
+    var focusSessions: [UUID: FocusSession] = [:]
 
     private enum CodingKeys: String, CodingKey {
         case captures
         case proposals
         case intentions
+        case focusSessions
     }
 
     init() {}
@@ -22,6 +24,10 @@ private struct Snapshot: Codable {
             forKey: .proposals
         ) ?? [:]
         intentions = try container.decode([UUID: Intention].self, forKey: .intentions)
+        focusSessions = try container.decodeIfPresent(
+            [UUID: FocusSession].self,
+            forKey: .focusSessions
+        ) ?? [:]
     }
 }
 
@@ -79,6 +85,17 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         try persist()
     }
 
+    public func save(focusSession: FocusSession) async throws {
+        snapshot.focusSessions[focusSession.id] = focusSession
+        try persist()
+    }
+
+    public func save(intention: Intention, focusSession: FocusSession) async throws {
+        snapshot.intentions[intention.id] = intention
+        snapshot.focusSessions[focusSession.id] = focusSession
+        try persist()
+    }
+
     public func proposal(captureID: UUID) async throws -> ClarificationProposal? {
         snapshot.proposals[captureID]
     }
@@ -125,6 +142,14 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
             }
     }
 
+    public func focusSession(id: UUID) async throws -> FocusSession? {
+        snapshot.focusSessions[id]
+    }
+
+    public func focusSessions() async throws -> [FocusSession] {
+        snapshot.focusSessions.values.sorted(by: Self.focusSessionOrder)
+    }
+
     func snapshotCaptures() -> [RawCapture] {
         snapshot.captures.values.sorted(by: Self.captureOrder)
     }
@@ -157,5 +182,10 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
     private static func intentionOrder(_ lhs: Intention, _ rhs: Intention) -> Bool {
         if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
         return lhs.createdAt < rhs.createdAt
+    }
+
+    private static func focusSessionOrder(_ lhs: FocusSession, _ rhs: FocusSession) -> Bool {
+        if lhs.startedAt == rhs.startedAt { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.startedAt < rhs.startedAt
     }
 }

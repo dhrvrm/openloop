@@ -8,6 +8,30 @@ private struct VaultSnapshot: Codable {
     var captures: [UUID: RawCapture] = [:]
     var proposals: [UUID: ClarificationProposal] = [:]
     var intentions: [UUID: Intention] = [:]
+    var focusSessions: [UUID: FocusSession] = [:]
+
+    private enum CodingKeys: String, CodingKey {
+        case captures
+        case proposals
+        case intentions
+        case focusSessions
+    }
+
+    init() {}
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        captures = try container.decode([UUID: RawCapture].self, forKey: .captures)
+        proposals = try container.decodeIfPresent(
+            [UUID: ClarificationProposal].self,
+            forKey: .proposals
+        ) ?? [:]
+        intentions = try container.decode([UUID: Intention].self, forKey: .intentions)
+        focusSessions = try container.decodeIfPresent(
+            [UUID: FocusSession].self,
+            forKey: .focusSessions
+        ) ?? [:]
+    }
 }
 
 public enum VaultStoreError: Error, Equatable {
@@ -70,6 +94,17 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         try update { $0.intentions[intention.id] = intention }
     }
 
+    public func save(focusSession: FocusSession) async throws {
+        try update { $0.focusSessions[focusSession.id] = focusSession }
+    }
+
+    public func save(intention: Intention, focusSession: FocusSession) async throws {
+        try update {
+            $0.intentions[intention.id] = intention
+            $0.focusSessions[focusSession.id] = focusSession
+        }
+    }
+
     public func proposal(captureID: UUID) async throws -> ClarificationProposal? {
         try synchronize()
         return snapshot.proposals[captureID]
@@ -112,9 +147,22 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
             .sorted(by: Self.intentionOrder)
     }
 
+    public func focusSession(id: UUID) async throws -> FocusSession? {
+        try synchronize()
+        return snapshot.focusSessions[id]
+    }
+
+    public func focusSessions() async throws -> [FocusSession] {
+        try synchronize()
+        return snapshot.focusSessions.values.sorted(by: Self.focusSessionOrder)
+    }
+
     public func empty() throws -> Bool {
         try synchronize()
-        return snapshot.captures.isEmpty && snapshot.proposals.isEmpty && snapshot.intentions.isEmpty
+        return snapshot.captures.isEmpty
+            && snapshot.proposals.isEmpty
+            && snapshot.intentions.isEmpty
+            && snapshot.focusSessions.isEmpty
     }
 
     public var counts: VaultCounts {
@@ -139,7 +187,8 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         try update { candidate in
             guard candidate.captures.isEmpty,
                   candidate.proposals.isEmpty,
-                  candidate.intentions.isEmpty else {
+                  candidate.intentions.isEmpty,
+                  candidate.focusSessions.isEmpty else {
                 throw VaultStoreError.vaultNotEmpty
             }
             candidate.captures = Dictionary(uniqueKeysWithValues: value.captures.map { ($0.id, $0) })
@@ -236,5 +285,10 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
     private static func intentionOrder(_ lhs: Intention, _ rhs: Intention) -> Bool {
         if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
         return lhs.createdAt < rhs.createdAt
+    }
+
+    private static func focusSessionOrder(_ lhs: FocusSession, _ rhs: FocusSession) -> Bool {
+        if lhs.startedAt == rhs.startedAt { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.startedAt < rhs.startedAt
     }
 }

@@ -1,4 +1,5 @@
 import ADHDCore
+import CryptoKit
 import Foundation
 import LocalStore
 import Security
@@ -6,6 +7,12 @@ import Testing
 @testable import VaultStore
 
 private let fixedKey = Data(repeating: 0x42, count: 32)
+
+private struct SchemaOneVaultSnapshot: Codable {
+    var captures: [UUID: RawCapture]
+    var proposals: [UUID: ClarificationProposal]
+    var intentions: [UUID: Intention]
+}
 
 private func temporaryDirectory() -> URL {
     FileManager.default.temporaryDirectory
@@ -48,6 +55,73 @@ private func temporaryDirectory() -> URL {
     let reader = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
     #expect(try await reader.captures(disposition: .later) == [capture])
     #expect(try await reader.proposal(captureID: capture.id) == proposal)
+}
+
+@Test func encryptedFocusPairSurvivesRestartWithoutPacketPlaintext() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let id = UUID()
+    let packet = try ReturnPacket(
+        capturedAt: Date(timeIntervalSince1970: 30),
+        justCompleted: "distinct completed recovery marker",
+        nextAction: "distinct next recovery marker",
+        blocker: "distinct blocker recovery marker",
+        references: ["distinct-reference://recovery-marker"]
+    )
+    var intention = Intention(
+        id: id,
+        sourceCaptureID: id,
+        desiredOutcome: "Recover exact encrypted context",
+        nextAction: "Begin",
+        state: .active,
+        createdAt: Date(timeIntervalSince1970: 10),
+        returnPacket: nil
+    )
+    try intention.interrupt(with: packet)
+    var session = FocusSession(
+        id: UUID(),
+        intentionID: id,
+        startedAt: Date(timeIntervalSince1970: 20)
+    )
+    try session.interrupt(at: packet.capturedAt)
+    let writer = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+
+    try await writer.save(intention: intention, focusSession: session)
+
+    let vaultData = try Data(contentsOf: directory.appendingPathComponent("openloop.vault"))
+    for plaintext in [packet.justCompleted!, packet.nextAction, packet.blocker!, packet.references[0]] {
+        #expect(vaultData.range(of: Data(plaintext.utf8)) == nil)
+    }
+    let reader = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    #expect(try await reader.intention(id: id) == intention)
+    #expect(try await reader.focusSession(id: session.id) == session)
+    #expect(try await reader.focusSessions() == [session])
+}
+
+@Test func schemaOneVaultWithoutFocusSessionsStillOpens() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let capture = try RawCapture(createdAt: Date(timeIntervalSince1970: 1), text: "old vault")
+    let snapshot = SchemaOneVaultSnapshot(
+        captures: [capture.id: capture],
+        proposals: [:],
+        intentions: [:]
+    )
+    let plaintext = try JSONEncoder().encode(snapshot)
+    let box = try AES.GCM.seal(
+        plaintext,
+        using: SymmetricKey(data: fixedKey),
+        authenticating: Data("openloop.vault|schema=1|content=thought-loop".utf8)
+    )
+    try #require(box.combined).write(
+        to: directory.appendingPathComponent("openloop.vault"),
+        options: .atomic
+    )
+
+    let repository = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+
+    #expect(try await repository.focusSessions().isEmpty)
 }
 
 @Test func wrongKeyCannotOpenVault() async throws {

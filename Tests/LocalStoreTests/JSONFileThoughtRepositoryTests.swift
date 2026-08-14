@@ -43,6 +43,36 @@ private struct LegacySnapshot: Codable {
     #expect(try await reader.openIntentions() == [intention])
 }
 
+@Test func focusSessionAndIntentionPairSurviveRepositoryRestart() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let id = UUID()
+    let intention = Intention(
+        id: id,
+        sourceCaptureID: id,
+        desiredOutcome: "Finish the recovery flow",
+        nextAction: "Open the focus view",
+        state: .active,
+        createdAt: Date(timeIntervalSince1970: 10),
+        returnPacket: nil
+    )
+    var session = FocusSession(
+        id: UUID(),
+        intentionID: id,
+        startedAt: Date(timeIntervalSince1970: 20)
+    )
+    try session.pause(at: Date(timeIntervalSince1970: 50))
+    let writer = try JSONFileThoughtRepository(directory: directory)
+
+    try await writer.save(intention: intention, focusSession: session)
+
+    let reader = try JSONFileThoughtRepository(directory: directory)
+    #expect(try await reader.intention(id: id) == intention)
+    #expect(try await reader.focusSession(id: session.id) == session)
+    #expect(try await reader.focusSessions() == [session])
+}
+
 @Test func legacySnapshotWithoutClarificationsStillLoads() async throws {
     let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -102,19 +102,19 @@ Commit: `feat: preserve interruption context through focus orchestration`.
 - Modify: `Tests/LocalStoreTests/JSONFileThoughtRepositoryTests.swift`
 - Modify: `Tests/VaultStoreTests/EncryptedThoughtRepositoryTests.swift`
 
-- [ ] **Step 1: Write failing persistence and compatibility tests**
+- [x] **Step 1: Write failing persistence and compatibility tests**
 
 For both adapters, persist an intention/session pair, reopen, and compare both values. For the vault, also create a schema-1 encrypted snapshot without `focusSessions` and prove it still opens. Verify a packet's next action and references do not appear as plaintext in any vault file.
 
-- [ ] **Step 2: Add optional snapshot fields**
+- [x] **Step 2: Add optional snapshot fields**
 
 Add `[UUID: FocusSession]` to both snapshot values and custom decoders that default a missing field to an empty dictionary. Keep the existing authenticated-data string so schema-1 vaults remain decryptable.
 
-- [ ] **Step 3: Implement atomic production writes and stable reads**
+- [x] **Step 3: Implement atomic production writes and stable reads**
 
 Both repositories override `save(intention:focusSession:)` with one snapshot persistence operation. Focus-session reads use stable start-date/UUID ordering. Vault `empty`, counts, import, and legacy export retain their existing semantics; focus sessions are independent of Increment 0 migration.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run `Scripts/test.sh --filter 'LocalStoreTests|VaultStoreTests' && Scripts/test.sh`.
 
