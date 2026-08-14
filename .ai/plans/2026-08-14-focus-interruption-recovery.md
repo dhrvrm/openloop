@@ -43,21 +43,21 @@
 - Create: `Sources/ADHDCore/FocusSession.swift`
 - Create: `Tests/ADHDCoreTests/FocusSessionTests.swift`
 
-- [ ] **Step 1: Write failing state and timing tests**
+- [x] **Step 1: Write failing state and timing tests**
 
 Cover creation in `active`, pausing with accrued elapsed time, continuing a paused session, interrupting from active or paused, resuming an interrupted session, finishing, invalid transitions, and a backward clock that never subtracts elapsed time.
 
-- [ ] **Step 2: Verify focused failure**
+- [x] **Step 2: Verify focused failure**
 
 Run `Scripts/test.sh --filter FocusSessionTests`.
 
 Expected: compilation fails because `FocusSession` and `FocusSessionState` do not exist.
 
-- [ ] **Step 3: Implement the value state machine**
+- [x] **Step 3: Implement the value state machine**
 
 `FocusSession` contains `id`, `intentionID`, `startedAt`, `state`, `accumulatedSeconds`, and optional `activeSince`. Its mutating commands are `pause(at:)`, `continue(at:)`, `interrupt(at:)`, `resume(at:)`, and `finish(at:)`; `elapsed(at:)` returns accumulated seconds plus the current active interval only while active.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run `Scripts/test.sh --filter FocusSessionTests && Scripts/test.sh --filter ADHDCoreTests`.
 
