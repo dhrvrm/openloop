@@ -1,0 +1,150 @@
+import ADHDCore
+import Foundation
+import LocalStore
+import Security
+import Testing
+@testable import VaultStore
+
+private let fixedKey = Data(repeating: 0x42, count: 32)
+
+private func temporaryDirectory() -> URL {
+    FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+}
+
+@Test func encryptedThoughtsSurviveRestartWithoutPlaintext() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let capture = try RawCapture(createdAt: .now, text: "private launch intention")
+    let proposal = try ClarificationProposal(
+        captureID: capture.id, disposition: .later, desiredOutcome: nil,
+        nextAction: nil, confidence: 1
+    )
+    let writer = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    try await writer.save(capture: capture)
+    try await writer.save(proposal: proposal)
+
+    let data = try Data(contentsOf: directory.appendingPathComponent("openloop.vault"))
+    #expect(data.range(of: Data(capture.text.utf8)) == nil)
+
+    let reader = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    #expect(try await reader.captures(disposition: .later) == [capture])
+    #expect(try await reader.proposal(captureID: capture.id) == proposal)
+}
+
+@Test func wrongKeyCannotOpenVault() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let writer = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    try await writer.save(capture: RawCapture(createdAt: .now, text: "secret"))
+
+    #expect(throws: VaultStoreError.authenticationFailed) {
+        try EncryptedThoughtRepository(directory: directory, keyData: Data(repeating: 7, count: 32))
+    }
+}
+
+@Test func tamperingIsReportedAsAuthenticationFailure() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let repository = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    try await repository.save(capture: RawCapture(createdAt: .now, text: "secret"))
+    let url = directory.appendingPathComponent("openloop.vault")
+    var data = try Data(contentsOf: url)
+    data[data.startIndex + 20] ^= 0xff
+    try data.write(to: url)
+
+    #expect(throws: VaultStoreError.authenticationFailed) {
+        try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    }
+}
+
+@Test func keychainProviderReturnsTheSame32ByteKey() throws {
+    let service = "dev.openloop.tests.\(UUID().uuidString)"
+    let account = "root-key"
+    let deleteQuery: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecAttrAccount as String: account,
+    ]
+    defer { SecItemDelete(deleteQuery as CFDictionary) }
+    let provider = KeychainVaultKeyProvider(service: service, account: account)
+
+    let first = try provider.loadOrCreateKey()
+    let second = try provider.loadOrCreateKey()
+
+    #expect(first.count == 32)
+    #expect(first == second)
+}
+
+@Test func developmentStoreMigratesOnceAndRemovesPlaintextAfterVerification() async throws {
+    let root = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let legacyDirectory = root.appendingPathComponent("legacy", isDirectory: true)
+    let vaultDirectory = root.appendingPathComponent("vault", isDirectory: true)
+    let legacy = try JSONFileThoughtRepository(directory: legacyDirectory)
+    let capture = try RawCapture(createdAt: .now, text: "migrate this private thought")
+    let proposal = try ClarificationProposal(
+        captureID: capture.id, disposition: .memory, desiredOutcome: nil,
+        nextAction: nil, confidence: 1
+    )
+    try await legacy.save(capture: capture)
+    try await legacy.save(proposal: proposal)
+    let vault = try EncryptedThoughtRepository(directory: vaultDirectory, keyData: fixedKey)
+
+    let result = try await DevelopmentStoreMigrator().migrateIfNeeded(
+        from: legacyDirectory,
+        to: vault
+    )
+
+    #expect(result == .imported(count: 1))
+    #expect(FileManager.default.fileExists(
+        atPath: legacyDirectory.appendingPathComponent("thought-loop.json").path
+    ) == false)
+    let reopened = try EncryptedThoughtRepository(directory: vaultDirectory, keyData: fixedKey)
+    #expect(try await reopened.captures(disposition: .memory) == [capture])
+    #expect(try await DevelopmentStoreMigrator().migrateIfNeeded(
+        from: legacyDirectory,
+        to: reopened
+    ) == .notNeeded)
+}
+
+@Test func migrationLeavesPlaintextWhenLegacyStoreIsCorrupt() async throws {
+    let root = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let legacyDirectory = root.appendingPathComponent("legacy", isDirectory: true)
+    try FileManager.default.createDirectory(at: legacyDirectory, withIntermediateDirectories: true)
+    let legacyFile = legacyDirectory.appendingPathComponent("thought-loop.json")
+    try Data("not-json".utf8).write(to: legacyFile)
+    let vault = try EncryptedThoughtRepository(
+        directory: root.appendingPathComponent("vault"),
+        keyData: fixedKey
+    )
+
+    await #expect(throws: JSONFileThoughtRepositoryError.corruptSnapshot) {
+        try await DevelopmentStoreMigrator().migrateIfNeeded(from: legacyDirectory, to: vault)
+    }
+    #expect(FileManager.default.fileExists(atPath: legacyFile.path))
+}
+
+@Test func migrationDoesNotOverwriteAnInitializedVault() async throws {
+    let root = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let legacyDirectory = root.appendingPathComponent("legacy", isDirectory: true)
+    let legacy = try JSONFileThoughtRepository(directory: legacyDirectory)
+    try await legacy.save(capture: RawCapture(createdAt: .now, text: "legacy"))
+    let legacyFile = legacyDirectory.appendingPathComponent("thought-loop.json")
+    let vault = try EncryptedThoughtRepository(
+        directory: root.appendingPathComponent("vault"),
+        keyData: fixedKey
+    )
+    try await vault.save(capture: RawCapture(createdAt: .now, text: "current"))
+
+    let result = try await DevelopmentStoreMigrator().migrateIfNeeded(
+        from: legacyDirectory,
+        to: vault
+    )
+
+    #expect(result == .vaultAlreadyInitialized)
+    #expect(FileManager.default.fileExists(atPath: legacyFile.path))
+    #expect(await vault.counts.captures == 1)
+}

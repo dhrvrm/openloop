@@ -100,8 +100,30 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
             }
     }
 
+    func snapshotCaptures() -> [RawCapture] {
+        snapshot.captures.values.sorted(by: Self.captureOrder)
+    }
+
+    func snapshotProposals() -> [ClarificationProposal] {
+        snapshot.proposals.values.sorted { $0.captureID.uuidString < $1.captureID.uuidString }
+    }
+
+    func snapshotIntentions() -> [Intention] {
+        snapshot.intentions.values.sorted(by: Self.intentionOrder)
+    }
+
     private func persist() throws {
         let data = try JSONEncoder().encode(snapshot)
         try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+    }
+
+    private static func captureOrder(_ lhs: RawCapture, _ rhs: RawCapture) -> Bool {
+        if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.createdAt < rhs.createdAt
+    }
+
+    private static func intentionOrder(_ lhs: Intention, _ rhs: Intention) -> Bool {
+        if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.createdAt < rhs.createdAt
     }
 }
