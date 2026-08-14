@@ -36,10 +36,15 @@ private struct UnusedClarifier: ClarificationProvider {
     )
     let controller = QuickCaptureController(model: model)
     controller.textForTesting = "do not lose this"
+    let previousCount = controller.latency.samples.count
+    controller.show()
+    #expect(await controller.waitForSample(after: previousCount))
 
     let saved = await controller.submitCurrentText()
 
     #expect(saved == false)
     #expect(controller.textForTesting == "do not lose this")
     #expect(model.captureError != nil)
+    #expect(controller.isOnscreenForTesting)
+    controller.hide()
 }

@@ -6,6 +6,7 @@ public protocol ThoughtRepository: Sendable {
     func save(proposal: ClarificationProposal, intention: Intention?) async throws
     func save(intention: Intention) async throws
     func unclarifiedCaptures() async throws -> [RawCapture]
+    func capturesRequiringClarification() async throws -> [RawCapture]
     func proposal(captureID: UUID) async throws -> ClarificationProposal?
     func captures(disposition: Disposition) async throws -> [RawCapture]
     func intention(id: UUID) async throws -> Intention?
@@ -19,6 +20,10 @@ public extension ThoughtRepository {
     }
 
     func unclarifiedCaptures() async throws -> [RawCapture] { [] }
+
+    func capturesRequiringClarification() async throws -> [RawCapture] {
+        try await unclarifiedCaptures()
+    }
 }
 
 public protocol ClarificationProvider: Sendable {

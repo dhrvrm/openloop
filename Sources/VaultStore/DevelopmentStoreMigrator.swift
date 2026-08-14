@@ -21,6 +21,7 @@ public struct DevelopmentStoreMigrator: Sendable {
         let storeLock = try DevelopmentStoreLock(directory: legacyDirectory)
         try storeLock.lockExclusive()
         defer { storeLock.unlock() }
+        guard FileManager.default.fileExists(atPath: legacyFile.path) else { return .notNeeded }
 
         let snapshot = try DevelopmentStoreSnapshot.load(from: legacyFile)
         if try await vault.empty() {

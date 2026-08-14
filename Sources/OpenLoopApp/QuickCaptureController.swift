@@ -121,6 +121,10 @@ final class QuickCaptureController: NSObject, NSTextFieldDelegate {
         set { field.stringValue = newValue }
     }
 
+    var isOnscreenForTesting: Bool {
+        Self.isOnscreen(CGWindowID(panel.windowNumber))
+    }
+
     func waitUntilHidden() async -> Bool {
         let windowNumber = CGWindowID(panel.windowNumber)
         for _ in 0..<1_000 {

@@ -100,6 +100,16 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
             .sorted(by: Self.captureOrder)
     }
 
+    public func capturesRequiringClarification() async throws -> [RawCapture] {
+        let intentionSources = Set(snapshot.intentions.values.map(\.sourceCaptureID))
+        return snapshot.captures.values
+            .filter { capture in
+                guard let proposal = snapshot.proposals[capture.id] else { return true }
+                return proposal.disposition == .action && intentionSources.contains(capture.id) == false
+            }
+            .sorted(by: Self.captureOrder)
+    }
+
     public func intention(id: UUID) async throws -> Intention? {
         snapshot.intentions[id]
     }

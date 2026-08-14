@@ -210,3 +210,34 @@ private func temporaryDirectory() -> URL {
     }
     #expect(try await repository.empty())
 }
+
+@Test func concurrentClarificationRecoveryConvergesOnOneIntention() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let first = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    let second = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    let capture = try RawCapture(createdAt: .now, text: "todo: converge")
+    try await first.save(capture: capture)
+    let firstLoop = ThoughtLoop(repository: first, clarifier: TestActionClarifier())
+    let secondLoop = ThoughtLoop(repository: second, clarifier: TestActionClarifier())
+
+    async let firstRecovery = firstLoop.recoverUnclarifiedCaptures()
+    async let secondRecovery = secondLoop.recoverUnclarifiedCaptures()
+    _ = await (firstRecovery, secondRecovery)
+
+    let intentions = try await first.openIntentions()
+    #expect(intentions.count == 1)
+    #expect(intentions.first?.id == capture.id)
+}
+
+private struct TestActionClarifier: ClarificationProvider {
+    func propose(for capture: RawCapture) async throws -> ClarificationProposal {
+        try ClarificationProposal(
+            captureID: capture.id,
+            disposition: .action,
+            desiredOutcome: "Converge",
+            nextAction: "Begin",
+            confidence: 1
+        )
+    }
+}

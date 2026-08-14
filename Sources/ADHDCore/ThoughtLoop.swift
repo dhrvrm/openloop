@@ -42,7 +42,7 @@ public struct ThoughtLoop: Sendable {
     }
 
     public func recoverUnclarifiedCaptures() async -> Int {
-        guard let captures = try? await repository.unclarifiedCaptures() else { return 0 }
+        guard let captures = try? await repository.capturesRequiringClarification() else { return 0 }
         var recovered = 0
         for capture in captures {
             if (try? await clarify(capture)) != nil { recovered += 1 }
@@ -58,7 +58,7 @@ public struct ThoughtLoop: Sendable {
            let outcome = proposal.desiredOutcome,
            let nextAction = proposal.nextAction {
             let value = Intention(
-                id: UUID(),
+                id: capture.id,
                 sourceCaptureID: capture.id,
                 desiredOutcome: outcome,
                 nextAction: nextAction,
