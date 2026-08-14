@@ -72,23 +72,23 @@ Commit: `feat: add durable focus session state machine`.
 - Create: `Tests/ADHDCoreTests/InterruptionSnapshotTests.swift`
 - Create: `Tests/ADHDCoreTests/FocusLoopTests.swift`
 
-- [ ] **Step 1: Write failing composer tests**
+- [x] **Step 1: Write failing composer tests**
 
 Verify whitespace normalization, stable reference de-duplication, manual-plus-provider ordering, empty next-action rejection, and provider failure falling back to manual references.
 
-- [ ] **Step 2: Write failing orchestration tests**
+- [x] **Step 2: Write failing orchestration tests**
 
 Verify start creates one focus session with the intention active; a second current session is rejected; pause/continue persist timing; interrupt atomically stores the exact packet and interrupted session; resume restores the packet next action; finish closes both values; and missing IDs produce typed errors.
 
-- [ ] **Step 3: Extend the repository contract compatibly**
+- [x] **Step 3: Extend the repository contract compatibly**
 
 Add `save(intention:focusSession:)`, `save(focusSession:)`, `focusSession(id:)`, and `focusSessions()` requirements. Supply safe default implementations so existing test doubles and third-party adapters still compile; production adapters override the combined save atomically.
 
-- [ ] **Step 4: Implement the composer and `FocusLoop`**
+- [x] **Step 4: Implement the composer and `FocusLoop`**
 
 `InterruptionSnapshotComposer` accepts an optional `ContextReferenceProvider` and builds the existing `ReturnPacket`. `FocusLoop` owns start, pause, continue, interrupt, resume, and finish. It enforces one current session and writes intention/session pairs through the combined repository method at every coupled transition.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run `Scripts/test.sh --filter 'InterruptionSnapshotTests|FocusLoopTests' && Scripts/test.sh --filter ADHDCoreTests`.
 

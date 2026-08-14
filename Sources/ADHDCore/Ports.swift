@@ -11,6 +11,14 @@ public protocol ThoughtRepository: Sendable {
     func captures(disposition: Disposition) async throws -> [RawCapture]
     func intention(id: UUID) async throws -> Intention?
     func openIntentions() async throws -> [Intention]
+    func save(focusSession: FocusSession) async throws
+    func save(intention: Intention, focusSession: FocusSession) async throws
+    func focusSession(id: UUID) async throws -> FocusSession?
+    func focusSessions() async throws -> [FocusSession]
+}
+
+public enum ThoughtRepositoryCompatibilityError: Error, Equatable {
+    case focusSessionsUnsupported
 }
 
 public extension ThoughtRepository {
@@ -24,6 +32,19 @@ public extension ThoughtRepository {
     func capturesRequiringClarification() async throws -> [RawCapture] {
         try await unclarifiedCaptures()
     }
+
+    func save(focusSession: FocusSession) async throws {
+        throw ThoughtRepositoryCompatibilityError.focusSessionsUnsupported
+    }
+
+    func save(intention: Intention, focusSession: FocusSession) async throws {
+        try await save(intention: intention)
+        try await save(focusSession: focusSession)
+    }
+
+    func focusSession(id: UUID) async throws -> FocusSession? { nil }
+
+    func focusSessions() async throws -> [FocusSession] { [] }
 }
 
 public protocol ClarificationProvider: Sendable {
