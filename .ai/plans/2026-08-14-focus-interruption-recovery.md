@@ -126,15 +126,15 @@ Commit: `feat: persist focus recovery state in the encrypted vault`.
 - Modify: `Sources/ADHDCore/ReadModels.swift`
 - Modify: `Tests/ADHDCoreTests/ReadModelsTests.swift`
 
-- [ ] **Step 1: Write failing read-model tests**
+- [x] **Step 1: Write failing read-model tests**
 
 Verify Now exposes an open intention as startable, exposes current focus timing/state, omits interrupted intentions, and never chooses an unrelated open item over a current session. Verify Return contains only interrupted intentions with exact packet fields in newest-packet-first order.
 
-- [ ] **Step 2: Implement projections**
+- [x] **Step 2: Implement projections**
 
 Extend `NowItem` with an optional focus-session projection and a deterministic `elapsed(at:)`. Add `ReturnItem` with all restart context. `now()` joins intentions to focus sessions and `returns()` emits only valid interrupted packets.
 
-- [ ] **Step 3: Run tests and commit**
+- [x] **Step 3: Run tests and commit**
 
 Run `Scripts/test.sh --filter ReadModelsTests && Scripts/test.sh --filter ADHDCoreTests`.
 

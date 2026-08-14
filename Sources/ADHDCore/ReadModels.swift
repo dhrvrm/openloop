@@ -5,6 +5,35 @@ public struct NowItem: Equatable, Sendable {
     public let desiredOutcome: String
     public let nextAction: String
     public let state: IntentionState
+    public let focus: FocusNowItem?
+
+    public func elapsed(at date: Date) -> TimeInterval {
+        focus?.elapsed(at: date) ?? 0
+    }
+}
+
+public struct FocusNowItem: Equatable, Sendable {
+    public let sessionID: UUID
+    public let state: FocusSessionState
+    public let startedAt: Date
+    public let accumulatedSeconds: TimeInterval
+    public let activeSince: Date?
+
+    public func elapsed(at date: Date) -> TimeInterval {
+        guard state == .active, let activeSince else { return accumulatedSeconds }
+        return accumulatedSeconds + max(0, date.timeIntervalSince(activeSince))
+    }
+}
+
+public struct ReturnItem: Equatable, Identifiable, Sendable {
+    public var id: UUID { intentionID }
+    public let intentionID: UUID
+    public let desiredOutcome: String
+    public let justCompleted: String?
+    public let nextAction: String
+    public let blocker: String?
+    public let references: [String]
+    public let capturedAt: Date
 }
 
 public struct LaterItem: Equatable, Identifiable, Sendable {
@@ -23,13 +52,40 @@ public struct ThoughtReadModels: Sendable {
 
     public func now() async throws -> NowItem? {
         let intentions = try await repository.openIntentions()
-        return intentions.sorted(by: comesBefore).first.map {
-            NowItem(
-                intentionID: $0.id,
-                desiredOutcome: $0.desiredOutcome,
-                nextAction: $0.nextAction,
-                state: $0.state
+        let sessions = try await repository.focusSessions()
+        if let currentSession = sessions
+            .filter({ $0.state == .active || $0.state == .paused })
+            .sorted(by: Self.focusComesBefore)
+            .first,
+           let intention = intentions.first(where: { $0.id == currentSession.intentionID }) {
+            return makeNowItem(intention, focusSession: currentSession)
+        }
+        return intentions
+            .filter { $0.state != .interrupted }
+            .sorted(by: comesBefore)
+            .first
+            .map { makeNowItem($0, focusSession: nil) }
+    }
+
+    public func returns() async throws -> [ReturnItem] {
+        try await repository.openIntentions().compactMap { intention in
+            guard intention.state == .interrupted, let packet = intention.returnPacket else {
+                return nil
+            }
+            return ReturnItem(
+                intentionID: intention.id,
+                desiredOutcome: intention.desiredOutcome,
+                justCompleted: packet.justCompleted,
+                nextAction: packet.nextAction,
+                blocker: packet.blocker,
+                references: packet.references,
+                capturedAt: packet.capturedAt
             )
+        }.sorted {
+            if $0.capturedAt == $1.capturedAt {
+                return $0.intentionID.uuidString < $1.intentionID.uuidString
+            }
+            return $0.capturedAt > $1.capturedAt
         }
     }
 
@@ -57,11 +113,37 @@ public struct ThoughtReadModels: Sendable {
     }
 
     private func comesBefore(_ lhs: Intention, _ rhs: Intention) -> Bool {
-        let rank: [IntentionState: Int] = [.active: 0, .interrupted: 1, .open: 2]
+        let rank: [IntentionState: Int] = [.active: 0, .open: 1]
         let left = rank[lhs.state] ?? 3
         let right = rank[rhs.state] ?? 3
         if left != right { return left < right }
         if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
         return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    private func makeNowItem(
+        _ intention: Intention,
+        focusSession: FocusSession?
+    ) -> NowItem {
+        NowItem(
+            intentionID: intention.id,
+            desiredOutcome: intention.desiredOutcome,
+            nextAction: intention.nextAction,
+            state: intention.state,
+            focus: focusSession.map {
+                FocusNowItem(
+                    sessionID: $0.id,
+                    state: $0.state,
+                    startedAt: $0.startedAt,
+                    accumulatedSeconds: $0.accumulatedSeconds,
+                    activeSince: $0.activeSince
+                )
+            }
+        )
+    }
+
+    private static func focusComesBefore(_ lhs: FocusSession, _ rhs: FocusSession) -> Bool {
+        if lhs.startedAt == rhs.startedAt { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.startedAt < rhs.startedAt
     }
 }

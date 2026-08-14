@@ -41,6 +41,25 @@ private func makeIntention(id: UUID = UUID(), createdAt: Date = focusStart) -> I
     )
 }
 
+private func makeLegacyInterruptedIntention() throws -> Intention {
+    let id = UUID()
+    return Intention(
+        id: id,
+        sourceCaptureID: id,
+        desiredOutcome: "Resume legacy work",
+        nextAction: "Old next action",
+        state: .interrupted,
+        createdAt: focusStart,
+        returnPacket: try ReturnPacket(
+            capturedAt: focusStart.addingTimeInterval(10),
+            justCompleted: "Saved before focus sessions existed",
+            nextAction: "Recovered exact next action",
+            blocker: nil,
+            references: ["legacy reference"]
+        )
+    )
+}
+
 @Test func startingFocusActivatesIntentionAndPersistsOnePair() async throws {
     let repository = FocusRepository()
     let intention = makeIntention()
@@ -155,4 +174,31 @@ private func makeIntention(id: UUID = UUID(), createdAt: Date = focusStart) -> I
     await #expect(throws: FocusLoopError.focusSessionNotFound(intention.id)) {
         try await loop.pause(intention.id, at: .now)
     }
+}
+
+@Test func legacyActiveIntentionCanStartAFocusSession() async throws {
+    let repository = FocusRepository()
+    var intention = makeIntention()
+    try intention.transition(to: .active)
+    await repository.insert(intention)
+    let loop = FocusLoop(repository: repository)
+
+    let update = try await loop.start(intention.id, at: focusStart)
+
+    #expect(update.intention.state == .active)
+    #expect(update.session.state == .active)
+}
+
+@Test func legacyInterruptedIntentionCanResumeWithoutAnExistingSession() async throws {
+    let repository = FocusRepository()
+    let intention = try makeLegacyInterruptedIntention()
+    await repository.insert(intention)
+    let loop = FocusLoop(repository: repository)
+
+    let update = try await loop.resume(intention.id, at: focusStart.addingTimeInterval(20))
+
+    #expect(update.intention.state == .active)
+    #expect(update.intention.nextAction == "Recovered exact next action")
+    #expect(update.session.state == .active)
+    #expect(update.session.intentionID == intention.id)
 }
