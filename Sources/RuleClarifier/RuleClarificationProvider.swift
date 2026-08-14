@@ -17,6 +17,28 @@ public struct RuleClarificationProvider: ClarificationProvider {
             )
         }
 
+        let nonActionPrefixes: [(prefix: String, disposition: Disposition)] = [
+            ("later:", .later),
+            ("release:", .release),
+        ]
+        if let match = nonActionPrefixes.first(where: { lower.hasPrefix($0.prefix) }) {
+            let start = capture.text.index(
+                capture.text.startIndex,
+                offsetBy: match.prefix.count
+            )
+            let content = capture.text[start...]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if content.isEmpty == false {
+                return try ClarificationProposal(
+                    captureID: capture.id,
+                    disposition: match.disposition,
+                    desiredOutcome: nil,
+                    nextAction: nil,
+                    confidence: 1
+                )
+            }
+        }
+
         let actionPrefixes = ["todo:", "do:"]
         if let prefix = actionPrefixes.first(where: lower.hasPrefix) {
             let start = capture.text.index(capture.text.startIndex, offsetBy: prefix.count)

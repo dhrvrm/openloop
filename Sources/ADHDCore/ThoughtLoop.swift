@@ -26,6 +26,7 @@ public struct ThoughtLoop: Sendable {
         let capture = try RawCapture(createdAt: date, text: text)
         try await repository.save(capture: capture)
         let proposal = try await clarifier.propose(for: capture)
+        try await repository.save(proposal: proposal)
 
         let intention: Intention?
         if proposal.disposition == .action,

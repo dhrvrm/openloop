@@ -38,3 +38,17 @@ func memoryPrefixesRemainMemories(prefix: String) async throws {
 
     #expect(proposal.disposition == .unclear)
 }
+
+@Test(arguments: [Disposition.later, .release])
+func explicitNonActionDispositionIsPreserved(disposition: Disposition) async throws {
+    let provider = RuleClarificationProvider()
+    let capture = try RawCapture(
+        createdAt: .now,
+        text: "\(disposition.rawValue): revisit the launch framing"
+    )
+
+    let proposal = try await provider.propose(for: capture)
+
+    #expect(proposal.disposition == disposition)
+    #expect(proposal.nextAction == nil)
+}

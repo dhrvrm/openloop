@@ -3,7 +3,26 @@ import Foundation
 
 private struct Snapshot: Codable {
     var captures: [UUID: RawCapture] = [:]
+    var proposals: [UUID: ClarificationProposal] = [:]
     var intentions: [UUID: Intention] = [:]
+
+    private enum CodingKeys: String, CodingKey {
+        case captures
+        case proposals
+        case intentions
+    }
+
+    init() {}
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        captures = try container.decode([UUID: RawCapture].self, forKey: .captures)
+        proposals = try container.decodeIfPresent(
+            [UUID: ClarificationProposal].self,
+            forKey: .proposals
+        ) ?? [:]
+        intentions = try container.decode([UUID: Intention].self, forKey: .intentions)
+    }
 }
 
 public enum JSONFileThoughtRepositoryError: Error, Equatable {
@@ -41,9 +60,29 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         try persist()
     }
 
+    public func save(proposal: ClarificationProposal) async throws {
+        snapshot.proposals[proposal.captureID] = proposal
+        try persist()
+    }
+
     public func save(intention: Intention) async throws {
         snapshot.intentions[intention.id] = intention
         try persist()
+    }
+
+    public func proposal(captureID: UUID) async throws -> ClarificationProposal? {
+        snapshot.proposals[captureID]
+    }
+
+    public func captures(disposition: Disposition) async throws -> [RawCapture] {
+        snapshot.captures.values
+            .filter { snapshot.proposals[$0.id]?.disposition == disposition }
+            .sorted {
+                if $0.createdAt == $1.createdAt {
+                    return $0.id.uuidString < $1.id.uuidString
+                }
+                return $0.createdAt < $1.createdAt
+            }
     }
 
     public func intention(id: UUID) async throws -> Intention? {

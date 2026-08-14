@@ -4,10 +4,16 @@ import Testing
 
 private actor MemoryRepository: ThoughtRepository {
     var captures: [UUID: RawCapture] = [:]
+    var proposals: [UUID: ClarificationProposal] = [:]
     var intentions: [UUID: Intention] = [:]
 
     func save(capture: RawCapture) async throws { captures[capture.id] = capture }
+    func save(proposal: ClarificationProposal) async throws { proposals[proposal.captureID] = proposal }
     func save(intention: Intention) async throws { intentions[intention.id] = intention }
+    func proposal(captureID: UUID) async throws -> ClarificationProposal? { proposals[captureID] }
+    func captures(disposition: Disposition) async throws -> [RawCapture] {
+        captures.values.filter { proposals[$0.id]?.disposition == disposition }
+    }
     func intention(id: UUID) async throws -> Intention? { intentions[id] }
     func openIntentions() async throws -> [Intention] {
         intentions.values.filter { $0.state != .closed && $0.state != .released }
@@ -43,6 +49,7 @@ private struct FailingClarifier: ClarificationProvider {
     let result = try await loop.capture(text: "reply to Riya", at: .now)
 
     #expect(await repository.captures[result.capture.id] != nil)
+    #expect(try await repository.proposal(captureID: result.capture.id) == result.proposal)
     #expect(result.intention?.nextAction == "Open Riya's latest message")
     #expect(try await repository.openIntentions().count == 1)
 }

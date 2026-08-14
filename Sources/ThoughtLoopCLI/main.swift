@@ -5,12 +5,15 @@ import LocalStore
 import RuleClarifier
 
 private enum CommandError: Error, LocalizedError {
+    case invalidDisposition(String)
     case invalidID(String)
     case missingArguments(String)
     case unknownCommand(String)
 
     var errorDescription: String? {
         switch self {
+        case let .invalidDisposition(value):
+            "Invalid disposition: \(value)"
         case let .invalidID(value):
             "Invalid intention ID: \(value)"
         case let .missingArguments(usage):
@@ -26,6 +29,7 @@ struct ThoughtLoopCommand {
     private static let usage = """
         Usage:
           thought-loop capture <text>
+          thought-loop captures <action|memory|later|release|unclear>
           thought-loop list
           thought-loop start <id>
           thought-loop interrupt <id> <next action>
@@ -76,6 +80,24 @@ struct ThoughtLoopCommand {
             } else {
                 for intention in intentions {
                     print("\(intention.id.uuidString)\t\(intention.state.rawValue)\t\(intention.nextAction)")
+                }
+            }
+
+        case "captures":
+            guard arguments.count >= 2 else {
+                throw CommandError.missingArguments(
+                    "thought-loop captures <action|memory|later|release|unclear>"
+                )
+            }
+            guard let disposition = Disposition(rawValue: arguments[1]) else {
+                throw CommandError.invalidDisposition(arguments[1])
+            }
+            let captures = try await repository.captures(disposition: disposition)
+            if captures.isEmpty {
+                print("No \(disposition.rawValue) captures.")
+            } else {
+                for capture in captures {
+                    print("\(capture.id.uuidString)\t\(capture.text)")
                 }
             }
 

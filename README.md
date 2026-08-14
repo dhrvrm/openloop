@@ -101,6 +101,8 @@ Try the first local behavior with:
 ```bash
 swift run thought-loop capture "todo: open the latest design"
 swift run thought-loop list
+swift run thought-loop capture "later: reconsider the launch framing"
+swift run thought-loop captures later
 ```
 
 An action can be moved through the complete durable loop with:
