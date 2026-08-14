@@ -3,6 +3,7 @@ import Darwin
 import Foundation
 import LocalStore
 import RuleClarifier
+import VaultStore
 
 private enum CommandError: Error, LocalizedError {
     case invalidDisposition(String)
@@ -53,7 +54,17 @@ struct ThoughtLoopCommand {
             return
         }
 
-        let repository = try JSONFileThoughtRepository(directory: dataDirectory())
+        let directory = dataDirectory()
+        let service = ProcessInfo.processInfo.environment["OPENLOOP_KEYCHAIN_SERVICE"]
+            ?? "dev.openloop.adhd.vault"
+        let repository = try EncryptedThoughtRepository(
+            directory: directory,
+            keyProvider: KeychainVaultKeyProvider(service: service)
+        )
+        _ = try await DevelopmentStoreMigrator().migrateIfNeeded(
+            from: directory,
+            to: repository
+        )
         let loop = ThoughtLoop(
             repository: repository,
             clarifier: RuleClarificationProvider()

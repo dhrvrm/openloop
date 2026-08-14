@@ -105,6 +105,19 @@ swift run thought-loop capture "later: reconsider the launch framing"
 swift run thought-loop captures later
 ```
 
+## Instant Capture app
+
+The Increment 1 menu-bar app uses Command-Shift-Space for Quick Capture and
+provides quiet Now and Later surfaces. Raw text is accepted into an AES-GCM
+encrypted local vault before Quick Capture closes; its 256-bit root key is owned
+by macOS Keychain. The app has no account, network dependency, or telemetry.
+
+Run `Scripts/verify-increment-1.sh` to test the core, measure capture latency,
+inspect the encrypted vault, build and ad-hoc sign the app, and mount-check the
+DMG. The resulting artifact is `.artifacts/OpenLoop-ADHD.dmg`. Ad-hoc signing is
+intended for personal and trusted testing and may still produce Gatekeeper
+friction when shared with another Mac.
+
 An action can be moved through the complete durable loop with:
 
 ```bash

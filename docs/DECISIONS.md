@@ -74,3 +74,24 @@ Status: blocked pending an explicitly authorized subsystem-design workflow.
 
 The connection document is a provisional implementation proposal and must not be
 treated as a materialized `SUBSYSTEM.md` graph.
+
+## D-011 — Increment 1 uses an encrypted atomic snapshot
+
+Status: accepted.
+
+The current small local dataset is persisted as one authenticated AES-GCM
+snapshot with a Keychain-owned root key. This is the minimally complex store for
+instant capture, restart durability, and migration from the development JSON
+file. SQLite remains the intended adapter when exact search, FTS5, or dataset
+size makes indexed queries observable product behavior.
+
+## D-012 — Ad-hoc builds use the standard macOS login Keychain
+
+Status: accepted for trusted testing.
+
+Data Protection Keychain access requires signed application-identifier and
+access-group entitlements that macOS does not grant to the current ad-hoc build.
+The Increment 1 vault key therefore remains a generic-password item in the local
+login Keychain. A Developer ID/provisioned build may move it to the Data
+Protection Keychain later; the application does not claim device-only key
+semantics in the current distribution.

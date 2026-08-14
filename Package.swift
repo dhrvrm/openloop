@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "RuleClarifier", targets: ["RuleClarifier"]),
         .library(name: "VaultStore", targets: ["VaultStore"]),
         .executable(name: "thought-loop", targets: ["ThoughtLoopCLI"]),
+        .executable(name: "OpenLoopADHD", targets: ["OpenLoopApp"]),
     ],
     targets: [
         .target(name: "ADHDCore"),
@@ -22,7 +23,17 @@ let package = Package(
         ),
         .executableTarget(
             name: "ThoughtLoopCLI",
-            dependencies: ["ADHDCore", "LocalStore", "RuleClarifier"]
+            dependencies: ["ADHDCore", "LocalStore", "RuleClarifier", "VaultStore"],
+            linkerSettings: [.linkedFramework("Security")]
+        ),
+        .executableTarget(
+            name: "OpenLoopApp",
+            dependencies: ["ADHDCore", "LocalStore", "RuleClarifier", "VaultStore"],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("Carbon"),
+                .linkedFramework("Security"),
+            ]
         ),
         .testTarget(name: "ADHDCoreTests", dependencies: ["ADHDCore"]),
         .testTarget(name: "LocalStoreTests", dependencies: ["ADHDCore", "LocalStore"]),
@@ -32,5 +43,6 @@ let package = Package(
             dependencies: ["ADHDCore", "LocalStore", "VaultStore"],
             linkerSettings: [.linkedFramework("Security")]
         ),
+        .testTarget(name: "OpenLoopAppTests", dependencies: ["OpenLoopApp"]),
     ]
 )

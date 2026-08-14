@@ -1,5 +1,6 @@
 import ADHDCore
 import CryptoKit
+import Darwin
 import Foundation
 import LocalStore
 
@@ -14,6 +15,8 @@ public enum VaultStoreError: Error, Equatable {
     case corruptPayload
     case invalidKeyLength(Int)
     case invalidMigrationReference
+    case duplicateMigrationID
+    case lockingFailed(Int32)
     case vaultNotEmpty
 }
 
@@ -25,6 +28,7 @@ public struct VaultCounts: Equatable, Sendable {
 
 public actor EncryptedThoughtRepository: ThoughtRepository {
     public let fileURL: URL
+    private let lockURL: URL
     private static let authenticatedData = Data(
         "openloop.vault|schema=1|content=thought-loop".utf8
     )
@@ -35,6 +39,7 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         guard keyData.count == 32 else { throw VaultStoreError.invalidKeyLength(keyData.count) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         fileURL = directory.appendingPathComponent("openloop.vault")
+        lockURL = directory.appendingPathComponent("openloop.vault.lock")
         key = SymmetricKey(data: keyData)
         snapshot = VaultSnapshot()
         if FileManager.default.fileExists(atPath: fileURL.path) {
@@ -47,40 +52,44 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
     }
 
     public func save(capture: RawCapture) async throws {
-        snapshot.captures[capture.id] = capture
-        try persist()
+        try update { $0.captures[capture.id] = capture }
     }
 
     public func save(proposal: ClarificationProposal) async throws {
-        snapshot.proposals[proposal.captureID] = proposal
-        try persist()
+        try update { $0.proposals[proposal.captureID] = proposal }
     }
 
     public func save(intention: Intention) async throws {
-        snapshot.intentions[intention.id] = intention
-        try persist()
+        try update { $0.intentions[intention.id] = intention }
     }
 
     public func proposal(captureID: UUID) async throws -> ClarificationProposal? {
-        snapshot.proposals[captureID]
+        try synchronize()
+        return snapshot.proposals[captureID]
     }
 
     public func captures(disposition: Disposition) async throws -> [RawCapture] {
-        snapshot.captures.values
+        try synchronize()
+        return snapshot.captures.values
             .filter { snapshot.proposals[$0.id]?.disposition == disposition }
             .sorted(by: Self.captureOrder)
     }
 
-    public func intention(id: UUID) async throws -> Intention? { snapshot.intentions[id] }
+    public func intention(id: UUID) async throws -> Intention? {
+        try synchronize()
+        return snapshot.intentions[id]
+    }
 
     public func openIntentions() async throws -> [Intention] {
-        snapshot.intentions.values
+        try synchronize()
+        return snapshot.intentions.values
             .filter { $0.state != .closed && $0.state != .released }
             .sorted(by: Self.intentionOrder)
     }
 
-    public var isEmpty: Bool {
-        snapshot.captures.isEmpty && snapshot.proposals.isEmpty && snapshot.intentions.isEmpty
+    public func empty() throws -> Bool {
+        try synchronize()
+        return snapshot.captures.isEmpty && snapshot.proposals.isEmpty && snapshot.intentions.isEmpty
     }
 
     public var counts: VaultCounts {
@@ -92,20 +101,30 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
     }
 
     public func importDevelopmentSnapshot(_ value: DevelopmentStoreSnapshot) throws {
-        guard isEmpty else { throw VaultStoreError.vaultNotEmpty }
         let captureIDs = Set(value.captures.map(\.id))
+        guard captureIDs.count == value.captures.count,
+              Set(value.proposals.map(\.captureID)).count == value.proposals.count,
+              Set(value.intentions.map(\.id)).count == value.intentions.count else {
+            throw VaultStoreError.duplicateMigrationID
+        }
         guard value.proposals.allSatisfy({ captureIDs.contains($0.captureID) }),
               value.intentions.allSatisfy({ captureIDs.contains($0.sourceCaptureID) }) else {
             throw VaultStoreError.invalidMigrationReference
         }
-        snapshot.captures = Dictionary(uniqueKeysWithValues: value.captures.map { ($0.id, $0) })
-        snapshot.proposals = Dictionary(uniqueKeysWithValues: value.proposals.map { ($0.captureID, $0) })
-        snapshot.intentions = Dictionary(uniqueKeysWithValues: value.intentions.map { ($0.id, $0) })
-        try persist()
+        try update { candidate in
+            guard candidate.captures.isEmpty,
+                  candidate.proposals.isEmpty,
+                  candidate.intentions.isEmpty else {
+                throw VaultStoreError.vaultNotEmpty
+            }
+            candidate.captures = Dictionary(uniqueKeysWithValues: value.captures.map { ($0.id, $0) })
+            candidate.proposals = Dictionary(uniqueKeysWithValues: value.proposals.map { ($0.captureID, $0) })
+            candidate.intentions = Dictionary(uniqueKeysWithValues: value.intentions.map { ($0.id, $0) })
+        }
     }
 
     public func verifyPersistedSnapshot() throws -> VaultCounts {
-        let reopened = try Self.read(fileURL: fileURL, key: key)
+        let reopened = try withLock(exclusive: false) { try loadLatest() }
         return VaultCounts(
             captures: reopened.captures.count,
             proposals: reopened.proposals.count,
@@ -113,10 +132,24 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         )
     }
 
-    private func persist() throws {
+    public func persistedDevelopmentSnapshot() throws -> DevelopmentStoreSnapshot {
+        let value = try withLock(exclusive: false) { try loadLatest() }
+        return Self.developmentSnapshot(value)
+    }
+
+    public func rollbackMigration() throws {
+        try withLock(exclusive: true) {
+            snapshot = VaultSnapshot()
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try FileManager.default.removeItem(at: fileURL)
+            }
+        }
+    }
+
+    private func persist(_ value: VaultSnapshot) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        let plaintext = try encoder.encode(snapshot)
+        let plaintext = try encoder.encode(value)
         let box = try AES.GCM.seal(
             plaintext,
             using: key,
@@ -124,6 +157,45 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         )
         guard let combined = box.combined else { throw VaultStoreError.corruptPayload }
         try combined.write(to: fileURL, options: [.atomic, .completeFileProtection])
+    }
+
+    private func update(_ change: (inout VaultSnapshot) throws -> Void) throws {
+        try withLock(exclusive: true) {
+            var candidate = try loadLatest()
+            try change(&candidate)
+            try persist(candidate)
+            snapshot = candidate
+        }
+    }
+
+    private func synchronize() throws {
+        snapshot = try withLock(exclusive: false) { try loadLatest() }
+    }
+
+    private func loadLatest() throws -> VaultSnapshot {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return VaultSnapshot() }
+        return try Self.read(fileURL: fileURL, key: key)
+    }
+
+    private func withLock<T>(exclusive: Bool, _ body: () throws -> T) throws -> T {
+        let descriptor = Darwin.open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        guard descriptor >= 0 else { throw VaultStoreError.lockingFailed(errno) }
+        defer { Darwin.close(descriptor) }
+        guard flock(descriptor, exclusive ? LOCK_EX : LOCK_SH) == 0 else {
+            throw VaultStoreError.lockingFailed(errno)
+        }
+        defer { flock(descriptor, LOCK_UN) }
+        return try body()
+    }
+
+    private static func developmentSnapshot(_ value: VaultSnapshot) -> DevelopmentStoreSnapshot {
+        DevelopmentStoreSnapshot(
+            captures: value.captures.values.sorted(by: captureOrder),
+            proposals: value.proposals.values.sorted {
+                $0.captureID.uuidString < $1.captureID.uuidString
+            },
+            intentions: value.intentions.values.sorted(by: intentionOrder)
+        )
     }
 
     private static func read(fileURL: URL, key: SymmetricKey) throws -> VaultSnapshot {

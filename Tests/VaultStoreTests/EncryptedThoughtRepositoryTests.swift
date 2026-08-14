@@ -12,6 +12,24 @@ private func temporaryDirectory() -> URL {
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
 }
 
+@Test func keychainProviderReturnsTheSame32ByteKey() throws {
+    let service = "dev.openloop.tests.\(UUID().uuidString)"
+    let account = "root-key"
+    let deleteQuery: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecAttrAccount as String: account,
+    ]
+    defer { SecItemDelete(deleteQuery as CFDictionary) }
+    let provider = KeychainVaultKeyProvider(service: service, account: account)
+
+    let first = try provider.loadOrCreateKey()
+    let second = try provider.loadOrCreateKey()
+
+    #expect(first.count == 32)
+    #expect(first == second)
+}
+
 @Test func encryptedThoughtsSurviveRestartWithoutPlaintext() async throws {
     let directory = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -56,24 +74,6 @@ private func temporaryDirectory() -> URL {
     #expect(throws: VaultStoreError.authenticationFailed) {
         try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
     }
-}
-
-@Test func keychainProviderReturnsTheSame32ByteKey() throws {
-    let service = "dev.openloop.tests.\(UUID().uuidString)"
-    let account = "root-key"
-    let deleteQuery: [String: Any] = [
-        kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: service,
-        kSecAttrAccount as String: account,
-    ]
-    defer { SecItemDelete(deleteQuery as CFDictionary) }
-    let provider = KeychainVaultKeyProvider(service: service, account: account)
-
-    let first = try provider.loadOrCreateKey()
-    let second = try provider.loadOrCreateKey()
-
-    #expect(first.count == 32)
-    #expect(first == second)
 }
 
 @Test func developmentStoreMigratesOnceAndRemovesPlaintextAfterVerification() async throws {
@@ -146,5 +146,35 @@ private func temporaryDirectory() -> URL {
 
     #expect(result == .vaultAlreadyInitialized)
     #expect(FileManager.default.fileExists(atPath: legacyFile.path))
-    #expect(await vault.counts.captures == 1)
+    #expect(try await vault.empty() == false)
+}
+
+@Test func twoRepositoryInstancesDoNotLoseUpdates() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let first = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    let second = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    let firstCapture = try RawCapture(createdAt: .now, text: "first")
+    let secondCapture = try RawCapture(createdAt: .now, text: "second")
+
+    try await first.save(capture: firstCapture)
+    try await second.save(capture: secondCapture)
+
+    #expect(try await first.persistedDevelopmentSnapshot().captures.count == 2)
+    #expect(try await second.persistedDevelopmentSnapshot().captures.count == 2)
+}
+
+@Test func duplicateMigrationIDsThrowInsteadOfTrapping() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let repository = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    let capture = try RawCapture(createdAt: .now, text: "duplicate")
+    let snapshot = DevelopmentStoreSnapshot(
+        captures: [capture, capture], proposals: [], intentions: []
+    )
+
+    await #expect(throws: VaultStoreError.duplicateMigrationID) {
+        try await repository.importDevelopmentSnapshot(snapshot)
+    }
+    #expect(try await repository.empty())
 }
