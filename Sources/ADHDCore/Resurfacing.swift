@@ -188,3 +188,98 @@ public struct ResurfacingPolicy: Sendable {
         return true
     }
 }
+
+public enum ResurfacingFeedback: Equatable, Sendable {
+    case started
+    case later
+    case never
+
+    fileprivate var eventKind: SuggestionEventKind {
+        switch self {
+        case .started: .started
+        case .later: .later
+        case .never: .never
+        }
+    }
+}
+
+public enum ResurfacingLoopError: Error, Equatable {
+    case intentionNotFound
+    case intentionNotOpen
+    case ruleNotFound
+}
+
+public struct ResurfacingLoop: Sendable {
+    private let repository: any ThoughtRepository
+    private let scorer: RelevanceScorer
+    private let policy: ResurfacingPolicy
+
+    public init(
+        repository: any ThoughtRepository,
+        scorer: RelevanceScorer = RelevanceScorer(),
+        policy: ResurfacingPolicy = ResurfacingPolicy()
+    ) {
+        self.repository = repository
+        self.scorer = scorer
+        self.policy = policy
+    }
+
+    public func suggest(
+        for context: ContextEvent,
+        at date: Date
+    ) async throws -> [ContextualSuggestion] {
+        async let intentionsValue = repository.openIntentions()
+        async let rulesValue = repository.resurfacingRules()
+        async let eventsValue = repository.suggestionEvents()
+        let (intentions, rules, events) = try await (
+            intentionsValue,
+            rulesValue,
+            eventsValue
+        )
+        let eligibleRules = rules.filter {
+            policy.isEligible(rule: $0, events: events, at: date)
+        }
+        let suggestions = scorer.suggestions(
+            intentions: intentions,
+            rules: eligibleRules,
+            context: context
+        )
+        for suggestion in suggestions {
+            try await repository.append(suggestionEvent: SuggestionEvent(
+                intentionID: suggestion.intentionID,
+                occurredAt: date,
+                application: context.application,
+                kind: .shown
+            ))
+        }
+        return suggestions
+    }
+
+    @discardableResult
+    public func recordFeedback(
+        _ feedback: ResurfacingFeedback,
+        intentionID: UUID,
+        application: ApplicationContext,
+        at date: Date
+    ) async throws -> SuggestionEvent {
+        guard let intention = try await repository.intention(id: intentionID) else {
+            throw ResurfacingLoopError.intentionNotFound
+        }
+        guard intention.state == .open else {
+            throw ResurfacingLoopError.intentionNotOpen
+        }
+        guard try await repository.resurfacingRules().contains(where: {
+            $0.intentionID == intentionID
+        }) else {
+            throw ResurfacingLoopError.ruleNotFound
+        }
+        let event = SuggestionEvent(
+            intentionID: intentionID,
+            occurredAt: date,
+            application: application,
+            kind: feedback.eventKind
+        )
+        try await repository.append(suggestionEvent: event)
+        return event
+    }
+}

@@ -152,10 +152,134 @@ import Testing
     #expect(policy.isEligible(rule: other, events: [later, never], at: now))
 }
 
+@Test func resurfacingLoopSuggestsOnlyEligibleOpenRulesAndRecordsShownCooldown() async throws {
+    let repository = ResurfacingRepository()
+    let application = try ApplicationContext(
+        bundleIdentifier: "dev.openloop.Editor", applicationName: "Editor"
+    )
+    let linked = openIntention(marker: "linked", seconds: 1)
+    let notLinked = openIntention(marker: "not linked", seconds: 2)
+    let closed = Intention(
+        id: UUID(), sourceCaptureID: UUID(), desiredOutcome: "Closed",
+        nextAction: "Done", state: .closed,
+        createdAt: Date(timeIntervalSince1970: 3), returnPacket: nil
+    )
+    for intention in [linked, notLinked, closed] {
+        try await repository.save(intention: intention)
+    }
+    for intention in [linked, closed] {
+        try await repository.save(resurfacingRule: ResurfacingRule(
+            intentionID: intention.id,
+            application: application,
+            createdAt: Date(timeIntervalSince1970: 5)
+        ))
+    }
+    let now = Date(timeIntervalSince1970: 1_000)
+    let context = ContextEvent(observedAt: now, application: application)
+    let loop = ResurfacingLoop(repository: repository)
+
+    let first = try await loop.suggest(for: context, at: now)
+    let repeated = try await loop.suggest(for: context, at: now.addingTimeInterval(60))
+
+    #expect(first.map(\.intentionID) == [linked.id])
+    #expect(repeated.isEmpty)
+    let events = try await repository.suggestionEvents()
+    #expect(events.count == 1)
+    #expect(events[0].intentionID == linked.id)
+    #expect(events[0].kind == .shown)
+    #expect(events[0].application == application)
+}
+
+@Test func resurfacingLoopRecordsStartedLaterAndNeverFeedbackWithoutPartialErrors() async throws {
+    let repository = ResurfacingRepository()
+    let application = try ApplicationContext(
+        bundleIdentifier: "dev.openloop.Editor", applicationName: "Editor"
+    )
+    let started = openIntention(marker: "started", seconds: 1)
+    let deferred = openIntention(marker: "deferred", seconds: 2)
+    let silenced = openIntention(marker: "silenced", seconds: 3)
+    for intention in [started, deferred, silenced] {
+        try await repository.save(intention: intention)
+        try await repository.save(resurfacingRule: ResurfacingRule(
+            intentionID: intention.id,
+            application: application,
+            createdAt: Date(timeIntervalSince1970: 5)
+        ))
+    }
+    let loop = ResurfacingLoop(repository: repository)
+    let now = Date(timeIntervalSince1970: 2_000)
+
+    _ = try await loop.recordFeedback(
+        .started, intentionID: started.id, application: application, at: now
+    )
+    _ = try await loop.recordFeedback(
+        .later, intentionID: deferred.id, application: application,
+        at: now.addingTimeInterval(1)
+    )
+    _ = try await loop.recordFeedback(
+        .never, intentionID: silenced.id, application: application,
+        at: now.addingTimeInterval(2)
+    )
+    await #expect(throws: ResurfacingLoopError.intentionNotFound) {
+        try await loop.recordFeedback(
+            .later, intentionID: UUID(), application: application, at: now
+        )
+    }
+
+    let events = try await repository.suggestionEvents()
+    #expect(events.map(\.kind) == [.started, .later, .never])
+    #expect(events.count == 3)
+    let rules = try await repository.resurfacingRules()
+    let nextContext = ContextEvent(observedAt: now, application: application)
+    let eligible = rules.filter {
+        ResurfacingPolicy().isEligible(rule: $0, events: events, at: now)
+    }
+    let eligibleIDs = RelevanceScorer().suggestions(
+        intentions: try await repository.openIntentions(),
+        rules: eligible,
+        context: nextContext
+    ).map(\.intentionID)
+    #expect(eligibleIDs == [started.id])
+}
+
 private func openIntention(marker: String, seconds: TimeInterval) -> Intention {
     Intention(
         id: UUID(), sourceCaptureID: UUID(), desiredOutcome: "\(marker) outcome",
         nextAction: "\(marker) next", state: .open,
         createdAt: Date(timeIntervalSince1970: seconds), returnPacket: nil
     )
+}
+
+private actor ResurfacingRepository: ThoughtRepository {
+    var intentions: [UUID: Intention] = [:]
+    var rules: [UUID: ResurfacingRule] = [:]
+    var events: [UUID: SuggestionEvent] = [:]
+
+    func save(capture: RawCapture) async throws {}
+    func save(proposal: ClarificationProposal) async throws {}
+    func save(intention: Intention) async throws { intentions[intention.id] = intention }
+    func proposal(captureID: UUID) async throws -> ClarificationProposal? { nil }
+    func captures(disposition: Disposition) async throws -> [RawCapture] { [] }
+    func intention(id: UUID) async throws -> Intention? { intentions[id] }
+    func openIntentions() async throws -> [Intention] {
+        intentions.values.filter { $0.state != .closed && $0.state != .released }
+    }
+    func save(resurfacingRule: ResurfacingRule) async throws {
+        rules[resurfacingRule.intentionID] = resurfacingRule
+    }
+    func deleteResurfacingRule(intentionID: UUID) async throws { rules[intentionID] = nil }
+    func resurfacingRules() async throws -> [ResurfacingRule] {
+        rules.values.sorted { $0.createdAt < $1.createdAt }
+    }
+    func append(suggestionEvent: SuggestionEvent) async throws {
+        events[suggestionEvent.id] = suggestionEvent
+    }
+    func suggestionEvents() async throws -> [SuggestionEvent] {
+        events.values.sorted {
+            if $0.occurredAt == $1.occurredAt {
+                return $0.id.uuidString < $1.id.uuidString
+            }
+            return $0.occurredAt < $1.occurredAt
+        }
+    }
 }

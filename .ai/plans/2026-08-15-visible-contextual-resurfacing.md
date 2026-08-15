@@ -156,19 +156,19 @@ Commit: `feat: persist encrypted resurfacing preferences and history`.
 - Modify: `Sources/ADHDCore/Ports.swift`
 - Modify: `Tests/ADHDCoreTests/ResurfacingTests.swift`
 
-- [ ] **Step 1: Write failing orchestration tests**
+- [x] **Step 1: Write failing orchestration tests**
 
 Using an in-memory repository, verify `suggest(for:at:)` loads only open intentions and explicit rules, applies cooldown/suppression, emits at most two stable suggestions, and records a shown event. Verify repeated evaluation inside cooldown is empty.
 
-- [ ] **Step 2: Write failing feedback tests**
+- [x] **Step 2: Write failing feedback tests**
 
 Verify `start`, `later`, and `never` record feedback. `later` suppresses exactly one day, `never` is permanent, and feedback for a missing/non-open intention returns a typed error without partial writes.
 
-- [ ] **Step 3: Implement `ResurfacingLoop`**
+- [x] **Step 3: Implement `ResurfacingLoop`**
 
 Inject repository, scorer, and policy. Keep time and context explicit in every method. Return domain suggestions already containing the user-facing explanation/contributions needed by the UI.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run `Scripts/test.sh --filter ResurfacingTests && Scripts/test.sh --filter ADHDCoreTests`.
 
