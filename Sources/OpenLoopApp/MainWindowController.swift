@@ -121,19 +121,55 @@ private struct MainView: View {
 
     private var laterView: some View {
         Group {
-            if model.later.isEmpty {
-                ContentUnavailableView("Later is quiet", systemImage: "tray")
+            if model.openLoops.isEmpty && model.later.isEmpty {
+                ContentUnavailableView(
+                    "Nothing stored yet",
+                    systemImage: "tray",
+                    description: Text("Captured actions and notes will stay visible here.")
+                )
             } else {
-                List(model.later) { item in
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(item.text)
-                        Text(item.disposition.rawValue.capitalized)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                List {
+                    if model.openLoops.isEmpty == false {
+                        Section("Open loops") {
+                            ForEach(model.openLoops) { item in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(item.desiredOutcome)
+                                        .font(.headline)
+                                    Text(item.nextAction)
+                                        .foregroundStyle(.secondary)
+                                    Text(openLoopStateLabel(item.state))
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                .padding(.vertical, 6)
+                            }
+                        }
                     }
-                    .padding(.vertical, 5)
+                    if model.later.isEmpty == false {
+                        Section("Notes and captures") {
+                            ForEach(model.later) { item in
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(item.text)
+                                    Text(item.disposition.rawValue.capitalized)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.vertical, 5)
+                            }
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    private func openLoopStateLabel(_ state: IntentionState) -> String {
+        switch state {
+        case .active: "Focusing"
+        case .open: "Ready"
+        case .interrupted: "Return point saved"
+        case .closed: "Finished"
+        case .released: "Released"
         }
     }
 }

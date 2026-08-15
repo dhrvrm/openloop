@@ -80,19 +80,19 @@ Commit: `fix: open a visible workspace on launch`.
 - Modify: `Sources/OpenLoopApp/AppModel.swift`
 - Modify: `Sources/OpenLoopApp/MainWindowController.swift`
 
-- [ ] **Step 1: Write failing library projection tests**
+- [x] **Step 1: Write failing library projection tests**
 
 Add `OpenLoopItem` and verify the projection contains open, active, and interrupted intentions with desired outcome, next action, state, and creation time; excludes closed/released intentions; and orders current/active before open before interrupted, with stable date/UUID ties.
 
-- [ ] **Step 2: Implement the read model and app publication**
+- [x] **Step 2: Implement the read model and app publication**
 
 Add `ThoughtReadModels.openLoops()` and publish it from `AppModel.refresh()` alongside Now, Return, and Later without changing their existing semantics.
 
-- [ ] **Step 3: Render a calm Later library**
+- [x] **Step 3: Render a calm Later library**
 
 Keep the Later tab. Show `Open loops` first with outcome, exact next action, and a neutral state label, followed by `Notes and captures`. Empty-state text distinguishes a truly empty store from a store containing only one category.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run `Scripts/test.sh --filter 'ReadModelsTests|OpenLoopAppTests' && Scripts/test.sh`.
 

@@ -43,6 +43,15 @@ public struct LaterItem: Equatable, Identifiable, Sendable {
     public let disposition: Disposition
 }
 
+public struct OpenLoopItem: Equatable, Identifiable, Sendable {
+    public var id: UUID { intentionID }
+    public let intentionID: UUID
+    public let desiredOutcome: String
+    public let nextAction: String
+    public let state: IntentionState
+    public let createdAt: Date
+}
+
 public struct ThoughtReadModels: Sendable {
     private let repository: any ThoughtRepository
 
@@ -109,6 +118,25 @@ public struct ThoughtReadModels: Sendable {
         return items.sorted {
             if $0.createdAt == $1.createdAt { return $0.id.uuidString < $1.id.uuidString }
             return $0.createdAt < $1.createdAt
+        }
+    }
+
+    public func openLoops() async throws -> [OpenLoopItem] {
+        try await repository.openIntentions().map {
+            OpenLoopItem(
+                intentionID: $0.id,
+                desiredOutcome: $0.desiredOutcome,
+                nextAction: $0.nextAction,
+                state: $0.state,
+                createdAt: $0.createdAt
+            )
+        }.sorted {
+            let rank: [IntentionState: Int] = [.active: 0, .open: 1, .interrupted: 2]
+            let left = rank[$0.state] ?? 3
+            let right = rank[$1.state] ?? 3
+            if left != right { return left < right }
+            if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
+            return $0.intentionID.uuidString < $1.intentionID.uuidString
         }
     }
 

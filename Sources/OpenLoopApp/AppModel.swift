@@ -10,6 +10,7 @@ final class AppModel: ObservableObject {
     @Published var now: NowItem?
     @Published var returns: [ReturnItem] = []
     @Published var later: [LaterItem] = []
+    @Published var openLoops: [OpenLoopItem] = []
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -60,10 +61,12 @@ final class AppModel: ObservableObject {
             async let nextNow = readModels.now()
             async let nextReturns = readModels.returns()
             async let nextLater = readModels.later()
-            let projections = try await (nextNow, nextReturns, nextLater)
+            async let nextOpenLoops = readModels.openLoops()
+            let projections = try await (nextNow, nextReturns, nextLater, nextOpenLoops)
             now = projections.0
             returns = projections.1
             later = projections.2
+            openLoops = projections.3
             commandError = nil
             return true
         } catch {

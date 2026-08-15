@@ -153,6 +153,53 @@ private actor ReadRepository: ThoughtRepository {
     #expect(returns[0].capturedAt == newerDate)
 }
 
+@Test func openLoopLibraryExposesEveryUnfinishedIntentionInCalmStateOrder() async throws {
+    let repository = ReadRepository()
+    let createdAt = Date(timeIntervalSince1970: 50)
+    let active = Intention(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
+        sourceCaptureID: UUID(), desiredOutcome: "Active outcome",
+        nextAction: "Active next", state: .active, createdAt: createdAt,
+        returnPacket: nil
+    )
+    let openFirst = Intention(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+        sourceCaptureID: UUID(), desiredOutcome: "Open first",
+        nextAction: "First next", state: .open, createdAt: createdAt,
+        returnPacket: nil
+    )
+    let openSecond = Intention(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+        sourceCaptureID: UUID(), desiredOutcome: "Open second",
+        nextAction: "Second next", state: .open, createdAt: createdAt,
+        returnPacket: nil
+    )
+    let interrupted = try interruptedIntention(
+        capturedAt: createdAt.addingTimeInterval(20), marker: "Interrupted"
+    )
+    let closed = Intention(
+        id: UUID(), sourceCaptureID: UUID(), desiredOutcome: "Closed",
+        nextAction: "Done", state: .closed, createdAt: createdAt,
+        returnPacket: nil
+    )
+    let released = Intention(
+        id: UUID(), sourceCaptureID: UUID(), desiredOutcome: "Released",
+        nextAction: "Drop", state: .released, createdAt: createdAt,
+        returnPacket: nil
+    )
+    for intention in [openSecond, interrupted, released, active, closed, openFirst] {
+        try await repository.save(intention: intention)
+    }
+
+    let items = try await ThoughtReadModels(repository: repository).openLoops()
+
+    #expect(items.map(\.intentionID) == [active.id, openFirst.id, openSecond.id, interrupted.id])
+    #expect(items.map(\.state) == [.active, .open, .open, .interrupted])
+    #expect(items[0].desiredOutcome == "Active outcome")
+    #expect(items[0].nextAction == "Active next")
+    #expect(items[0].createdAt == createdAt)
+}
+
 private func interruptedIntention(capturedAt: Date, marker: String) throws -> Intention {
     let id = UUID()
     let packet = try ReturnPacket(
