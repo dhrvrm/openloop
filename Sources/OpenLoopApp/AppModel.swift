@@ -11,19 +11,42 @@ final class AppModel: ObservableObject {
     @Published var returns: [ReturnItem] = []
     @Published var later: [LaterItem] = []
     @Published var openLoops: [OpenLoopItem] = []
+    @Published var currentApplication: ApplicationContext?
+    @Published var suggestions: [ContextualSuggestion] = []
+    @Published var resurfacingError: String?
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
     private let focusLoop: FocusLoop?
+    private let resurfacingLoop: ResurfacingLoop?
 
     init(
         loop: ThoughtLoop,
         readModels: ThoughtReadModels,
-        focusLoop: FocusLoop? = nil
+        focusLoop: FocusLoop? = nil,
+        resurfacingLoop: ResurfacingLoop? = nil
     ) {
         self.loop = loop
         self.readModels = readModels
         self.focusLoop = focusLoop
+        self.resurfacingLoop = resurfacingLoop
+    }
+
+    func refreshContext(_ application: ApplicationContext?, at date: Date = .now) async {
+        guard let resurfacingLoop else { return }
+        if application == currentApplication, suggestions.isEmpty == false { return }
+        currentApplication = application
+        suggestions = []
+        resurfacingError = nil
+        guard let application else { return }
+        do {
+            suggestions = try await resurfacingLoop.suggest(
+                for: ContextEvent(observedAt: date, application: application),
+                at: date
+            )
+        } catch {
+            resurfacingError = "Suggestions are quiet for now. Your stored work is safe."
+        }
     }
 
     func submitCapture(_ text: String) async -> Bool {

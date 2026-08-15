@@ -59,10 +59,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                     contextProvider: contextProvider
                 )
             )
+            let resurfacingLoop = ResurfacingLoop(repository: repository)
             let model = AppModel(
                 loop: loop,
                 readModels: ThoughtReadModels(repository: repository),
-                focusLoop: focusLoop
+                focusLoop: focusLoop,
+                resurfacingLoop: resurfacingLoop
             )
             _ = try await DevelopmentStoreMigrator().migrateIfNeeded(
                 from: directory,
@@ -86,15 +88,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             self.mainWindow = mainWindow
             self.model = model
             self.contextProvider = contextProvider
-            let workspaceLifecycle = WorkspaceLifecycle { [weak mainWindow] tab in
-                mainWindow?.show(tab: tab)
+            let workspaceLifecycle = WorkspaceLifecycle { [weak self] tab in
+                self?.presentWorkspace(tab: tab)
             }
             self.workspaceLifecycle = workspaceLifecycle
             configureMenu(quickCapture: quickCapture, mainWindow: mainWindow)
             hotKey = try GlobalHotKey { [weak quickCapture] startedAt in
                 quickCapture?.show(startedAt: startedAt)
             }
-            await contextProvider.snapshot()
             workspaceLifecycle.showInitialWorkspace()
         } catch {
             NSApp.presentError(error)
@@ -271,12 +272,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     }
 
     @objc private func showCapture() { quickCapture?.show() }
-    @objc private func showNow() {
-        Task {
-            await contextProvider?.snapshot()
-            mainWindow?.show(tab: 0)
-        }
-    }
+    @objc private func showNow() { presentWorkspace(tab: 0) }
     @objc private func showReturn() { mainWindow?.show(tab: 1) }
     @objc private func showLater() { mainWindow?.show(tab: 2) }
     @objc private func pauseOrContinue() {
@@ -290,6 +286,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         }
     }
     @objc private func quit() { NSApp.terminate(nil) }
+
+    private func presentWorkspace(tab: Int) {
+        Task { [weak self] in
+            guard let self else { return }
+            await contextProvider?.snapshot()
+            let application = await contextProvider?.currentContext()
+            await model?.refreshContext(application)
+            mainWindow?.show(tab: tab)
+        }
+    }
 
     func applicationShouldHandleReopen(
         _ sender: NSApplication,

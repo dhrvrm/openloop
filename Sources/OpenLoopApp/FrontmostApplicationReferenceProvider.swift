@@ -2,32 +2,52 @@ import ADHDCore
 import AppKit
 import Foundation
 
-actor FrontmostApplicationReferenceProvider: ContextReferenceProvider {
-    private let applicationName: @MainActor @Sendable () -> String?
-    private var capturedReference: String?
+struct FrontmostApplicationIdentity: Equatable, Sendable {
+    let bundleIdentifier: String?
+    let applicationName: String?
+}
 
-    init(applicationName: @escaping @MainActor @Sendable () -> String?) {
-        self.applicationName = applicationName
+actor FrontmostApplicationReferenceProvider: ContextReferenceProvider {
+    private let applicationIdentity: @MainActor @Sendable () -> FrontmostApplicationIdentity?
+    private var capturedContext: ApplicationContext?
+
+    init(
+        applicationIdentity: @escaping @MainActor @Sendable () -> FrontmostApplicationIdentity?
+    ) {
+        self.applicationIdentity = applicationIdentity
     }
 
     init() {
-        applicationName = {
+        applicationIdentity = {
             guard let application = NSWorkspace.shared.frontmostApplication,
                   application.bundleIdentifier != Bundle.main.bundleIdentifier else {
                 return nil
             }
-            return application.localizedName
+            return FrontmostApplicationIdentity(
+                bundleIdentifier: application.bundleIdentifier,
+                applicationName: application.localizedName
+            )
         }
     }
 
     func snapshot() async {
-        capturedReference = nil
-        guard let value = await applicationName() else { return }
-        let name = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        capturedReference = name.isEmpty ? nil : "Application — \(name)"
+        capturedContext = nil
+        guard let identity = await applicationIdentity(),
+              let bundleIdentifier = identity.bundleIdentifier,
+              let applicationName = identity.applicationName else {
+            return
+        }
+        capturedContext = try? ApplicationContext(
+            bundleIdentifier: bundleIdentifier,
+            applicationName: applicationName
+        )
+    }
+
+    func currentContext() -> ApplicationContext? {
+        capturedContext
     }
 
     func references() async throws -> [String] {
-        capturedReference.map { [$0] } ?? []
+        capturedContext.map { ["Application — \($0.applicationName)"] } ?? []
     }
 }

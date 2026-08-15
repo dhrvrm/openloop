@@ -181,19 +181,19 @@ Commit: `feat: orchestrate rate-limited contextual suggestions`.
 - Modify: `Tests/OpenLoopAppTests/FrontmostApplicationReferenceProviderTests.swift`
 - Modify: `Sources/OpenLoopApp/OpenLoopApp.swift`
 
-- [ ] **Step 1: Write failing adapter tests**
+- [x] **Step 1: Write failing adapter tests**
 
 Inject a lookup that returns bundle ID and localized name. Verify normalized `ApplicationContext`, nil for incomplete/absent applications, and continued readable interruption references. Verify no permissions or workspace observer are registered.
 
-- [ ] **Step 2: Implement the dual-purpose provider**
+- [x] **Step 2: Implement the dual-purpose provider**
 
 Retain `ContextReferenceProvider` behavior for interruption packets and add a structured `currentContext()` method for resurfacing. Production performs one `NSWorkspace.shared.frontmostApplication` lookup only when requested.
 
-- [ ] **Step 3: Wire the resurfacing loop**
+- [x] **Step 3: Wire the resurfacing loop**
 
 Create one provider and one `ResurfacingLoop`. When the workspace is opened by launch, Dock, or Now menu action, snapshot the application that was foreground before OpenLoop activates, refresh suggestions, then show the window.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run `Scripts/test.sh --filter FrontmostApplicationReferenceProviderTests && Scripts/test.sh`.
 
