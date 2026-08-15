@@ -104,19 +104,19 @@ Commit: `feat: expose stored open loops in Later`.
 - Create: `Sources/ADHDCore/Resurfacing.swift`
 - Create: `Tests/ADHDCoreTests/ResurfacingTests.swift`
 
-- [ ] **Step 1: Write failing value and scoring tests**
+- [x] **Step 1: Write failing value and scoring tests**
 
 Cover normalized application bundle identifiers/names; a rule linked to one intention; a matching and nonmatching `ContextEvent`; exact `RelevanceContribution` label/value/explanation; threshold behavior; stable tie ordering; maximum-two selection; and the absence of recency/age penalties.
 
-- [ ] **Step 2: Write failing cooldown and suppression tests**
+- [x] **Step 2: Write failing cooldown and suppression tests**
 
 Cover first eligibility, four-hour shown cooldown, eligibility at the boundary, one-day `Later`, permanent `Never`, and unrelated intentions remaining eligible. All decisions use an injected date.
 
-- [ ] **Step 3: Implement pure domain types and scorer**
+- [x] **Step 3: Implement pure domain types and scorer**
 
 Create Codable/Sendable/Equatable context, rule, history-event, feedback, contribution, and suggestion values. Implement a pure `RelevanceScorer` and `ResurfacingPolicy` with the constants in Constraints. Keep reason text derived from the public contribution values so UI explanations cannot drift from scoring.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run `Scripts/test.sh --filter ResurfacingTests && Scripts/test.sh --filter ADHDCoreTests`.
 
