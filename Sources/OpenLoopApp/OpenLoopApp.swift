@@ -7,6 +7,26 @@ import RuleClarifier
 import VaultStore
 
 @MainActor
+struct WorkspaceLifecycle {
+    private let show: (Int) -> Void
+
+    init(show: @escaping (Int) -> Void) {
+        self.show = show
+    }
+
+    func showInitialWorkspace() {
+        show(0)
+    }
+
+    @discardableResult
+    func restoreWorkspace(hasVisibleWindows: Bool) -> Bool {
+        guard hasVisibleWindows == false else { return false }
+        show(0)
+        return true
+    }
+}
+
+@MainActor
 private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var quickCapture: QuickCaptureController?
@@ -15,6 +35,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private var model: AppModel?
     private var pauseMenuItem: NSMenuItem?
     private var contextProvider: FrontmostApplicationReferenceProvider?
+    private var workspaceLifecycle: WorkspaceLifecycle?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { await start() }
@@ -65,10 +86,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             self.mainWindow = mainWindow
             self.model = model
             self.contextProvider = contextProvider
+            let workspaceLifecycle = WorkspaceLifecycle { [weak mainWindow] tab in
+                mainWindow?.show(tab: tab)
+            }
+            self.workspaceLifecycle = workspaceLifecycle
             configureMenu(quickCapture: quickCapture, mainWindow: mainWindow)
             hotKey = try GlobalHotKey { [weak quickCapture] startedAt in
                 quickCapture?.show(startedAt: startedAt)
             }
+            await contextProvider.snapshot()
+            workspaceLifecycle.showInitialWorkspace()
         } catch {
             NSApp.presentError(error)
         }
@@ -134,6 +161,19 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             withExtendedLifetime(hotKey) {
                 print("hotkey-registration=passed")
             }
+            return true
+
+        case "--window-test":
+            let controller = MainWindowController(model: model)
+            controller.show(tab: 0)
+            await Task.yield()
+            guard controller.isVisibleForTesting,
+                  controller.windowNumberForTesting > 0 else {
+                print("window-test=failed")
+                exit(EXIT_FAILURE)
+            }
+            print("window-test=passed")
+            controller.closeForTesting()
             return true
 
         case "--focus-interrupt-test":
@@ -251,6 +291,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     }
     @objc private func quit() { NSApp.terminate(nil) }
 
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows flag: Bool
+    ) -> Bool {
+        workspaceLifecycle?.restoreWorkspace(hasVisibleWindows: flag) ?? false
+    }
+
     private func configureMenu(
         quickCapture: QuickCaptureController,
         mainWindow: MainWindowController
@@ -316,7 +363,7 @@ struct OpenLoopApplication {
         let application = NSApplication.shared
         let delegate = AppDelegate()
         application.delegate = delegate
-        application.setActivationPolicy(.accessory)
+        application.setActivationPolicy(.regular)
         application.run()
         _ = delegate
     }

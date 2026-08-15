@@ -272,6 +272,7 @@ final class MainWindowController {
     private let window: NSWindow
     private let model: AppModel
     private let hostingController: NSHostingController<MainView>
+    private(set) var selectedTabForTesting = 0
 
     init(model: AppModel) {
         self.model = model
@@ -283,9 +284,17 @@ final class MainWindowController {
     }
 
     func show(tab: Int) {
+        selectedTabForTesting = tab
         hostingController.rootView = MainView(model: model, selection: tab)
         window.center()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+    }
+
+    var isVisibleForTesting: Bool { window.isVisible }
+    var windowNumberForTesting: Int { window.windowNumber }
+
+    func closeForTesting() {
+        window.close()
     }
 }

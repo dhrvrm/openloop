@@ -48,25 +48,25 @@
 - Modify: `Resources/Info.plist`
 - Create: `Tests/OpenLoopAppTests/MainWindowControllerTests.swift`
 
-- [ ] **Step 1: Write a failing lifecycle seam test**
+- [x] **Step 1: Write a failing lifecycle seam test**
 
 Expose read-only window state needed by tests and verify `show(tab:)` selects the requested surface and orders a titled window on screen. Add a delegate lifecycle test seam that proves initial startup and Dock reopen request the main workspace.
 
-- [ ] **Step 2: Verify focused failure**
+- [x] **Step 2: Verify focused failure**
 
 Run `Scripts/test.sh --filter MainWindowControllerTests`.
 
 Expected: compilation or assertions fail because lifecycle/window observability and reopen behavior do not exist.
 
-- [ ] **Step 3: Implement regular foreground lifecycle**
+- [x] **Step 3: Implement regular foreground lifecycle**
 
 Use `.regular` activation, remove `LSUIElement`, bump the bundle version to `0.3.0`, show Now after successful startup, and implement `applicationShouldHandleReopen(_:hasVisibleWindows:)` to restore Now when no window is visible. Preserve menu-bar actions and Quick Capture.
 
-- [ ] **Step 4: Add a packaged window diagnostic**
+- [x] **Step 4: Add a packaged window diagnostic**
 
 Add `--window-test`, which constructs the production window, shows it, waits one run-loop turn, verifies it is visible/key with a valid window number, prints `window-test=passed`, and exits nonzero on failure.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run `Scripts/test.sh --filter OpenLoopAppTests && swift build -c release`.
 
