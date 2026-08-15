@@ -95,11 +95,15 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
     }
 
     public func save(focusSession: FocusSession) async throws {
-        try update { $0.focusSessions[focusSession.id] = focusSession }
+        try update {
+            try Self.validateCurrentFocus(focusSession, in: $0)
+            $0.focusSessions[focusSession.id] = focusSession
+        }
     }
 
     public func save(intention: Intention, focusSession: FocusSession) async throws {
         try update {
+            try Self.validateCurrentFocus(focusSession, in: $0)
             $0.intentions[intention.id] = intention
             $0.focusSessions[focusSession.id] = focusSession
         }
@@ -290,5 +294,17 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
     private static func focusSessionOrder(_ lhs: FocusSession, _ rhs: FocusSession) -> Bool {
         if lhs.startedAt == rhs.startedAt { return lhs.id.uuidString < rhs.id.uuidString }
         return lhs.startedAt < rhs.startedAt
+    }
+
+    private static func validateCurrentFocus(
+        _ focusSession: FocusSession,
+        in snapshot: VaultSnapshot
+    ) throws {
+        guard focusSession.state == .active || focusSession.state == .paused else { return }
+        if let current = snapshot.focusSessions.values.first(where: {
+            ($0.state == .active || $0.state == .paused) && $0.id != focusSession.id
+        }) {
+            throw ThoughtRepositoryFocusError.currentFocusExists(current.intentionID)
+        }
     }
 }

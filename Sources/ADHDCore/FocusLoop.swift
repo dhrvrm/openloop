@@ -84,7 +84,19 @@ public actor FocusLoop {
 
     public func finish(_ intentionID: UUID, at date: Date) async throws -> FocusUpdate {
         var intention = try await loadIntention(intentionID)
-        var session = try await loadSession(intentionID)
+        var session: FocusSession
+        if let existing = try await existingSession(intentionID) {
+            session = existing
+        } else {
+            guard intention.state == .active || intention.state == .interrupted else {
+                throw FocusLoopError.focusSessionNotFound(intentionID)
+            }
+            session = FocusSession(
+                intentionID: intentionID,
+                startedAt: date,
+                state: intention.state == .interrupted ? .interrupted : .active
+            )
+        }
         try intention.transition(to: .closed)
         try session.finish(at: date)
         return try await persist(intention, session)
@@ -94,7 +106,11 @@ public actor FocusLoop {
         _ intention: Intention,
         _ session: FocusSession
     ) async throws -> FocusUpdate {
-        try await repository.save(intention: intention, focusSession: session)
+        do {
+            try await repository.save(intention: intention, focusSession: session)
+        } catch let ThoughtRepositoryFocusError.currentFocusExists(id) {
+            throw FocusLoopError.currentFocusExists(id)
+        }
         return FocusUpdate(intention: intention, session: session)
     }
 

@@ -21,6 +21,10 @@ public enum ThoughtRepositoryCompatibilityError: Error, Equatable {
     case focusSessionsUnsupported
 }
 
+public enum ThoughtRepositoryFocusError: Error, Equatable {
+    case currentFocusExists(UUID)
+}
+
 public extension ThoughtRepository {
     func save(proposal: ClarificationProposal, intention: Intention?) async throws {
         try await save(proposal: proposal)
@@ -38,8 +42,7 @@ public extension ThoughtRepository {
     }
 
     func save(intention: Intention, focusSession: FocusSession) async throws {
-        try await save(intention: intention)
-        try await save(focusSession: focusSession)
+        throw ThoughtRepositoryCompatibilityError.focusSessionsUnsupported
     }
 
     func focusSession(id: UUID) async throws -> FocusSession? { nil }

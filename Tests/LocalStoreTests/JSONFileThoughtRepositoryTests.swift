@@ -132,3 +132,68 @@ private struct LegacySnapshot: Codable {
         try JSONFileThoughtRepository(directory: directory)
     }
 }
+
+@Test func twoDevelopmentRepositoriesPersistOnlyOneCurrentFocus() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let writer = try JSONFileThoughtRepository(directory: directory)
+    let firstIntention = localTestIntention()
+    let secondIntention = localTestIntention()
+    try await writer.save(intention: firstIntention)
+    try await writer.save(intention: secondIntention)
+    let first = try JSONFileThoughtRepository(directory: directory)
+    let second = try JSONFileThoughtRepository(directory: directory)
+    let date = Date(timeIntervalSince1970: 100)
+
+    async let firstStarted = attemptLocalStart(firstIntention.id, repository: first, at: date)
+    async let secondStarted = attemptLocalStart(secondIntention.id, repository: second, at: date)
+    let outcomes = await [firstStarted, secondStarted]
+
+    #expect(outcomes.filter { $0 }.count == 1)
+    let reopened = try JSONFileThoughtRepository(directory: directory)
+    #expect(try await reopened.focusSessions().filter {
+        $0.state == .active || $0.state == .paused
+    }.count == 1)
+    #expect(try await reopened.openIntentions().filter { $0.state == .active }.count == 1)
+}
+
+@Test func standaloneDevelopmentFocusSaveRejectsASecondCurrentSession() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let repository = try JSONFileThoughtRepository(directory: directory)
+    let first = FocusSession(intentionID: UUID(), startedAt: .now)
+    let second = FocusSession(intentionID: UUID(), startedAt: .now)
+    try await repository.save(focusSession: first)
+
+    await #expect(throws: ThoughtRepositoryFocusError.currentFocusExists(first.intentionID)) {
+        try await repository.save(focusSession: second)
+    }
+}
+
+private func attemptLocalStart(
+    _ id: UUID,
+    repository: JSONFileThoughtRepository,
+    at date: Date
+) async -> Bool {
+    do {
+        _ = try await FocusLoop(repository: repository).start(id, at: date)
+        return true
+    } catch {
+        return false
+    }
+}
+
+private func localTestIntention() -> Intention {
+    let id = UUID()
+    return Intention(
+        id: id,
+        sourceCaptureID: id,
+        desiredOutcome: "Test local focus",
+        nextAction: "Begin",
+        state: .open,
+        createdAt: Date(timeIntervalSince1970: 1),
+        returnPacket: nil
+    )
+}

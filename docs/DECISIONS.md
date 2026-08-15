@@ -95,3 +95,14 @@ The Increment 1 vault key therefore remains a generic-password item in the local
 login Keychain. A Developer ID/provisioned build may move it to the Data
 Protection Keychain later; the application does not claim device-only key
 semantics in the current distribution.
+
+## D-013 — Focus lifecycle pairs are persisted atomically
+
+Status: accepted.
+
+Each intention owns one durable focus session. Active and paused sessions are the
+single current focus; interrupted sessions move to Return and no longer block a
+new current intention. Every coupled intention/session lifecycle change is saved
+in one repository snapshot write so relaunch cannot observe half a transition.
+Older active or interrupted intentions without a focus-session record are
+upgraded when they next start or resume.

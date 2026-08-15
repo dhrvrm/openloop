@@ -27,6 +27,22 @@ private actor FocusRepository: ThoughtRepository {
     func savedPairCount() -> Int { combinedSaveCount }
 }
 
+private actor LegacyFocusUnsupportedRepository: ThoughtRepository {
+    var storedIntention: Intention
+
+    init(intention: Intention) { storedIntention = intention }
+
+    func save(capture: RawCapture) async throws {}
+    func save(proposal: ClarificationProposal) async throws {}
+    func save(intention: Intention) async throws { storedIntention = intention }
+    func proposal(captureID: UUID) async throws -> ClarificationProposal? { nil }
+    func captures(disposition: Disposition) async throws -> [RawCapture] { [] }
+    func intention(id: UUID) async throws -> Intention? {
+        storedIntention.id == id ? storedIntention : nil
+    }
+    func openIntentions() async throws -> [Intention] { [storedIntention] }
+}
+
 private let focusStart = Date(timeIntervalSince1970: 2_000)
 
 private func makeIntention(id: UUID = UUID(), createdAt: Date = focusStart) -> Intention {
@@ -201,4 +217,40 @@ private func makeLegacyInterruptedIntention() throws -> Intention {
     #expect(update.intention.nextAction == "Recovered exact next action")
     #expect(update.session.state == .active)
     #expect(update.session.intentionID == intention.id)
+}
+
+@Test func legacyInterruptedIntentionCanFinishWithoutAnExistingSession() async throws {
+    let repository = FocusRepository()
+    let intention = try makeLegacyInterruptedIntention()
+    await repository.insert(intention)
+    let loop = FocusLoop(repository: repository)
+
+    let update = try await loop.finish(intention.id, at: focusStart.addingTimeInterval(20))
+
+    #expect(update.intention.state == .closed)
+    #expect(update.session.state == .finished)
+    #expect(update.session.intentionID == intention.id)
+}
+
+@Test func unsupportedRepositoryRejectsFocusBeforeSavingTheIntention() async throws {
+    let intention = makeIntention()
+    let repository = LegacyFocusUnsupportedRepository(intention: intention)
+    let loop = FocusLoop(repository: repository)
+
+    await #expect(throws: ThoughtRepositoryCompatibilityError.focusSessionsUnsupported) {
+        try await loop.start(intention.id, at: focusStart)
+    }
+
+    #expect(try await repository.intention(id: intention.id)?.state == .open)
+}
+
+@Test func openIntentionCannotFinishWithoutFirstEnteringFocus() async throws {
+    let repository = FocusRepository()
+    let intention = makeIntention()
+    await repository.insert(intention)
+    let loop = FocusLoop(repository: repository)
+
+    await #expect(throws: FocusLoopError.focusSessionNotFound(intention.id)) {
+        try await loop.finish(intention.id, at: focusStart)
+    }
 }

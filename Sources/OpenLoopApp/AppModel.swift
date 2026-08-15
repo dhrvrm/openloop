@@ -54,32 +54,40 @@ final class AppModel: ObservableObject {
         await refresh()
     }
 
-    func refresh() async {
+    @discardableResult
+    func refresh() async -> Bool {
         do {
             async let nextNow = readModels.now()
             async let nextReturns = readModels.returns()
             async let nextLater = readModels.later()
-            now = try await nextNow
-            returns = try await nextReturns
-            later = try await nextLater
+            let projections = try await (nextNow, nextReturns, nextLater)
+            now = projections.0
+            returns = projections.1
+            later = projections.2
+            commandError = nil
+            return true
         } catch {
-            captureError = "Could not refresh local thoughts."
+            commandError = "Saved locally, but the view could not refresh. Try reopening it."
+            return false
         }
     }
 
-    func startFocus(_ intentionID: UUID) async {
+    @discardableResult
+    func startFocus(_ intentionID: UUID) async -> Bool {
         await runFocusCommand {
             try await $0.start(intentionID, at: .now)
         }
     }
 
-    func pauseFocus(_ intentionID: UUID) async {
+    @discardableResult
+    func pauseFocus(_ intentionID: UUID) async -> Bool {
         await runFocusCommand {
             try await $0.pause(intentionID, at: .now)
         }
     }
 
-    func continueFocus(_ intentionID: UUID) async {
+    @discardableResult
+    func continueFocus(_ intentionID: UUID) async -> Bool {
         await runFocusCommand {
             try await $0.continueSession(intentionID, at: .now)
         }
@@ -91,13 +99,15 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func resumeFocus(_ intentionID: UUID) async {
+    @discardableResult
+    func resumeFocus(_ intentionID: UUID) async -> Bool {
         await runFocusCommand {
             try await $0.resume(intentionID, at: .now)
         }
     }
 
-    func finishFocus(_ intentionID: UUID) async {
+    @discardableResult
+    func finishFocus(_ intentionID: UUID) async -> Bool {
         await runFocusCommand {
             try await $0.finish(intentionID, at: .now)
         }
@@ -114,8 +124,7 @@ final class AppModel: ObservableObject {
         commandError = nil
         do {
             _ = try await operation(focusLoop)
-            await refresh()
-            return true
+            return await refresh()
         } catch let FocusLoopError.currentFocusExists(id) {
             commandError = id == now?.intentionID
                 ? "This intention is already in focus."

@@ -118,6 +118,26 @@ DMG. The resulting artifact is `.artifacts/OpenLoop-ADHD.dmg`. Ad-hoc signing is
 intended for personal and trusted testing and may still produce Gatekeeper
 friction when shared with another Mac.
 
+## Focus and interruption recovery
+
+Open Now to start one intention. While focused, the app shows only its outcome,
+exact next action, a calm elapsed-time cue, and Pause, Interrupt, and Finish.
+Interrupt saves what was just completed, the exact restart action, an optional
+blocker, manual files/links/notes, and the frontmost application name when it is
+locally available. This adapter does not request Accessibility or Automation
+permission.
+
+Interrupted work leaves Now and appears in Return. Its packet remains encrypted
+on disk and can be resumed after quitting and reopening the app; Resume restores
+the saved next action rather than asking for reconstruction. The menu-bar item
+exposes Capture, Now, Pause/Continue, Return, Later, and the current private-mode
+status. No ambient sensing is active in this increment.
+
+Run `Scripts/verify-increment-2.sh` to execute all tests, prove an exact Return
+packet survives a fresh encrypted-repository instance, scan for packet plaintext,
+recheck capture latency and the global hot key, sign the app, build the DMG, and
+mount-check it. The artifact remains `.artifacts/OpenLoop-ADHD.dmg`.
+
 An action can be moved through the complete durable loop with:
 
 ```bash

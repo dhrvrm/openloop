@@ -180,27 +180,27 @@ Commit: `feat: add calm focus and Return surfaces`.
 - Modify: `docs/DECISIONS.md`
 - Modify: `.ai/plans/2026-08-14-focus-interruption-recovery.md`
 
-- [ ] **Step 1: Add a packaged focus recovery diagnostic**
+- [x] **Step 1: Add a packaged focus recovery diagnostic**
 
 `--focus-recovery-test` creates a unique action, starts it, interrupts it with distinctive just-completed text, next action, blocker, and references, then opens a new encrypted repository instance. It asserts the stored intention and session are interrupted, compares every packet field, resumes through a new `FocusLoop`, and asserts the restored next action and active state.
 
-- [ ] **Step 2: Add the complete Increment 2 gate**
+- [x] **Step 2: Add the complete Increment 2 gate**
 
 `Scripts/verify-increment-2.sh` runs all tests and release build, builds and signs the DMG, runs the packaged recovery diagnostic in a temporary vault/Keychain service, scans the full data directory for every distinctive plaintext packet string, reruns capture latency and hot-key checks, mounts the DMG, and verifies the app plus Applications link.
 
-- [ ] **Step 3: Document the delivered behavior and decision**
+- [x] **Step 3: Document the delivered behavior and decision**
 
 Update the README usage with Command-Shift-Space, Now focus controls, interruption capture, and Return recovery. Add a decision recording one durable focus session per intention, with interrupted sessions retained independently and lifecycle pairs persisted atomically.
 
-- [ ] **Step 4: Self-review the implementation**
+- [x] **Step 4: Self-review the implementation**
 
 Run placeholder scan (`TODO|FIXME|stub|placeholder`), review the diff for accidental plaintext/logging and unrelated changes, confirm all plan checkboxes match reality, and run the full Increment 2 gate from a clean process state.
 
-- [ ] **Step 5: Request independent code review and resolve findings**
+- [x] **Step 5: Request independent code review and resolve findings**
 
 Review against the Increment 2 exit gate, repository compatibility, focus invariants, UI behavior, encryption, and verification evidence. Resolve every blocking finding and rerun affected checks.
 
-- [ ] **Step 6: Commit final verification**
+- [x] **Step 6: Commit final verification**
 
 Commit: `test: verify interruption recovery across relaunch`.
 

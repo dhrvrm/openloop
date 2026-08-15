@@ -14,6 +14,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private var hotKey: GlobalHotKey?
     private var model: AppModel?
     private var pauseMenuItem: NSMenuItem?
+    private var contextProvider: FrontmostApplicationReferenceProvider?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { await start() }
@@ -30,10 +31,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 keyProvider: keyProvider
             )
             let loop = ThoughtLoop(repository: repository, clarifier: RuleClarificationProvider())
+            let contextProvider = FrontmostApplicationReferenceProvider()
             let focusLoop = FocusLoop(
                 repository: repository,
                 composer: InterruptionSnapshotComposer(
-                    contextProvider: FrontmostApplicationReferenceProvider()
+                    contextProvider: contextProvider
                 )
             )
             let model = AppModel(
@@ -62,6 +64,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             self.quickCapture = quickCapture
             self.mainWindow = mainWindow
             self.model = model
+            self.contextProvider = contextProvider
             configureMenu(quickCapture: quickCapture, mainWindow: mainWindow)
             hotKey = try GlobalHotKey { [weak quickCapture] startedAt in
                 quickCapture?.show(startedAt: startedAt)
@@ -133,6 +136,71 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             }
             return true
 
+        case "--focus-interrupt-test":
+            let startedAt = Date(timeIntervalSince1970: 1_723_600_000)
+            let interruptedAt = startedAt.addingTimeInterval(73)
+            let result = try await loop.capture(
+                text: "todo: packaged focus recovery marker",
+                at: startedAt
+            )
+            guard let intention = result.intention else { exit(EXIT_FAILURE) }
+            let expectedPacket = try Self.focusDiagnosticPacket()
+            let focusLoop = FocusLoop(repository: repository)
+            _ = try await focusLoop.start(intention.id, at: startedAt)
+            _ = try await focusLoop.interrupt(
+                intention.id,
+                draft: InterruptionDraft(
+                    justCompleted: expectedPacket.justCompleted,
+                    nextAction: expectedPacket.nextAction,
+                    blocker: expectedPacket.blocker,
+                    references: expectedPacket.references
+                ),
+                at: interruptedAt
+            )
+            print("focus-interrupted-id=\(intention.id.uuidString)")
+            return true
+
+        case "--focus-resume-test":
+            guard arguments.count > 1, let intentionID = UUID(uuidString: arguments[1]) else {
+                exit(EXIT_FAILURE)
+            }
+            let expectedPacket = try Self.focusDiagnosticPacket()
+            guard let storedIntention = try await repository.intention(id: intentionID),
+                  storedIntention.state == .interrupted,
+                  storedIntention.returnPacket == expectedPacket,
+                  let storedSession = try await repository.focusSessions().first(where: {
+                      $0.intentionID == intentionID
+                  }),
+                  storedSession.state == .interrupted,
+                  model.returns.contains(where: {
+                      $0.intentionID == intentionID
+                          && $0.nextAction == expectedPacket.nextAction
+                          && $0.references == expectedPacket.references
+                  }) else {
+                exit(EXIT_FAILURE)
+            }
+
+            _ = try await FocusLoop(repository: repository).resume(
+                intentionID,
+                at: expectedPacket.capturedAt.addingTimeInterval(20)
+            )
+            let verified = try EncryptedThoughtRepository(
+                directory: directory,
+                keyProvider: keyProvider
+            )
+            guard let resumedIntention = try await verified.intention(id: intentionID),
+                  resumedIntention.state == .active,
+                  resumedIntention.nextAction == expectedPacket.nextAction,
+                  resumedIntention.returnPacket == expectedPacket,
+                  let resumedSession = try await verified.focusSessions().first(where: {
+                      $0.intentionID == intentionID
+                  }),
+                  resumedSession.state == .active else {
+                exit(EXIT_FAILURE)
+            }
+            print("focus-resume-test=passed")
+            return true
+
         default:
             return false
         }
@@ -149,8 +217,26 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             + Double(duration.components.attoseconds) / 1_000_000_000_000_000
     }
 
+    private static func focusDiagnosticPacket() throws -> ReturnPacket {
+        try ReturnPacket(
+            capturedAt: Date(timeIntervalSince1970: 1_723_600_073),
+            justCompleted: "packaged completed recovery marker",
+            nextAction: "packaged exact next recovery marker",
+            blocker: "packaged blocker recovery marker",
+            references: [
+                "file:///packaged-reference-recovery-marker.md",
+                "https://example.test/packaged-recovery-marker",
+            ]
+        )
+    }
+
     @objc private func showCapture() { quickCapture?.show() }
-    @objc private func showNow() { mainWindow?.show(tab: 0) }
+    @objc private func showNow() {
+        Task {
+            await contextProvider?.snapshot()
+            mainWindow?.show(tab: 0)
+        }
+    }
     @objc private func showReturn() { mainWindow?.show(tab: 1) }
     @objc private func showLater() { mainWindow?.show(tab: 2) }
     @objc private func pauseOrContinue() {

@@ -98,7 +98,10 @@ private struct MainView: View {
     }
 
     private var returnView: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 10) {
+            if let error = model.commandError {
+                Text(error).font(.callout).foregroundStyle(.secondary)
+            }
             if model.returns.isEmpty {
                 ContentUnavailableView(
                     "No saved return points",

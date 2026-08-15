@@ -65,35 +65,37 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
     }
 
     public func save(capture: RawCapture) async throws {
-        snapshot.captures[capture.id] = capture
-        try persist()
+        try update { $0.captures[capture.id] = capture }
     }
 
     public func save(proposal: ClarificationProposal) async throws {
-        snapshot.proposals[proposal.captureID] = proposal
-        try persist()
+        try update { $0.proposals[proposal.captureID] = proposal }
     }
 
     public func save(proposal: ClarificationProposal, intention: Intention?) async throws {
-        snapshot.proposals[proposal.captureID] = proposal
-        if let intention { snapshot.intentions[intention.id] = intention }
-        try persist()
+        try update {
+            $0.proposals[proposal.captureID] = proposal
+            if let intention { $0.intentions[intention.id] = intention }
+        }
     }
 
     public func save(intention: Intention) async throws {
-        snapshot.intentions[intention.id] = intention
-        try persist()
+        try update { $0.intentions[intention.id] = intention }
     }
 
     public func save(focusSession: FocusSession) async throws {
-        snapshot.focusSessions[focusSession.id] = focusSession
-        try persist()
+        try update {
+            try Self.validateCurrentFocus(focusSession, in: $0)
+            $0.focusSessions[focusSession.id] = focusSession
+        }
     }
 
     public func save(intention: Intention, focusSession: FocusSession) async throws {
-        snapshot.intentions[intention.id] = intention
-        snapshot.focusSessions[focusSession.id] = focusSession
-        try persist()
+        try update {
+            try Self.validateCurrentFocus(focusSession, in: $0)
+            $0.intentions[intention.id] = intention
+            $0.focusSessions[focusSession.id] = focusSession
+        }
     }
 
     public func proposal(captureID: UUID) async throws -> ClarificationProposal? {
@@ -162,7 +164,7 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         snapshot.intentions.values.sorted(by: Self.intentionOrder)
     }
 
-    private func persist() throws {
+    private func update(_ change: (inout Snapshot) throws -> Void) throws {
         try storeLock.lockExclusive()
         defer { storeLock.unlock() }
         let marker = fileURL.deletingLastPathComponent()
@@ -170,8 +172,32 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         guard FileManager.default.fileExists(atPath: marker.path) == false else {
             throw JSONFileThoughtRepositoryError.storeMigrated
         }
-        let data = try JSONEncoder().encode(snapshot)
+        var candidate = try loadLatest()
+        try change(&candidate)
+        let data = try JSONEncoder().encode(candidate)
         try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+        snapshot = candidate
+    }
+
+    private func loadLatest() throws -> Snapshot {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return Snapshot() }
+        do {
+            return try JSONDecoder().decode(Snapshot.self, from: Data(contentsOf: fileURL))
+        } catch {
+            throw JSONFileThoughtRepositoryError.corruptSnapshot
+        }
+    }
+
+    private static func validateCurrentFocus(
+        _ focusSession: FocusSession,
+        in snapshot: Snapshot
+    ) throws {
+        guard focusSession.state == .active || focusSession.state == .paused else { return }
+        if let current = snapshot.focusSessions.values.first(where: {
+            ($0.state == .active || $0.state == .paused) && $0.id != focusSession.id
+        }) {
+            throw ThoughtRepositoryFocusError.currentFocusExists(current.intentionID)
+        }
     }
 
     private static func captureOrder(_ lhs: RawCapture, _ rhs: RawCapture) -> Bool {

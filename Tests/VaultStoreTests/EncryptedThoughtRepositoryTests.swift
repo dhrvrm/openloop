@@ -304,6 +304,120 @@ private func temporaryDirectory() -> URL {
     #expect(intentions.first?.id == capture.id)
 }
 
+@Test func concurrentFocusStartsPersistOnlyOneCurrentSession() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let repository = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    let first = testIntention(state: .open)
+    let second = testIntention(state: .open)
+    try await repository.save(intention: first)
+    try await repository.save(intention: second)
+    let date = Date(timeIntervalSince1970: 100)
+
+    async let firstStarted = attemptStart(first.id, repository: repository, at: date)
+    async let secondStarted = attemptStart(second.id, repository: repository, at: date)
+    let outcomes = await [firstStarted, secondStarted]
+
+    #expect(outcomes.filter { $0 }.count == 1)
+    let current = try await repository.focusSessions().filter {
+        $0.state == .active || $0.state == .paused
+    }
+    #expect(current.count == 1)
+    #expect(try await repository.openIntentions().filter { $0.state == .active }.count == 1)
+}
+
+@Test func concurrentFocusResumesPersistOnlyOneCurrentSession() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let repository = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    let first = try interruptedPair(marker: "first")
+    let second = try interruptedPair(marker: "second")
+    try await repository.save(intention: first.intention, focusSession: first.session)
+    try await repository.save(intention: second.intention, focusSession: second.session)
+    let date = Date(timeIntervalSince1970: 200)
+
+    async let firstResumed = attemptResume(first.intention.id, repository: repository, at: date)
+    async let secondResumed = attemptResume(second.intention.id, repository: repository, at: date)
+    let outcomes = await [firstResumed, secondResumed]
+
+    #expect(outcomes.filter { $0 }.count == 1)
+    let current = try await repository.focusSessions().filter {
+        $0.state == .active || $0.state == .paused
+    }
+    #expect(current.count == 1)
+    #expect(try await repository.openIntentions().filter { $0.state == .active }.count == 1)
+}
+
+@Test func standaloneEncryptedFocusSaveRejectsASecondCurrentSession() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let repository = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    let first = FocusSession(intentionID: UUID(), startedAt: .now)
+    let second = FocusSession(intentionID: UUID(), startedAt: .now)
+    try await repository.save(focusSession: first)
+
+    await #expect(throws: ThoughtRepositoryFocusError.currentFocusExists(first.intentionID)) {
+        try await repository.save(focusSession: second)
+    }
+}
+
+private func attemptStart(
+    _ id: UUID,
+    repository: EncryptedThoughtRepository,
+    at date: Date
+) async -> Bool {
+    do {
+        _ = try await FocusLoop(repository: repository).start(id, at: date)
+        return true
+    } catch {
+        return false
+    }
+}
+
+private func attemptResume(
+    _ id: UUID,
+    repository: EncryptedThoughtRepository,
+    at date: Date
+) async -> Bool {
+    do {
+        _ = try await FocusLoop(repository: repository).resume(id, at: date)
+        return true
+    } catch {
+        return false
+    }
+}
+
+private func testIntention(state: IntentionState) -> Intention {
+    let id = UUID()
+    return Intention(
+        id: id,
+        sourceCaptureID: id,
+        desiredOutcome: "Test focus",
+        nextAction: "Begin",
+        state: state,
+        createdAt: Date(timeIntervalSince1970: 1),
+        returnPacket: nil
+    )
+}
+
+private func interruptedPair(marker: String) throws -> (intention: Intention, session: FocusSession) {
+    var intention = testIntention(state: .active)
+    let packet = try ReturnPacket(
+        capturedAt: Date(timeIntervalSince1970: 20),
+        justCompleted: nil,
+        nextAction: "Resume \(marker)",
+        blocker: nil,
+        references: []
+    )
+    try intention.interrupt(with: packet)
+    var session = FocusSession(
+        intentionID: intention.id,
+        startedAt: Date(timeIntervalSince1970: 10)
+    )
+    try session.interrupt(at: packet.capturedAt)
+    return (intention, session)
+}
+
 private struct TestActionClarifier: ClarificationProvider {
     func propose(for capture: RawCapture) async throws -> ClarificationProposal {
         try ClarificationProposal(
