@@ -15,10 +15,16 @@ public protocol ThoughtRepository: Sendable {
     func save(intention: Intention, focusSession: FocusSession) async throws
     func focusSession(id: UUID) async throws -> FocusSession?
     func focusSessions() async throws -> [FocusSession]
+    func save(resurfacingRule: ResurfacingRule) async throws
+    func deleteResurfacingRule(intentionID: UUID) async throws
+    func resurfacingRules() async throws -> [ResurfacingRule]
+    func append(suggestionEvent: SuggestionEvent) async throws
+    func suggestionEvents() async throws -> [SuggestionEvent]
 }
 
 public enum ThoughtRepositoryCompatibilityError: Error, Equatable {
     case focusSessionsUnsupported
+    case resurfacingUnsupported
 }
 
 public enum ThoughtRepositoryFocusError: Error, Equatable {
@@ -48,6 +54,22 @@ public extension ThoughtRepository {
     func focusSession(id: UUID) async throws -> FocusSession? { nil }
 
     func focusSessions() async throws -> [FocusSession] { [] }
+
+    func save(resurfacingRule: ResurfacingRule) async throws {
+        throw ThoughtRepositoryCompatibilityError.resurfacingUnsupported
+    }
+
+    func deleteResurfacingRule(intentionID: UUID) async throws {
+        throw ThoughtRepositoryCompatibilityError.resurfacingUnsupported
+    }
+
+    func resurfacingRules() async throws -> [ResurfacingRule] { [] }
+
+    func append(suggestionEvent: SuggestionEvent) async throws {
+        throw ThoughtRepositoryCompatibilityError.resurfacingUnsupported
+    }
+
+    func suggestionEvents() async throws -> [SuggestionEvent] { [] }
 }
 
 public protocol ClarificationProvider: Sendable {

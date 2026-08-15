@@ -172,6 +172,53 @@ private struct LegacySnapshot: Codable {
     }
 }
 
+@Test func resurfacingRulesAndStableHistorySurviveDevelopmentRepositoryRestart() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let application = try ApplicationContext(
+        bundleIdentifier: "dev.openloop.distinct-editor",
+        applicationName: "Distinct Editor"
+    )
+    let intentionID = UUID()
+    let original = ResurfacingRule(
+        intentionID: intentionID,
+        application: application,
+        createdAt: Date(timeIntervalSince1970: 1)
+    )
+    let updated = ResurfacingRule(
+        intentionID: intentionID,
+        application: application,
+        createdAt: Date(timeIntervalSince1970: 2)
+    )
+    let timestamp = Date(timeIntervalSince1970: 10)
+    let laterID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    let earlierID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    let laterEvent = SuggestionEvent(
+        id: laterID, intentionID: intentionID, occurredAt: timestamp,
+        application: application, kind: .later
+    )
+    let shownEvent = SuggestionEvent(
+        id: earlierID, intentionID: intentionID, occurredAt: timestamp,
+        application: application, kind: .shown
+    )
+    let writer = try JSONFileThoughtRepository(directory: directory)
+
+    try await writer.save(resurfacingRule: original)
+    try await writer.save(resurfacingRule: updated)
+    try await writer.append(suggestionEvent: laterEvent)
+    try await writer.append(suggestionEvent: shownEvent)
+
+    let reader = try JSONFileThoughtRepository(directory: directory)
+    #expect(try await reader.resurfacingRules() == [updated])
+    #expect(try await reader.suggestionEvents() == [shownEvent, laterEvent])
+
+    try await reader.deleteResurfacingRule(intentionID: intentionID)
+    let afterDelete = try JSONFileThoughtRepository(directory: directory)
+    #expect(try await afterDelete.resurfacingRules().isEmpty)
+    #expect(try await afterDelete.suggestionEvents() == [shownEvent, laterEvent])
+}
+
 private func attemptLocalStart(
     _ id: UUID,
     repository: JSONFileThoughtRepository,

@@ -6,12 +6,16 @@ private struct Snapshot: Codable {
     var proposals: [UUID: ClarificationProposal] = [:]
     var intentions: [UUID: Intention] = [:]
     var focusSessions: [UUID: FocusSession] = [:]
+    var resurfacingRules: [UUID: ResurfacingRule] = [:]
+    var suggestionEvents: [UUID: SuggestionEvent] = [:]
 
     private enum CodingKeys: String, CodingKey {
         case captures
         case proposals
         case intentions
         case focusSessions
+        case resurfacingRules
+        case suggestionEvents
     }
 
     init() {}
@@ -27,6 +31,14 @@ private struct Snapshot: Codable {
         focusSessions = try container.decodeIfPresent(
             [UUID: FocusSession].self,
             forKey: .focusSessions
+        ) ?? [:]
+        resurfacingRules = try container.decodeIfPresent(
+            [UUID: ResurfacingRule].self,
+            forKey: .resurfacingRules
+        ) ?? [:]
+        suggestionEvents = try container.decodeIfPresent(
+            [UUID: SuggestionEvent].self,
+            forKey: .suggestionEvents
         ) ?? [:]
     }
 }
@@ -152,6 +164,26 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         snapshot.focusSessions.values.sorted(by: Self.focusSessionOrder)
     }
 
+    public func save(resurfacingRule: ResurfacingRule) async throws {
+        try update { $0.resurfacingRules[resurfacingRule.intentionID] = resurfacingRule }
+    }
+
+    public func deleteResurfacingRule(intentionID: UUID) async throws {
+        try update { $0.resurfacingRules[intentionID] = nil }
+    }
+
+    public func resurfacingRules() async throws -> [ResurfacingRule] {
+        snapshot.resurfacingRules.values.sorted(by: Self.resurfacingRuleOrder)
+    }
+
+    public func append(suggestionEvent: SuggestionEvent) async throws {
+        try update { $0.suggestionEvents[suggestionEvent.id] = suggestionEvent }
+    }
+
+    public func suggestionEvents() async throws -> [SuggestionEvent] {
+        snapshot.suggestionEvents.values.sorted(by: Self.suggestionEventOrder)
+    }
+
     func snapshotCaptures() -> [RawCapture] {
         snapshot.captures.values.sorted(by: Self.captureOrder)
     }
@@ -213,5 +245,23 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
     private static func focusSessionOrder(_ lhs: FocusSession, _ rhs: FocusSession) -> Bool {
         if lhs.startedAt == rhs.startedAt { return lhs.id.uuidString < rhs.id.uuidString }
         return lhs.startedAt < rhs.startedAt
+    }
+
+    private static func resurfacingRuleOrder(
+        _ lhs: ResurfacingRule,
+        _ rhs: ResurfacingRule
+    ) -> Bool {
+        if lhs.createdAt == rhs.createdAt {
+            return lhs.intentionID.uuidString < rhs.intentionID.uuidString
+        }
+        return lhs.createdAt < rhs.createdAt
+    }
+
+    private static func suggestionEventOrder(
+        _ lhs: SuggestionEvent,
+        _ rhs: SuggestionEvent
+    ) -> Bool {
+        if lhs.occurredAt == rhs.occurredAt { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.occurredAt < rhs.occurredAt
     }
 }

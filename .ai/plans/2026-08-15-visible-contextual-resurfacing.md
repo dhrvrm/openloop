@@ -131,19 +131,19 @@ Commit: `feat: score explicit context with explainable relevance`.
 - Modify: `Tests/LocalStoreTests/JSONFileThoughtRepositoryTests.swift`
 - Modify: `Tests/VaultStoreTests/EncryptedThoughtRepositoryTests.swift`
 
-- [ ] **Step 1: Write failing repository contract tests**
+- [x] **Step 1: Write failing repository contract tests**
 
 For both adapters, save/update/delete a rule, append ordered history, reopen, and compare exact values. Verify an Increment 2 snapshot without the new fields still opens. For the vault, scan the complete directory and prove distinctive application names, bundle identifiers, reason text, and feedback values are absent as plaintext.
 
-- [ ] **Step 2: Extend the port compatibly**
+- [x] **Step 2: Extend the port compatibly**
 
 Add `save(resurfacingRule:)`, `deleteResurfacingRule(intentionID:)`, `resurfacingRules()`, `append(suggestionEvent:)`, and `suggestionEvents()` with compatibility defaults. Add one production atomic operation to record a shown suggestion event together with any rule update required by feedback.
 
-- [ ] **Step 3: Add backward-compatible snapshot fields**
+- [x] **Step 3: Add backward-compatible snapshot fields**
 
 Store rules by intention ID and events by event ID in both adapters. Custom decoding defaults missing fields to empty. Keep stable event ordering by timestamp then UUID and do not change the vault authenticated-data string.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run `Scripts/test.sh --filter 'LocalStoreTests|VaultStoreTests' && Scripts/test.sh`.
 

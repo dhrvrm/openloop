@@ -361,6 +361,65 @@ private func temporaryDirectory() -> URL {
     }
 }
 
+@Test func encryptedResurfacingStateSurvivesRestartWithoutContextPlaintext() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let application = try ApplicationContext(
+        bundleIdentifier: "dev.openloop.distinct-secret-editor",
+        applicationName: "Distinct Secret Editor"
+    )
+    let intentionID = UUID()
+    let rule = ResurfacingRule(
+        intentionID: intentionID,
+        application: application,
+        createdAt: Date(timeIntervalSince1970: 1)
+    )
+    let shown = SuggestionEvent(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+        intentionID: intentionID,
+        occurredAt: Date(timeIntervalSince1970: 20),
+        application: application,
+        kind: .shown
+    )
+    let never = SuggestionEvent(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+        intentionID: intentionID,
+        occurredAt: Date(timeIntervalSince1970: 20),
+        application: application,
+        kind: .never
+    )
+    let writer = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+
+    try await writer.save(resurfacingRule: rule)
+    try await writer.append(suggestionEvent: shown)
+    try await writer.append(suggestionEvent: never)
+
+    let reader = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    #expect(try await reader.resurfacingRules() == [rule])
+    #expect(try await reader.suggestionEvents() == [never, shown])
+    let distinctivePlaintext = [
+        application.bundleIdentifier,
+        application.applicationName,
+        "Application match",
+        "Linked to Distinct Secret Editor",
+        SuggestionEventKind.never.rawValue,
+    ]
+    for file in try FileManager.default.contentsOfDirectory(
+        at: directory,
+        includingPropertiesForKeys: nil
+    ) {
+        let data = try Data(contentsOf: file)
+        for value in distinctivePlaintext {
+            #expect(data.range(of: Data(value.utf8)) == nil)
+        }
+    }
+
+    try await reader.deleteResurfacingRule(intentionID: intentionID)
+    let afterDelete = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    #expect(try await afterDelete.resurfacingRules().isEmpty)
+    #expect(try await afterDelete.suggestionEvents() == [never, shown])
+}
+
 private func attemptStart(
     _ id: UUID,
     repository: EncryptedThoughtRepository,
