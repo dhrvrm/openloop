@@ -46,10 +46,10 @@
 
 ### Task 1: Define atomic memories and explicit candidate extraction
 
-- [ ] Create `MemoryKind`, `MemoryState`, `EvidenceAvailability`, `MemoryEvidence`, `MemoryRecord`, `MemoryCandidate`, and `MemoryRelation` in `WorkingMemory.swift`.
-- [ ] Write `WorkingMemoryTests` proving every accepted prefix maps to the correct kind, unmarked/action prose returns no candidate, 500-character/empty statements are rejected, `correction: old -> new` stores `.supersedes(old)`, and transcription corrections become `.correction` candidates.
-- [ ] Define `MemoryExtractionProvider` and implement `DeterministicMemoryExtractionProvider` with exact case-insensitive prefix parsing and no inferred candidate path.
-- [ ] Run `Scripts/test.sh --filter WorkingMemoryTests` and commit `feat: extract explicit working memory candidates`.
+- [x] Create `MemoryKind`, `MemoryState`, `EvidenceAvailability`, `MemoryEvidence`, `MemoryRecord`, `MemoryCandidate`, and `MemoryRelation` in `WorkingMemory.swift`.
+- [x] Write `WorkingMemoryTests` proving every accepted prefix maps to the correct kind, unmarked/action prose returns no candidate, 500-character/empty statements are rejected, `correction: old -> new` stores `.supersedes(old)`, and transcription corrections become `.correction` candidates.
+- [x] Define `MemoryExtractionProvider` and implement `DeterministicMemoryExtractionProvider` with exact case-insensitive prefix parsing and no inferred candidate path.
+- [x] Run `Scripts/test.sh --filter WorkingMemoryTests` and commit `feat: extract explicit working memory candidates`.
 
 ```swift
 public protocol MemoryExtractionProvider: Sendable {
@@ -59,11 +59,11 @@ public protocol MemoryExtractionProvider: Sendable {
 
 ### Task 2: Validate evidence and merge temporal state
 
-- [ ] Write failing tests for exact excerpt validation, missing evidence rejection, equivalent evidence merge/version increment, idempotent evidence, explicit supersession, and unresolved contradiction preservation.
-- [ ] Implement `MemoryEvidenceValidator.validate(_:against:)` and `TemporalMemoryLedger.applying(_:to:at:)`.
-- [ ] A merge retains one record ID, increments `version`, unions evidence stably, and updates `updatedAt`. Supersession marks matched active records `.superseded(by:newID)` and never removes them.
-- [ ] Add `revalidated(against:)` to mark each evidence reference retained/expired and set record `.evidenceExpired` only when no retained evidence remains.
-- [ ] Run `Scripts/test.sh --filter WorkingMemoryTests` and commit `feat: preserve temporal memory revisions and evidence`.
+- [x] Write failing tests for exact excerpt validation, missing evidence rejection, equivalent evidence merge/version increment, idempotent evidence, explicit supersession, and unresolved contradiction preservation.
+- [x] Implement `MemoryEvidenceValidator.validate(_:against:)` and `TemporalMemoryLedger.applying(_:to:at:)`.
+- [x] A merge retains one record ID, increments `version`, unions evidence stably, and updates `updatedAt`. Supersession marks matched active records `.superseded(by:newID)` and never removes them.
+- [x] Add `revalidated(against:)` to mark each evidence reference retained/expired and set record `.evidenceExpired` only when no retained evidence remains.
+- [x] Run `Scripts/test.sh --filter WorkingMemoryTests` and commit `feat: preserve temporal memory revisions and evidence`.
 
 ### Task 3: Persist the ledger in both repositories
 

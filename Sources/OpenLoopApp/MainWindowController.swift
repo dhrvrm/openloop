@@ -358,6 +358,7 @@ private struct RecallEvidenceRow: View {
         case .intention: "INTENTION"
         case .returnPacket: "RETURN PACKET"
         case .correction: "VOICE CORRECTION"
+        case .memory: "MEMORY"
         }
     }
 
