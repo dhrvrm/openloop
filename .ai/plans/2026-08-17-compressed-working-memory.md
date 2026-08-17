@@ -89,11 +89,11 @@ func memoryRecords() async throws -> [MemoryRecord]
 
 ### Task 5: Render current and historical memory without a new screen
 
-- [ ] Inject `WorkingMemoryCompiling` into `AppModel`; publish `memoryRecords`, `isCompilingMemory`, and `memoryError`. `refreshMemory()` runs on Recall activation, keeps prior records on failure, and does not alter capture/focus errors.
-- [ ] Add a compact “Working memory” section above Recall search showing active statements first, kind, state, evidence count, and retained/expired copy. Historical records are disclosed below a native divider.
-- [ ] Add “Refresh evidence” as a quiet secondary action. Do not add a global shortcut or sixth surface.
-- [ ] Test model failure containment and Recall tab rendering/navigation.
-- [ ] Run `Scripts/test.sh --filter 'AppModelMemoryTests|MainWindowControllerTests'` and commit `feat: show evidence-backed working memory in recall`.
+- [x] Inject `WorkingMemoryCompiling` into `AppModel`; publish `memoryRecords`, `isCompilingMemory`, and `memoryError`. `refreshMemory()` runs on Recall activation, keeps prior records on failure, and does not alter capture/focus errors.
+- [x] Add a compact “Working memory” section above Recall search showing active statements first, kind, state, evidence count, and retained/expired copy. Historical records are disclosed below a native divider.
+- [x] Add “Refresh evidence” as a quiet secondary action. Do not add a global shortcut or sixth surface.
+- [x] Test model failure containment and Recall tab rendering/navigation.
+- [x] Run `Scripts/test.sh --filter 'AppModelMemoryTests|MainWindowControllerTests'` and commit `feat: show evidence-backed working memory in recall`.
 
 ### Task 6: Add deterministic quality reporting and document Increment 6
 

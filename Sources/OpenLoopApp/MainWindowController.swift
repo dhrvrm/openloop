@@ -6,6 +6,7 @@ private struct MainView: View {
     @ObservedObject var model: AppModel
     @State var selection = 0
     @State private var interruptionItem: NowItem?
+    @State private var memoryHistoryExpanded = false
     @FocusState private var recallFieldFocused: Bool
 
     var body: some View {
@@ -19,7 +20,10 @@ private struct MainView: View {
         .frame(minWidth: 600, minHeight: 460)
         .task { await model.refresh() }
         .onChange(of: selection) { _, tab in
-            if tab == 3 { recallFieldFocused = true }
+            if tab == 3 {
+                recallFieldFocused = true
+                Task { await model.refreshMemory() }
+            }
         }
         .sheet(isPresented: interruptionPresented) {
             if let item = interruptionItem {
@@ -234,6 +238,9 @@ private struct MainView: View {
                     .foregroundStyle(.secondary)
             }
 
+
+            workingMemorySection
+
             HStack(spacing: 10) {
                 TextField("Search captures, decisions, return points, and corrections", text: $model.recallQuery)
                     .textFieldStyle(.roundedBorder)
@@ -295,6 +302,73 @@ private struct MainView: View {
         .onAppear { recallFieldFocused = true }
     }
 
+    @ViewBuilder private var workingMemorySection: some View {
+        let current = model.memoryRecords.filter { record in
+            switch record.state {
+            case .active, .contradicted: true
+            case .superseded, .evidenceExpired: false
+            }
+        }
+        let history = model.memoryRecords.filter { !current.map(\.id).contains($0.id) }
+
+        if model.isCompilingMemory || !model.memoryRecords.isEmpty || model.memoryError != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("WORKING MEMORY")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                        Text("Explicit claims linked to stored evidence")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                    Spacer()
+                    Button("Refresh evidence") {
+                        Task { await model.refreshMemory() }
+                    }
+                    .buttonStyle(.link)
+                    .disabled(model.isCompilingMemory)
+                }
+
+                if model.isCompilingMemory && model.memoryRecords.isEmpty {
+                    ProgressView("Checking explicit memory…")
+                        .controlSize(.small)
+                }
+
+                if !model.memoryRecords.isEmpty {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 8) {
+                            ForEach(current) { record in
+                                WorkingMemoryRow(record: record)
+                            }
+
+                            if !history.isEmpty {
+                                DisclosureGroup("History", isExpanded: $memoryHistoryExpanded) {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        ForEach(history) { record in
+                                            WorkingMemoryRow(record: record)
+                                        }
+                                    }
+                                    .padding(.top, 7)
+                                }
+                                .font(.callout)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 170)
+                }
+
+                if let error = model.memoryError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.bottom, 4)
+            Divider()
+        }
+    }
+
     private func openLoopStateLabel(_ state: IntentionState) -> String {
         switch state {
         case .active: "Focusing"
@@ -303,6 +377,42 @@ private struct MainView: View {
         case .closed: "Finished"
         case .released: "Released"
         }
+    }
+}
+
+private struct WorkingMemoryRow: View {
+    let record: MemoryRecord
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(record.statement)
+                .font(.body)
+                .textSelection(.enabled)
+            Spacer(minLength: 12)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(record.kind.rawValue.uppercased()) · \(stateLabel)")
+                Text(evidenceLabel)
+            }
+            .font(.caption.monospaced())
+            .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var stateLabel: String {
+        switch record.state {
+        case .active: "CURRENT"
+        case .contradicted: "CONTRADICTED"
+        case .superseded: "SUPERSEDED"
+        case .evidenceExpired: "EVIDENCE EXPIRED"
+        }
+    }
+
+    private var evidenceLabel: String {
+        let retained = record.evidence.filter { $0.availability == .retained }.count
+        let expired = record.evidence.count - retained
+        if expired == 0 { return "\(retained) EVIDENCE RETAINED" }
+        return "\(retained) RETAINED · \(expired) EXPIRED"
     }
 }
 
@@ -596,6 +706,7 @@ final class MainWindowController {
     func show(tab: Int) {
         selectedTabForTesting = tab
         hostingController.rootView = MainView(model: model, selection: tab)
+        if tab == 3 { Task { await model.refreshMemory() } }
         window.center()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)

@@ -26,21 +26,33 @@ private struct WindowUnusedClarifier: ClarificationProvider {
     }
 }
 
+private actor WindowMemoryCompiler: WorkingMemoryCompiling {
+    private(set) var calls = 0
+    func compile() async throws -> [MemoryRecord] {
+        calls += 1
+        return []
+    }
+}
+
 @MainActor
 @Test func mainWorkspaceShowsTheRequestedSurfaceInARealWindow() async {
     let repository = EmptyWindowRepository()
+    let memoryCompiler = WindowMemoryCompiler()
     let model = AppModel(
         loop: ThoughtLoop(repository: repository, clarifier: WindowUnusedClarifier()),
-        readModels: ThoughtReadModels(repository: repository)
+        readModels: ThoughtReadModels(repository: repository),
+        workingMemory: memoryCompiler
     )
     let controller = MainWindowController(model: model)
 
     controller.show(tab: 3)
     await Task.yield()
+    await Task.yield()
 
     #expect(controller.selectedTabForTesting == 3)
     #expect(controller.isVisibleForTesting)
     #expect(controller.windowNumberForTesting > 0)
+    #expect(await memoryCompiler.calls == 1)
     controller.closeForTesting()
 }
 

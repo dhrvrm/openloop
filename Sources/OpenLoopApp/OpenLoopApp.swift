@@ -111,20 +111,27 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 )
             )
             let resurfacingLoop = ResurfacingLoop(repository: repository)
+            let recallSource = RecallDocumentSource(repository: repository)
             let recallLoop = RecallLoop(
-                source: RecallDocumentSource(repository: repository),
+                source: recallSource,
                 indexStore: try EncryptedRecallIndexStore(
                     directory: directory,
                     rootKeyData: rootKeyData
                 ),
                 embeddingProvider: NaturalLanguageEmbeddingProvider()
             )
+            let workingMemory = WorkingMemoryCompiler(
+                source: recallSource,
+                provider: DeterministicMemoryExtractionProvider(),
+                repository: repository
+            )
             let model = AppModel(
                 loop: loop,
                 readModels: ThoughtReadModels(repository: repository),
                 focusLoop: focusLoop,
                 resurfacingLoop: resurfacingLoop,
-                recallSearch: recallLoop
+                recallSearch: recallLoop,
+                workingMemory: workingMemory
             )
             _ = try await DevelopmentStoreMigrator().migrateIfNeeded(
                 from: directory,

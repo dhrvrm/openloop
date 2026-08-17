@@ -19,12 +19,16 @@ final class AppModel: ObservableObject {
     @Published var recallHits: [RecallHit] = []
     @Published var isRecalling = false
     @Published var recallError: String?
+    @Published var memoryRecords: [MemoryRecord] = []
+    @Published var isCompilingMemory = false
+    @Published var memoryError: String?
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
     private let focusLoop: FocusLoop?
     private let resurfacingLoop: ResurfacingLoop?
     private let recallSearch: (any RecallSearching)?
+    private let workingMemory: (any WorkingMemoryCompiling)?
     private var recallGeneration = 0
 
     init(
@@ -32,13 +36,27 @@ final class AppModel: ObservableObject {
         readModels: ThoughtReadModels,
         focusLoop: FocusLoop? = nil,
         resurfacingLoop: ResurfacingLoop? = nil,
-        recallSearch: (any RecallSearching)? = nil
+        recallSearch: (any RecallSearching)? = nil,
+        workingMemory: (any WorkingMemoryCompiling)? = nil
     ) {
         self.loop = loop
         self.readModels = readModels
         self.focusLoop = focusLoop
         self.resurfacingLoop = resurfacingLoop
         self.recallSearch = recallSearch
+        self.workingMemory = workingMemory
+    }
+
+    func refreshMemory() async {
+        guard !isCompilingMemory, let workingMemory else { return }
+        isCompilingMemory = true
+        memoryError = nil
+        defer { isCompilingMemory = false }
+        do {
+            memoryRecords = try await workingMemory.compile()
+        } catch {
+            memoryError = "Working memory could not refresh. Existing evidence is unchanged."
+        }
     }
 
     func searchRecall(_ text: String) async {
