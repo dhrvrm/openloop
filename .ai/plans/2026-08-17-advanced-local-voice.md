@@ -1,6 +1,6 @@
 # Advanced Local Voice Capture Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Evolve the working `Command-Shift-R` on-device transcription flow into a provider-neutral, voice-activity-aware, correction-learning capture framework with reproducible quality metrics and encrypted personal vocabulary.
 
@@ -47,7 +47,7 @@
 - Create: `Tests/ADHDCoreTests/VoiceLearningTests.swift`
 - Modify: `Sources/ADHDCore/Ports.swift`
 
-- [ ] **Step 1: Write failing correction normalization tests**
+- [x] **Step 1: Write failing correction normalization tests**
 
 Test that `TranscriptionCorrection(recognized:corrected:createdAt:)` trims outer whitespace, rejects empty/equal text, preserves the exact corrected phrase, and exposes stable token differences. Use this intended interface:
 
@@ -62,17 +62,17 @@ let correction = try TranscriptionCorrection(
 #expect(correction.learnedPhrases == ["Open Xcode", "Xcode"])
 ```
 
-- [ ] **Step 2: Run the focused failure**
+- [x] **Step 2: Run the focused failure**
 
 Run `Scripts/test.sh --filter VoiceLearningTests`.
 
 Expected: compilation fails because `TranscriptionCorrection` does not exist.
 
-- [ ] **Step 3: Write failing vocabulary projection tests**
+- [x] **Step 3: Write failing vocabulary projection tests**
 
 Verify `PersonalVocabulary(corrections:).phrases(limit:)` de-duplicates case-insensitively, ranks repeated corrections first, then most recent evidence, then localized lexical order, and never returns more than 100 phrases. Original-only words must not become hints.
 
-- [ ] **Step 4: Implement domain values and compatible repository requirements**
+- [x] **Step 4: Implement domain values and compatible repository requirements**
 
 Add these exact repository requirements with safe compatibility defaults:
 
@@ -83,7 +83,7 @@ func transcriptionCorrections() async throws -> [TranscriptionCorrection]
 
 The save default throws `ThoughtRepositoryCompatibilityError.voiceLearningUnsupported`; the read default returns `[]`. Implement `TranscriptionCorrection`, `PersonalVocabulary`, `VoiceLearningError`, and `VoiceLearningLoop.record(recognized:corrected:at:)` / `vocabulary(limit:)`.
 
-- [ ] **Step 5: Run focused tests and commit**
+- [x] **Step 5: Run focused tests and commit**
 
 Run `Scripts/test.sh --filter VoiceLearningTests`.
 
@@ -95,7 +95,7 @@ Commit: `feat: learn deterministic vocabulary from voice corrections`.
 - Create: `Sources/ADHDCore/VoiceBenchmark.swift`
 - Create: `Tests/ADHDCoreTests/VoiceBenchmarkTests.swift`
 
-- [ ] **Step 1: Write failing word-error-rate tests**
+- [x] **Step 1: Write failing word-error-rate tests**
 
 Cover exact match (`0`), one substitution, insertion, deletion, case/punctuation normalization, and empty reference/hypothesis behavior. The public calculation is:
 
@@ -106,15 +106,15 @@ let metric = VoiceBenchmarkMetric(reference: "Open Xcode", hypothesis: "open cod
 #expect(metric.wordErrorRate == 0.5)
 ```
 
-- [ ] **Step 2: Write failing aggregate report tests**
+- [x] **Step 2: Write failing aggregate report tests**
 
 Define `VoiceBenchmarkCategory.general`, `.name`, and `.technical`; `VoiceBenchmarkSample` carries reference, hypothesis, first-partial milliseconds, and final milliseconds. Verify `VoiceBenchmarkReport(samples:)` exposes micro-averaged WER, nearest-rank p95 latencies, and separate per-category WER. An empty report has `nil` metrics and zero samples.
 
-- [ ] **Step 3: Implement deterministic metrics**
+- [x] **Step 3: Implement deterministic metrics**
 
 Tokenize with Unicode letter/number sequences and lowercase using `en_US_POSIX`. Compute edit distance with two integer rows, not a full matrix. Aggregate edit/reference counts before division so long samples have proportional weight. Reuse the existing nearest-rank p95 convention.
 
-- [ ] **Step 4: Run focused tests and commit**
+- [x] **Step 4: Run focused tests and commit**
 
 Run `Scripts/test.sh --filter VoiceBenchmarkTests`.
 
@@ -128,15 +128,15 @@ Commit: `feat: measure provider-neutral voice quality`.
 - Modify: `Tests/LocalStoreTests/JSONFileThoughtRepositoryTests.swift`
 - Modify: `Tests/VaultStoreTests/EncryptedThoughtRepositoryTests.swift`
 
-- [ ] **Step 1: Write failing development repository tests**
+- [x] **Step 1: Write failing development repository tests**
 
 Save two corrections with equal dates and deterministic UUIDs, reopen, and verify date/UUID ordering. Save a snapshot without `transcriptionCorrections` and verify it still opens with an empty correction list.
 
-- [ ] **Step 2: Write failing encrypted repository tests**
+- [x] **Step 2: Write failing encrypted repository tests**
 
 Save a distinctive recognized/corrected pair, reopen, compare exactly, and scan every file in the vault directory to prove neither phrase appears as plaintext. Reuse the existing schema-1 fixture to prove missing correction fields decode as empty.
 
-- [ ] **Step 3: Add backward-compatible snapshot fields**
+- [x] **Step 3: Add backward-compatible snapshot fields**
 
 Both snapshots add:
 
@@ -146,7 +146,7 @@ var transcriptionCorrections: [UUID: TranscriptionCorrection] = [:]
 
 Custom decoders use `decodeIfPresent(...) ?? [:]`. Local saves use one locked update; vault saves use one AES-GCM snapshot update. Stable reads sort by `createdAt` then UUID. Include corrections in vault `empty()` and import-emptiness guards without changing authenticated data.
 
-- [ ] **Step 4: Run focused repository tests and commit**
+- [x] **Step 4: Run focused repository tests and commit**
 
 Run `Scripts/test.sh --filter 'transcriptionCorrection|legacySnapshotWithoutClarifications|schemaOneVaultWithoutFocusSessions'`.
 
@@ -158,7 +158,7 @@ Commit: `feat: persist encrypted voice correction evidence`.
 - Modify: `Sources/OpenLoopApp/VoiceTranscriptionController.swift`
 - Modify: `Tests/OpenLoopAppTests/VoiceTranscriptionControllerTests.swift`
 
-- [ ] **Step 1: Extend the fake-provider tests first**
+- [x] **Step 1: Extend the fake-provider tests first**
 
 Replace the current `start(onTranscript:onFailure:)` seam with:
 
@@ -178,19 +178,19 @@ func start(
 
 Verify the controller loads vocabulary before start, always passes `requiresOnDeviceRecognition == true`, clamps level events into `0...1`, and resets the published level to zero on stop/cancel/failure.
 
-- [ ] **Step 2: Test audio normalization separately**
+- [x] **Step 2: Test audio normalization separately**
 
 `AudioLevelNormalizer.normalized(rms:)` maps silence/invalid values to `0`, `0.001` near the floor, and `1.0` to `1`, using `20 * log10(rms)` clamped from `-60...0 dB`. `VoiceActivityDetector` uses a `0.12` threshold and exposes `hasDetectedSpeech` without storing samples.
 
-- [ ] **Step 3: Implement the generalized controller contract**
+- [x] **Step 3: Implement the generalized controller contract**
 
 Inject `vocabulary: @MainActor () async -> [String]`. Publish `audioLevel` and `hasDetectedSpeech`. Keep all existing toggle, one-minute, retry, and empty-transcript behavior. Provider failure preserves editable text and zeros activity.
 
-- [ ] **Step 4: Update the Apple provider**
+- [x] **Step 4: Update the Apple provider**
 
 Set `request.contextualStrings` to at most 100 ranked phrases and keep `requiresOnDeviceRecognition = true`. In the audio tap, calculate RMS from the first float channel without retaining the buffer, normalize it, and deliver it to the main actor. Continue appending the same buffer directly to Speech.
 
-- [ ] **Step 5: Run focused app tests and commit**
+- [x] **Step 5: Run focused app tests and commit**
 
 Run `Scripts/test.sh --filter VoiceTranscriptionControllerTests`.
 
@@ -204,11 +204,11 @@ Commit: `feat: expose provider-neutral voice activity`.
 - Modify: `Sources/OpenLoopApp/OpenLoopApp.swift`
 - Modify: `Tests/OpenLoopAppTests/VoiceTranscriptionControllerTests.swift`
 
-- [ ] **Step 1: Write failing editing/learning tests**
+- [x] **Step 1: Write failing editing/learning tests**
 
 Verify provider partials update both recognized and editable text until the user edits; `editTranscript(_:)` changes only the editable text; later provider partials do not overwrite a user edit; successful save calls `recordCorrection` once only when normalized recognized/final text differs; failed save records nothing; retry records once after success.
 
-- [ ] **Step 2: Implement correction-aware controller state**
+- [x] **Step 2: Implement correction-aware controller state**
 
 Inject:
 
@@ -218,15 +218,15 @@ recordCorrection: @MainActor (String, String, Date) async -> Void
 
 Track `recognizedTranscript`, `transcriptWasEdited`, and session start. After `save(value)` succeeds, record the correction before clearing state. Never block capture success if correction persistence fails.
 
-- [ ] **Step 3: Wire `VoiceLearningLoop` in production**
+- [x] **Step 3: Wire `VoiceLearningLoop` in production**
 
 Construct the loop from the encrypted repository. The vocabulary closure calls `vocabulary(limit: 100)` and falls back to `[]` on error. The correction closure calls `record(...)` and leaves the already-saved capture untouched on failure.
 
-- [ ] **Step 4: Render activity and explicit learning copy**
+- [x] **Step 4: Render activity and explicit learning copy**
 
 Replace direct `$controller.transcript` mutation with a `Binding` whose setter calls `editTranscript`. Add five native activity bars driven by `audioLevel`, accessibility value `Voice detected` / `Listening`, and quiet copy `Edits improve names and technical words on this Mac`. Do not display an accuracy score in the capture panel.
 
-- [ ] **Step 5: Run focused app tests and commit**
+- [x] **Step 5: Run focused app tests and commit**
 
 Run `Scripts/test.sh --filter VoiceTranscriptionControllerTests`.
 
@@ -241,19 +241,19 @@ Commit: `feat: learn from edited voice captures`.
 - Modify: `docs/DECISIONS.md`
 - Modify: `.ai/plans/2026-08-17-advanced-local-voice.md`
 
-- [ ] **Step 1: Add a focused packaged benchmark diagnostic**
+- [x] **Step 1: Add a focused packaged benchmark diagnostic**
 
 `--voice-benchmark <fixture.json>` decodes `[VoiceBenchmarkSample]`, prints stable lines for sample count, overall WER, first-partial p95, final p95, and each category, and exits nonzero only for malformed fixtures. It evaluates supplied provider output; it does not claim the fixture is a live microphone benchmark.
 
-- [ ] **Step 2: Add a deterministic mixed fixture**
+- [x] **Step 2: Add a deterministic mixed fixture**
 
 Include at least one general phrase, one personal-name phrase, and one technical phrase. Expected values are asserted in `VoiceBenchmarkTests`; distinctive text remains test-only and never enters the user's vault.
 
-- [ ] **Step 3: Document the provider framework and privacy boundary**
+- [x] **Step 3: Document the provider framework and privacy boundary**
 
 README explains activity feedback, edit-based vocabulary, benchmark invocation, and that raw audio remains ephemeral. Add a decision recording deterministic correction evidence, provider-neutral metrics, and Apple Speech as the selected on-device adapter pending personal-corpus evidence.
 
-- [ ] **Step 4: Run only focused Increment 4 tests**
+- [x] **Step 4: Run only focused Increment 4 tests**
 
 Run:
 
@@ -263,7 +263,7 @@ Scripts/test.sh --filter 'VoiceLearningTests|VoiceBenchmarkTests|VoiceTranscript
 
 Do not run the exhaustive Increment 3 gate unless the user asks.
 
-- [ ] **Step 5: Commit the focused Increment 4 handoff**
+- [x] **Step 5: Commit the focused Increment 4 handoff**
 
 Commit: `feat: complete advanced local voice framework`.
 

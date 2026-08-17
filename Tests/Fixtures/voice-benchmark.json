@@ -1,0 +1,23 @@
+[
+  {
+    "category": "general",
+    "reference": "capture this thought",
+    "hypothesis": "capture this thought",
+    "firstPartialMilliseconds": 40,
+    "finalMilliseconds": 100
+  },
+  {
+    "category": "name",
+    "reference": "call Kuvam",
+    "hypothesis": "call cool van",
+    "firstPartialMilliseconds": 80,
+    "finalMilliseconds": 200
+  },
+  {
+    "category": "technical",
+    "reference": "open Xcode",
+    "hypothesis": "open code",
+    "firstPartialMilliseconds": 60,
+    "finalMilliseconds": 150
+  }
+]

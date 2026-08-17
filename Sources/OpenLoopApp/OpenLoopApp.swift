@@ -270,6 +270,29 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             print("voice-controller-test=passed")
             return true
 
+        case "--voice-benchmark":
+            guard arguments.count > 1 else {
+                print("voice-benchmark-error=missing-fixture")
+                exit(EXIT_FAILURE)
+            }
+            do {
+                let fixtureURL = URL(fileURLWithPath: arguments[1])
+                let data = try Data(contentsOf: fixtureURL)
+                let samples = try JSONDecoder().decode([VoiceBenchmarkSample].self, from: data)
+                let report = VoiceBenchmarkReport(samples: samples)
+                print("voice-benchmark-samples=\(report.sampleCount)")
+                print("voice-benchmark-wer=\(Self.metricText(report.wordErrorRate))")
+                print("voice-benchmark-first-partial-p95-ms=\(Self.metricText(report.firstPartialP95Milliseconds))")
+                print("voice-benchmark-final-p95-ms=\(Self.metricText(report.finalP95Milliseconds))")
+                for category in VoiceBenchmarkCategory.allCases {
+                    print("voice-benchmark-\(category.rawValue)-wer=\(Self.metricText(report.wordErrorRate(for: category)))")
+                }
+                return true
+            } catch {
+                print("voice-benchmark-error=malformed-fixture")
+                exit(EXIT_FAILURE)
+            }
+
         case "--resurfacing-test":
             try await runResurfacingDiagnostic(
                 directory: directory,
@@ -352,6 +375,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private func diagnosticCount(_ arguments: [String]) -> Int {
         guard arguments.count > 1, let value = Int(arguments[1]), value > 0 else { return 100 }
         return value
+    }
+
+    private static func metricText(_ value: Double?) -> String {
+        guard let value else { return "empty" }
+        return String(
+            format: "%.6f",
+            locale: Locale(identifier: "en_US_POSIX"),
+            value
+        )
     }
 
     private func runResurfacingDiagnostic(

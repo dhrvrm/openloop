@@ -130,3 +130,23 @@ there is no network fallback. Audio buffers are not written to disk or retained.
 Only the normalized transcript crosses the existing capture interface, where it
 receives the same encrypted persistence, clarification, and recovery behavior as
 typed text. Sessions are visibly indicated and capped at one minute.
+
+## D-016 — Voice learning is deterministic evidence behind a provider-neutral seam
+
+Status: accepted.
+
+The selected live adapter remains Apple Speech because it satisfies the current
+on-device requirement without shipping a model-download lifecycle. The capture
+controller passes it at most 100 contextual phrases through a provider-neutral
+configuration, and microphone activity is reduced to an ephemeral bounded level
+for visible feedback. No audio sample, activity history, attention inference, or
+accuracy claim is persisted.
+
+Personal vocabulary is derived only after a user-edited transcript successfully
+enters the encrypted capture path. The vault stores the recognized and corrected
+text as correction evidence, ranks phrases deterministically by frequency,
+recency, and lexical order, and never rewrites prior captures. Exact word error
+rate and first-partial/final latency are computed from explicit fixtures with
+separate general, name, and technical categories. A future local provider must
+use the same contract and earn selection with personal-corpus evidence; cloud
+fallback is not an allowed provider behavior.

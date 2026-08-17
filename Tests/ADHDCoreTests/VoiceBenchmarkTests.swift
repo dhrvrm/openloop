@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import ADHDCore
 
@@ -52,4 +53,23 @@ import Testing
     #expect(report.firstPartialP95Milliseconds == nil)
     #expect(report.finalP95Milliseconds == nil)
     #expect(report.wordErrorRate(for: .general) == nil)
+}
+
+@Test func mixedVoiceBenchmarkFixtureProducesDocumentedMetrics() throws {
+    let testFile = URL(fileURLWithPath: #filePath)
+    let fixture = testFile.deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/voice-benchmark.json")
+    let samples = try JSONDecoder().decode(
+        [VoiceBenchmarkSample].self,
+        from: Data(contentsOf: fixture)
+    )
+    let report = VoiceBenchmarkReport(samples: samples)
+
+    #expect(report.sampleCount == 3)
+    #expect(report.wordErrorRate == 3.0 / 7.0)
+    #expect(report.firstPartialP95Milliseconds == 80)
+    #expect(report.finalP95Milliseconds == 200)
+    #expect(report.wordErrorRate(for: .general) == 0)
+    #expect(report.wordErrorRate(for: .name) == 1)
+    #expect(report.wordErrorRate(for: .technical) == 0.5)
 }

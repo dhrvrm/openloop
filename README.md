@@ -182,6 +182,29 @@ and Speech Recognition permission. If the current Dictation language has no
 on-device recognizer, OpenLoop reports that limitation instead of uploading
 audio.
 
+The panel shows a small live activity meter so silence, microphone selection,
+and detected speech are visible without storing audio samples. You can correct
+the transcript while recording; later recognition updates will not overwrite
+your edit. After the corrected text is successfully captured, OpenLoop stores
+only the recognized/final text pair inside the encrypted vault. Repeated edits
+produce a deterministic, 100-phrase personal vocabulary for names and technical
+terms that Apple Speech receives at the next session. No correction is learned
+from a failed save.
+
+Recognition quality is measured independently of the active speech provider.
+The diagnostic consumes already-produced transcript fixtures and reports exact
+word error rate plus first-partial and final p95 latency for general, name, and
+technical phrases:
+
+```bash
+swift run OpenLoopADHD --voice-benchmark Tests/Fixtures/voice-benchmark.json
+```
+
+This command evaluates the supplied fixture; it is not a live microphone
+benchmark. The provider seam requires on-device recognition and can accept a
+future local adapter, while Apple Speech remains the selected implementation.
+Raw audio remains ephemeral and never enters the vocabulary or benchmark data.
+
 Run `Scripts/verify-increment-3.sh` to execute all tests, build and sign the app,
 verify the visible foreground lifecycle, contextual scoring and suppression,
 voice-controller capture, dual global hot keys, encrypted-at-rest markers,
