@@ -66,12 +66,12 @@ public protocol ContextTrailProviding: Sendable {
 
 ### Task 3: Gate recording and enrich Return packets
 
-- [ ] Implement `ContextTrailLoop`: check `.focusTrail`, select only the active focus session, ignore a consecutive duplicate bundle, append the event, then replace the pruned/capped set.
-- [ ] Make `setEnabled(false)` immediately persist `.privateMode` and erase retained context events; this is a recoverable privacy action, not a background cleanup promise.
-- [ ] Implement `ContextTrailReferenceProvider` over the repository. It returns no reference in private mode/no evidence and otherwise emits one bounded, chronological `Context trail — Xcode → Safari` string for the current session.
-- [ ] Compose the existing explicit frontmost reference with the context-trail provider using a small `CompositeContextReferenceProvider` so manual interruption behavior remains intact.
-- [ ] Test private/paused/no-focus rejection, enabled active recording, disabling erasure, stable reference order, and manual references surviving provider failure.
-- [ ] Run `Scripts/test.sh --filter 'ContextTrailTests|InterruptionSnapshotTests|FocusLoopTests'` and commit `feat: attach opt-in context evidence to return packets`.
+- [x] Implement `ContextTrailLoop`: check `.focusTrail`, select only the active focus session, ignore a consecutive duplicate bundle, append the event, then replace the pruned/capped set.
+- [x] Make `setEnabled(false)` immediately persist `.privateMode` and erase retained context events; this is a recoverable privacy action, not a background cleanup promise.
+- [x] Implement `ContextTrailReferenceProvider` over the repository. It returns no reference in private mode/no evidence and otherwise emits one bounded, chronological `Context trail — Xcode → Safari` string for the current session.
+- [x] Compose the existing explicit frontmost reference with the context-trail provider using a small `CompositeContextReferenceProvider` so manual interruption behavior remains intact.
+- [x] Test private/paused/no-focus rejection, enabled active recording, disabling erasure, stable reference order, and manual references surviving provider failure.
+- [x] Run `Scripts/test.sh --filter 'ContextTrailTests|InterruptionSnapshotTests|FocusLoopTests'` and commit `feat: attach opt-in context evidence to return packets`.
 
 ### Task 4: Connect explicit runtime observation without background policy leaks
 

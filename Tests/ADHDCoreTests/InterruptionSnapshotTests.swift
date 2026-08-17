@@ -14,6 +14,15 @@ private struct FailingContextProvider: ContextReferenceProvider {
     func references() async throws -> [String] { throw Failure() }
 }
 
+@Test func compositeContextProviderKeepsSuccessfulEvidenceWhenAnotherProviderFails() async throws {
+    let provider = CompositeContextReferenceProvider([
+        FailingContextProvider(),
+        FixedContextProvider(values: ["Context trail — Xcode → Safari"]),
+    ])
+
+    #expect(try await provider.references() == ["Context trail — Xcode → Safari"])
+}
+
 @Test func interruptionComposerNormalizesTextAndDeduplicatesReferences() async throws {
     let composer = InterruptionSnapshotComposer(
         contextProvider: FixedContextProvider(values: [" Notes ", "https://example.test", ""])

@@ -23,6 +23,22 @@ public protocol ContextReferenceProvider: Sendable {
     func references() async throws -> [String]
 }
 
+public struct CompositeContextReferenceProvider: ContextReferenceProvider, Sendable {
+    private let providers: [any ContextReferenceProvider]
+
+    public init(_ providers: [any ContextReferenceProvider]) {
+        self.providers = providers
+    }
+
+    public func references() async throws -> [String] {
+        var result: [String] = []
+        for provider in providers {
+            result.append(contentsOf: (try? await provider.references()) ?? [])
+        }
+        return result
+    }
+}
+
 public struct InterruptionSnapshotComposer: Sendable {
     private let contextProvider: (any ContextReferenceProvider)?
 

@@ -104,10 +104,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             )
             let loop = ThoughtLoop(repository: repository, clarifier: RuleClarificationProvider())
             let contextProvider = FrontmostApplicationReferenceProvider()
+            let contextTrailLoop = ContextTrailLoop(repository: repository)
             let focusLoop = FocusLoop(
                 repository: repository,
                 composer: InterruptionSnapshotComposer(
-                    contextProvider: contextProvider
+                    contextProvider: CompositeContextReferenceProvider([
+                        contextProvider,
+                        ContextTrailReferenceProvider(repository: repository),
+                    ])
                 )
             )
             let resurfacingLoop = ResurfacingLoop(repository: repository)
