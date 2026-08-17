@@ -52,6 +52,92 @@ import Testing
     #expect(documents.map(\.occurredAt) == documents.map(\.occurredAt).sorted())
 }
 
+@Test func recallRanksExactPhraseAndExposesLexicalContributions() async throws {
+    let repository = RecallRepository()
+    let exact = try RawCapture(
+        id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,
+        createdAt: Date(timeIntervalSince1970: 10),
+        text: "The exact restart action is open the rollout notes"
+    )
+    let partial = try RawCapture(
+        id: UUID(uuidString: "10000000-0000-0000-0000-000000000002")!,
+        createdAt: Date(timeIntervalSince1970: 20),
+        text: "Restart after reviewing another action"
+    )
+    await repository.seed(captures: [partial, exact], intentions: [], corrections: [])
+    let loop = RecallLoop(
+        source: RecallDocumentSource(repository: repository),
+        indexStore: MemoryRecallIndexStore(),
+        embeddingProvider: FailingEmbeddingProvider()
+    )
+
+    let result = try await loop.retrieve(RecallQuery(text: "EXACT restart action"))
+
+    #expect(result.hits.first?.evidenceID.id == exact.id)
+    #expect(result.hits.first?.contributions.contains { $0.kind == .exactPhrase } == true)
+    #expect(result.hits.first?.contributions.contains { $0.kind == .tokenCoverage } == true)
+    #expect(result.hits.count == 2)
+}
+
+@Test func recallAddsSemanticEvidenceAndKeepsExactSearchWhenEmbeddingFails() async throws {
+    let repository = RecallRepository()
+    let semantic = try RawCapture(
+        id: UUID(uuidString: "20000000-0000-0000-0000-000000000001")!,
+        createdAt: Date(timeIntervalSince1970: 10),
+        text: "Release conversation with Mira"
+    )
+    await repository.seed(captures: [semantic], intentions: [], corrections: [])
+    let semanticLoop = RecallLoop(
+        source: RecallDocumentSource(repository: repository),
+        indexStore: MemoryRecallIndexStore(),
+        embeddingProvider: FixtureEmbeddingProvider()
+    )
+
+    let semanticResult = try await semanticLoop.retrieve(RecallQuery(text: "launch discussion"))
+    #expect(semanticResult.hits.first?.evidenceID.id == semantic.id)
+    #expect(semanticResult.hits.first?.contributions.contains {
+        $0.kind == .semanticSimilarity
+    } == true)
+
+    let fallback = RecallLoop(
+        source: RecallDocumentSource(repository: repository),
+        indexStore: MemoryRecallIndexStore(),
+        embeddingProvider: FailingEmbeddingProvider()
+    )
+    let exactResult = try await fallback.retrieve(RecallQuery(text: "Mira"))
+    #expect(exactResult.hits.first?.evidenceID.id == semantic.id)
+    await #expect(throws: RecallError.emptyQuery) {
+        _ = try await fallback.retrieve(RecallQuery(text: "  "))
+    }
+}
+
+private actor MemoryRecallIndexStore: RecallIndexStore {
+    private var value: RecallIndexSnapshot?
+    func load() async throws -> RecallIndexSnapshot? { value }
+    func save(_ snapshot: RecallIndexSnapshot) async throws { value = snapshot }
+    func discard() async throws { value = nil }
+}
+
+private struct FixtureEmbeddingProvider: EmbeddingProvider {
+    var identifier: String { get async { "fixture-v1" } }
+    func vectors(for texts: [String]) async throws -> [[Double]] {
+        texts.map { text in
+            let normalized = text.lowercased()
+            if normalized.contains("launch discussion") || normalized.contains("release conversation") {
+                return [1, 0]
+            }
+            return [0, 1]
+        }
+    }
+}
+
+private struct FailingEmbeddingProvider: EmbeddingProvider {
+    var identifier: String { get async { "failure-v1" } }
+    func vectors(for texts: [String]) async throws -> [[Double]] {
+        throw RecallError.embeddingUnavailable
+    }
+}
+
 private actor RecallRepository: ThoughtRepository {
     private var captureValues: [RawCapture] = []
     private var intentionValues: [Intention] = []

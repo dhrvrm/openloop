@@ -113,3 +113,225 @@ public struct RecallDocumentSource: Sendable {
         return lhs.evidenceID.id.uuidString < rhs.evidenceID.id.uuidString
     }
 }
+
+public struct RecallQuery: Equatable, Sendable {
+    public let text: String
+    public let limit: Int
+
+    public init(text: String, limit: Int = 5) {
+        self.text = text
+        self.limit = max(1, min(limit, 50))
+    }
+}
+
+public enum RecallContributionKind: String, Codable, Equatable, Hashable, Sendable {
+    case exactPhrase
+    case tokenCoverage
+    case semanticSimilarity
+}
+
+public struct RecallContribution: Codable, Equatable, Identifiable, Sendable {
+    public var id: RecallContributionKind { kind }
+    public let kind: RecallContributionKind
+    public let value: Double
+
+    public init(kind: RecallContributionKind, value: Double) {
+        self.kind = kind
+        self.value = value
+    }
+}
+
+public struct RecallHit: Equatable, Identifiable, Sendable {
+    public var id: RecallEvidenceID { evidenceID }
+    public let evidenceID: RecallEvidenceID
+    public let title: String
+    public let excerpt: String
+    public let occurredAt: Date
+    public let score: Double
+    public let contributions: [RecallContribution]
+}
+
+public struct RecallResult: Equatable, Sendable {
+    public let query: String
+    public let hits: [RecallHit]
+
+    public init(query: String, hits: [RecallHit]) {
+        self.query = query
+        self.hits = hits
+    }
+}
+
+public enum RecallError: Error, Equatable {
+    case emptyQuery
+    case embeddingUnavailable
+    case invalidEmbeddingCount
+}
+
+public protocol EmbeddingProvider: Sendable {
+    var identifier: String { get async }
+    func vectors(for texts: [String]) async throws -> [[Double]]
+}
+
+public struct RecallIndexSnapshot: Codable, Equatable, Sendable {
+    public let providerIdentifier: String
+    public let documents: [RecallDocument]
+    public let vectors: [[Double]]
+
+    public init(
+        providerIdentifier: String,
+        documents: [RecallDocument],
+        vectors: [[Double]]
+    ) {
+        self.providerIdentifier = providerIdentifier
+        self.documents = documents
+        self.vectors = vectors
+    }
+}
+
+public protocol RecallIndexStore: Sendable {
+    func load() async throws -> RecallIndexSnapshot?
+    func save(_ snapshot: RecallIndexSnapshot) async throws
+    func discard() async throws
+}
+
+public protocol RecallSearching: Sendable {
+    func retrieve(_ query: RecallQuery) async throws -> RecallResult
+}
+
+public struct RecallLoop: RecallSearching, Sendable {
+    private let source: RecallDocumentSource
+    private let indexStore: any RecallIndexStore
+    private let embeddingProvider: any EmbeddingProvider
+
+    public init(
+        source: RecallDocumentSource,
+        indexStore: any RecallIndexStore,
+        embeddingProvider: any EmbeddingProvider
+    ) {
+        self.source = source
+        self.indexStore = indexStore
+        self.embeddingProvider = embeddingProvider
+    }
+
+    public func retrieve(_ query: RecallQuery) async throws -> RecallResult {
+        let normalizedQuery = Self.normalized(query.text)
+        guard !normalizedQuery.isEmpty else { throw RecallError.emptyQuery }
+        let documents = try await source.documents()
+        let semantic = await semanticValues(query: normalizedQuery, documents: documents)
+        let queryTokens = Set(Self.tokens(query.text))
+
+        let hits = documents.enumerated().compactMap { index, document -> RecallHit? in
+            let normalizedDocument = Self.normalized(document.text)
+            let documentTokens = Set(Self.tokens(document.text))
+            let exact = normalizedDocument.contains(normalizedQuery)
+            let coverage = queryTokens.isEmpty ? 0 : Double(
+                queryTokens.intersection(documentTokens).count
+            ) / Double(queryTokens.count)
+            let lexical = exact ? 1.0 : coverage
+            let semanticValue = semantic.flatMap { values in
+                values.indices.contains(index) ? values[index] : nil
+            }
+            guard lexical > 0 || (semanticValue ?? 0) >= 0.55 else { return nil }
+
+            var contributions: [RecallContribution] = []
+            if exact {
+                contributions.append(RecallContribution(kind: .exactPhrase, value: 1))
+            }
+            if coverage > 0 {
+                contributions.append(RecallContribution(kind: .tokenCoverage, value: coverage))
+            }
+            if let semanticValue {
+                contributions.append(RecallContribution(
+                    kind: .semanticSimilarity,
+                    value: semanticValue
+                ))
+            }
+            let score = semanticValue.map { 0.65 * lexical + 0.35 * $0 } ?? lexical
+            return RecallHit(
+                evidenceID: document.evidenceID,
+                title: document.title,
+                excerpt: document.text,
+                occurredAt: document.occurredAt,
+                score: score,
+                contributions: contributions
+            )
+        }.sorted(by: Self.hitComesBefore)
+
+        return RecallResult(query: query.text.trimmingCharacters(in: .whitespacesAndNewlines), hits: Array(hits.prefix(query.limit)))
+    }
+
+    private func semanticValues(
+        query: String,
+        documents: [RecallDocument]
+    ) async -> [Double]? {
+        do {
+            let identifier = await embeddingProvider.identifier
+            let documentVectors: [[Double]]
+            if let snapshot = try await indexStore.load(),
+               snapshot.providerIdentifier == identifier,
+               snapshot.documents == documents,
+               snapshot.vectors.count == documents.count {
+                documentVectors = snapshot.vectors
+            } else {
+                documentVectors = try await embeddingProvider.vectors(
+                    for: documents.map(\.text)
+                )
+                guard documentVectors.count == documents.count else {
+                    throw RecallError.invalidEmbeddingCount
+                }
+                try await indexStore.save(RecallIndexSnapshot(
+                    providerIdentifier: identifier,
+                    documents: documents,
+                    vectors: documentVectors
+                ))
+            }
+            guard let queryVector = try await embeddingProvider.vectors(for: [query]).first else {
+                throw RecallError.invalidEmbeddingCount
+            }
+            return documentVectors.map { Self.cosineSimilarity($0, queryVector) }
+        } catch {
+            return nil
+        }
+    }
+
+    private static func normalized(_ text: String) -> String {
+        tokens(text).joined(separator: " ")
+    }
+
+    private static func tokens(_ text: String) -> [String] {
+        var values: [String] = []
+        var token = ""
+        for character in text.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: Locale(identifier: "en_US_POSIX")
+        ) {
+            if character.isLetter || character.isNumber {
+                token.append(character)
+            } else if !token.isEmpty {
+                values.append(token)
+                token = ""
+            }
+        }
+        if !token.isEmpty { values.append(token) }
+        return values
+    }
+
+    private static func cosineSimilarity(_ lhs: [Double], _ rhs: [Double]) -> Double {
+        guard !lhs.isEmpty, lhs.count == rhs.count else { return 0 }
+        let dot = zip(lhs, rhs).reduce(0) { $0 + $1.0 * $1.1 }
+        let leftMagnitude = sqrt(lhs.reduce(0) { $0 + $1 * $1 })
+        let rightMagnitude = sqrt(rhs.reduce(0) { $0 + $1 * $1 })
+        guard leftMagnitude > 0, rightMagnitude > 0 else { return 0 }
+        let cosine = dot / (leftMagnitude * rightMagnitude)
+        return min(1, max(0, (cosine + 1) / 2))
+    }
+
+    private static func hitComesBefore(_ lhs: RecallHit, _ rhs: RecallHit) -> Bool {
+        if lhs.score != rhs.score { return lhs.score > rhs.score }
+        if lhs.occurredAt != rhs.occurredAt { return lhs.occurredAt > rhs.occurredAt }
+        if lhs.evidenceID.kind.rawValue != rhs.evidenceID.kind.rawValue {
+            return lhs.evidenceID.kind.rawValue < rhs.evidenceID.kind.rawValue
+        }
+        return lhs.evidenceID.id.uuidString < rhs.evidenceID.id.uuidString
+    }
+}
