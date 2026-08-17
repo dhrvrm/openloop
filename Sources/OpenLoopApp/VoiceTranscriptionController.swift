@@ -57,7 +57,8 @@ enum VoiceCaptureState: Equatable {
 @MainActor
 final class VoiceTranscriptionController: ObservableObject {
     @Published private(set) var state: VoiceCaptureState = .idle
-    @Published var transcript = ""
+    @Published private(set) var transcript = ""
+    @Published private(set) var recognizedTranscript = ""
     @Published private(set) var statusMessage = ""
     @Published private(set) var startedAt: Date?
     @Published private(set) var audioLevel = 0.0
@@ -67,18 +68,26 @@ final class VoiceTranscriptionController: ObservableObject {
     private let save: @MainActor (String) async -> Bool
     private let maximumDuration: Duration
     private let vocabulary: @MainActor @Sendable () async -> [String]
+    private let now: @MainActor @Sendable () -> Date
+    private let recordCorrection: @MainActor @Sendable (String, String, Date) async -> Void
     private let activityDetector = VoiceActivityDetector()
     private var durationTask: Task<Void, Never>?
+    private var transcriptWasEdited = false
+    private var sessionStartedAt: Date?
 
     init(
         transcriber: any VoiceTranscribing,
         maximumDuration: Duration = .seconds(60),
         vocabulary: @escaping @MainActor @Sendable () async -> [String] = { [] },
+        now: @escaping @MainActor @Sendable () -> Date = { .now },
+        recordCorrection: @escaping @MainActor @Sendable (String, String, Date) async -> Void = { _, _, _ in },
         save: @escaping @MainActor (String) async -> Bool
     ) {
         self.transcriber = transcriber
         self.maximumDuration = maximumDuration
         self.vocabulary = vocabulary
+        self.now = now
+        self.recordCorrection = recordCorrection
         self.save = save
     }
 
@@ -104,14 +113,19 @@ final class VoiceTranscriptionController: ObservableObject {
         durationTask = nil
         transcriber.cancel()
         resetActivity()
-        transcript = ""
+        resetTranscript()
         statusMessage = ""
         startedAt = nil
         state = .idle
     }
 
+    func editTranscript(_ value: String) {
+        transcript = value
+        transcriptWasEdited = true
+    }
+
     private func start() async {
-        transcript = ""
+        resetTranscript()
         statusMessage = "Checking microphone and speech access…"
         state = .requestingPermission
         switch await transcriber.requestAuthorization() {
@@ -129,7 +143,10 @@ final class VoiceTranscriptionController: ObservableObject {
                     ),
                     onTranscript: { [weak self] text, isFinal in
                         guard let self else { return }
-                        self.transcript = text
+                        self.recognizedTranscript = text
+                        if self.transcriptWasEdited == false {
+                            self.transcript = text
+                        }
                         if isFinal {
                             Task { @MainActor [weak self] in
                                 await self?.stopAndSave()
@@ -146,7 +163,9 @@ final class VoiceTranscriptionController: ObservableObject {
                         self?.handleFailure(message)
                     }
                 )
-                startedAt = .now
+                let start = now()
+                startedAt = start
+                sessionStartedAt = start
                 statusMessage = "Recording · transcribing on device"
                 state = .recording
                 startDurationLimit()
@@ -172,7 +191,7 @@ final class VoiceTranscriptionController: ObservableObject {
     private func saveTranscript() async {
         let value = normalizedTranscript
         guard value.isEmpty == false else {
-            transcript = ""
+            resetTranscript()
             statusMessage = ""
             state = .idle
             return
@@ -180,7 +199,11 @@ final class VoiceTranscriptionController: ObservableObject {
         statusMessage = "Saving transcript locally…"
         state = .saving
         if await save(value) {
-            transcript = ""
+            let recognized = normalizedRecognizedTranscript
+            if recognized.isEmpty == false, recognized != value {
+                await recordCorrection(recognized, value, sessionStartedAt ?? now())
+            }
+            resetTranscript()
             statusMessage = ""
             state = .idle
         } else {
@@ -214,8 +237,19 @@ final class VoiceTranscriptionController: ObservableObject {
         hasDetectedSpeech = false
     }
 
+    private func resetTranscript() {
+        transcript = ""
+        recognizedTranscript = ""
+        transcriptWasEdited = false
+        sessionStartedAt = nil
+    }
+
     private var normalizedTranscript: String {
         transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var normalizedRecognizedTranscript: String {
+        recognizedTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

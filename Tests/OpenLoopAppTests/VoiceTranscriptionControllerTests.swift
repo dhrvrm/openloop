@@ -42,6 +42,11 @@ private final class VoiceSaveProbe {
 }
 
 @MainActor
+private final class VoiceLearningProbe {
+    var records: [(recognized: String, corrected: String, date: Date)] = []
+}
+
+@MainActor
 @Test func oneToggleStartsAndSecondToggleStopsAndSavesNormalizedTranscript() async {
     let transcriber = FakeVoiceTranscriber()
     var saved: [String] = []
@@ -217,4 +222,57 @@ private final class VoiceSaveProbe {
     let detector = VoiceActivityDetector()
     #expect(detector.detects(level: 0.119) == false)
     #expect(detector.detects(level: 0.12))
+}
+
+@MainActor
+@Test func editedTranscriptIsNotOverwrittenAndLearnsOnlyAfterSuccessfulSave() async {
+    let transcriber = FakeVoiceTranscriber()
+    let saveProbe = VoiceSaveProbe()
+    let learningProbe = VoiceLearningProbe()
+    let date = Date(timeIntervalSince1970: 42)
+    let controller = VoiceTranscriptionController(
+        transcriber: transcriber,
+        now: { date },
+        recordCorrection: { recognized, corrected, createdAt in
+            learningProbe.records.append((recognized, corrected, createdAt))
+        }
+    ) { text in
+        saveProbe.attempts.append(text)
+        return saveProbe.allowed
+    }
+
+    await controller.toggle()
+    transcriber.emit("Call cool van")
+    controller.editTranscript("Call Kuvam")
+    transcriber.emit("Call cool van tomorrow")
+    #expect(controller.recognizedTranscript == "Call cool van tomorrow")
+    #expect(controller.transcript == "Call Kuvam")
+
+    await controller.toggle()
+    #expect(controller.state == .failed)
+    #expect(learningProbe.records.isEmpty)
+
+    saveProbe.allowed = true
+    await controller.toggle()
+    #expect(saveProbe.attempts == ["Call Kuvam", "Call Kuvam"])
+    #expect(learningProbe.records.count == 1)
+    #expect(learningProbe.records[0].recognized == "Call cool van tomorrow")
+    #expect(learningProbe.records[0].corrected == "Call Kuvam")
+    #expect(learningProbe.records[0].date == date)
+}
+
+@MainActor
+@Test func uneditedSuccessfulTranscriptDoesNotCreateCorrectionEvidence() async {
+    let transcriber = FakeVoiceTranscriber()
+    var correctionCount = 0
+    let controller = VoiceTranscriptionController(
+        transcriber: transcriber,
+        recordCorrection: { _, _, _ in correctionCount += 1 }
+    ) { _ in true }
+
+    await controller.toggle()
+    transcriber.emit("Exact transcript")
+    await controller.toggle()
+
+    #expect(correctionCount == 0)
 }

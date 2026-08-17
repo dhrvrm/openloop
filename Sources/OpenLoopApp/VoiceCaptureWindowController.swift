@@ -28,7 +28,26 @@ private struct VoiceCaptureView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-            TextEditor(text: $controller.transcript)
+            if controller.state == .recording {
+                HStack(alignment: .center, spacing: 5) {
+                    ForEach(0..<5, id: \.self) { index in
+                        Capsule()
+                            .fill(activityColor(for: index))
+                            .frame(width: 5, height: CGFloat(8 + index * 3))
+                    }
+                    Text(controller.hasDetectedSpeech ? "Voice detected" : "Listening")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Microphone activity")
+                .accessibilityValue(controller.hasDetectedSpeech ? "Voice detected" : "Listening")
+            }
+
+            TextEditor(text: Binding(
+                get: { controller.transcript },
+                set: { controller.editTranscript($0) }
+            ))
                 .font(.body)
                 .scrollContentBackground(.hidden)
                 .padding(10)
@@ -39,6 +58,10 @@ private struct VoiceCaptureView: View {
                 .frame(minHeight: 110)
                 .disabled(controller.state == .requestingPermission || controller.state == .saving)
                 .accessibilityLabel("Live transcript")
+
+            Text("Edits improve names and technical words on this Mac")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
 
             HStack {
                 Text("⌘⇧R to \(controller.state == .recording ? "stop and save" : "start")")
@@ -89,6 +112,13 @@ private struct VoiceCaptureView: View {
     private func elapsed(from start: Date, to end: Date) -> String {
         let seconds = max(0, Int(end.timeIntervalSince(start)))
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+
+    private func activityColor(for index: Int) -> Color {
+        let threshold = Double(index + 1) / 5
+        return controller.audioLevel >= threshold
+            ? .accentColor
+            : Color.secondary.opacity(0.2)
     }
 }
 

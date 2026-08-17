@@ -110,8 +110,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             }
             let quickCapture = QuickCaptureController(model: model)
             let mainWindow = MainWindowController(model: model)
+            let voiceLearningLoop = VoiceLearningLoop(repository: repository)
             let voiceController = VoiceTranscriptionController(
-                transcriber: OnDeviceSpeechTranscriber()
+                transcriber: OnDeviceSpeechTranscriber(),
+                vocabulary: {
+                    (try? await voiceLearningLoop.vocabulary(limit: 100)) ?? []
+                },
+                recordCorrection: { recognized, corrected, date in
+                    try? await voiceLearningLoop.record(
+                        recognized: recognized, corrected: corrected, at: date
+                    )
+                }
             ) { [weak model] transcript in
                 await model?.submitCapture(transcript) ?? false
             }
