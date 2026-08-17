@@ -13,6 +13,20 @@ struct SpeechProviderConfiguration: Equatable, Sendable {
     let requiresOnDeviceRecognition: Bool
 }
 
+enum PermissionCallbackBridge {
+    nonisolated static func resolve(
+        _ register: @escaping @Sendable (
+            @escaping @Sendable (Bool) -> Void
+        ) -> Void
+    ) async -> Bool {
+        await withCheckedContinuation(isolation: nil) { continuation in
+            register { granted in
+                continuation.resume(returning: granted)
+            }
+        }
+    }
+}
+
 enum AudioLevelNormalizer {
     static func normalized(rms: Double) -> Double {
         guard rms.isFinite, rms > 0 else { return 0 }
@@ -382,9 +396,9 @@ final class OnDeviceSpeechTranscriber: VoiceTranscribing {
         case .denied, .restricted:
             return false
         case .notDetermined:
-            return await withCheckedContinuation { continuation in
+            return await PermissionCallbackBridge.resolve { completion in
                 SFSpeechRecognizer.requestAuthorization { status in
-                    continuation.resume(returning: status == .authorized)
+                    completion(status == .authorized)
                 }
             }
         @unknown default:
@@ -399,9 +413,9 @@ final class OnDeviceSpeechTranscriber: VoiceTranscribing {
         case .denied, .restricted:
             return false
         case .notDetermined:
-            return await withCheckedContinuation { continuation in
+            return await PermissionCallbackBridge.resolve { completion in
                 AVCaptureDevice.requestAccess(for: .audio) { granted in
-                    continuation.resume(returning: granted)
+                    completion(granted)
                 }
             }
         @unknown default:

@@ -3,6 +3,17 @@ import Testing
 @testable import OpenLoopApp
 
 @MainActor
+@Test func permissionCallbackBridgeAcceptsAWorkerQueueCompletion() async {
+    let granted = await PermissionCallbackBridge.resolve { completion in
+        DispatchQueue.global(qos: .default).async {
+            completion(true)
+        }
+    }
+
+    #expect(granted)
+}
+
+@MainActor
 private final class FakeVoiceTranscriber: VoiceTranscribing {
     var authorization: VoiceAuthorization = .authorized
     var startCount = 0
