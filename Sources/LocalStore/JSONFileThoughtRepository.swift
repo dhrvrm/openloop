@@ -9,6 +9,7 @@ private struct Snapshot: Codable {
     var resurfacingRules: [UUID: ResurfacingRule] = [:]
     var suggestionEvents: [UUID: SuggestionEvent] = [:]
     var transcriptionCorrections: [UUID: TranscriptionCorrection] = [:]
+    var memoryRecords: [UUID: MemoryRecord] = [:]
 
     private enum CodingKeys: String, CodingKey {
         case captures
@@ -18,6 +19,7 @@ private struct Snapshot: Codable {
         case resurfacingRules
         case suggestionEvents
         case transcriptionCorrections
+        case memoryRecords
     }
 
     init() {}
@@ -45,6 +47,10 @@ private struct Snapshot: Codable {
         transcriptionCorrections = try container.decodeIfPresent(
             [UUID: TranscriptionCorrection].self,
             forKey: .transcriptionCorrections
+        ) ?? [:]
+        memoryRecords = try container.decodeIfPresent(
+            [UUID: MemoryRecord].self,
+            forKey: .memoryRecords
         ) ?? [:]
     }
 }
@@ -198,6 +204,18 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         snapshot.transcriptionCorrections.values.sorted(by: Self.transcriptionCorrectionOrder)
     }
 
+    public func save(memoryRecords: [MemoryRecord]) async throws {
+        try update { snapshot in
+            snapshot.memoryRecords = Dictionary(
+                uniqueKeysWithValues: memoryRecords.map { ($0.id, $0) }
+            )
+        }
+    }
+
+    public func memoryRecords() async throws -> [MemoryRecord] {
+        snapshot.memoryRecords.values.sorted(by: Self.memoryRecordOrder)
+    }
+
     public func allCaptures() async throws -> [RawCapture] {
         snapshot.captures.values.sorted(by: Self.captureOrder)
     }
@@ -293,5 +311,11 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
     ) -> Bool {
         if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
         return lhs.createdAt < rhs.createdAt
+    }
+
+    private static func memoryRecordOrder(_ lhs: MemoryRecord, _ rhs: MemoryRecord) -> Bool {
+        if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+        if lhs.kind != rhs.kind { return lhs.kind.rawValue < rhs.kind.rawValue }
+        return lhs.id.uuidString < rhs.id.uuidString
     }
 }

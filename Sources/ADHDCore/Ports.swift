@@ -22,6 +22,8 @@ public protocol ThoughtRepository: Sendable {
     func suggestionEvents() async throws -> [SuggestionEvent]
     func save(transcriptionCorrection: TranscriptionCorrection) async throws
     func transcriptionCorrections() async throws -> [TranscriptionCorrection]
+    func save(memoryRecords: [MemoryRecord]) async throws
+    func memoryRecords() async throws -> [MemoryRecord]
     func allCaptures() async throws -> [RawCapture]
     func allIntentions() async throws -> [Intention]
 }
@@ -30,6 +32,7 @@ public enum ThoughtRepositoryCompatibilityError: Error, Equatable {
     case focusSessionsUnsupported
     case resurfacingUnsupported
     case voiceLearningUnsupported
+    case workingMemoryUnsupported
 }
 
 public enum ThoughtRepositoryFocusError: Error, Equatable {
@@ -81,6 +84,12 @@ public extension ThoughtRepository {
     }
 
     func transcriptionCorrections() async throws -> [TranscriptionCorrection] { [] }
+
+    func save(memoryRecords: [MemoryRecord]) async throws {
+        throw ThoughtRepositoryCompatibilityError.workingMemoryUnsupported
+    }
+
+    func memoryRecords() async throws -> [MemoryRecord] { [] }
 
     func allCaptures() async throws -> [RawCapture] { [] }
 

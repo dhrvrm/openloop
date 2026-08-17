@@ -12,6 +12,7 @@ private struct VaultSnapshot: Codable {
     var resurfacingRules: [UUID: ResurfacingRule] = [:]
     var suggestionEvents: [UUID: SuggestionEvent] = [:]
     var transcriptionCorrections: [UUID: TranscriptionCorrection] = [:]
+    var memoryRecords: [UUID: MemoryRecord] = [:]
 
     private enum CodingKeys: String, CodingKey {
         case captures
@@ -21,6 +22,7 @@ private struct VaultSnapshot: Codable {
         case resurfacingRules
         case suggestionEvents
         case transcriptionCorrections
+        case memoryRecords
     }
 
     init() {}
@@ -48,6 +50,10 @@ private struct VaultSnapshot: Codable {
         transcriptionCorrections = try container.decodeIfPresent(
             [UUID: TranscriptionCorrection].self,
             forKey: .transcriptionCorrections
+        ) ?? [:]
+        memoryRecords = try container.decodeIfPresent(
+            [UUID: MemoryRecord].self,
+            forKey: .memoryRecords
         ) ?? [:]
     }
 }
@@ -212,6 +218,19 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         )
     }
 
+    public func save(memoryRecords: [MemoryRecord]) async throws {
+        try update { snapshot in
+            snapshot.memoryRecords = Dictionary(
+                uniqueKeysWithValues: memoryRecords.map { ($0.id, $0) }
+            )
+        }
+    }
+
+    public func memoryRecords() async throws -> [MemoryRecord] {
+        try synchronize()
+        return snapshot.memoryRecords.values.sorted(by: Self.memoryRecordOrder)
+    }
+
     public func allCaptures() async throws -> [RawCapture] {
         try synchronize()
         return snapshot.captures.values.sorted(by: Self.captureOrder)
@@ -231,6 +250,7 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
             && snapshot.resurfacingRules.isEmpty
             && snapshot.suggestionEvents.isEmpty
             && snapshot.transcriptionCorrections.isEmpty
+            && snapshot.memoryRecords.isEmpty
     }
 
     public var counts: VaultCounts {
@@ -259,7 +279,8 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
                   candidate.focusSessions.isEmpty,
                   candidate.resurfacingRules.isEmpty,
                   candidate.suggestionEvents.isEmpty,
-                  candidate.transcriptionCorrections.isEmpty else {
+                  candidate.transcriptionCorrections.isEmpty,
+                  candidate.memoryRecords.isEmpty else {
                 throw VaultStoreError.vaultNotEmpty
             }
             candidate.captures = Dictionary(uniqueKeysWithValues: value.captures.map { ($0.id, $0) })
@@ -387,6 +408,12 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
     ) -> Bool {
         if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
         return lhs.createdAt < rhs.createdAt
+    }
+
+    private static func memoryRecordOrder(_ lhs: MemoryRecord, _ rhs: MemoryRecord) -> Bool {
+        if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
+        if lhs.kind != rhs.kind { return lhs.kind.rawValue < rhs.kind.rawValue }
+        return lhs.id.uuidString < rhs.id.uuidString
     }
 
     private static func validateCurrentFocus(

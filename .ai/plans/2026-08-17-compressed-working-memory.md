@@ -67,17 +67,17 @@ public protocol MemoryExtractionProvider: Sendable {
 
 ### Task 3: Persist the ledger in both repositories
 
-- [ ] Add protocol methods with safe defaults:
+- [x] Add protocol methods with safe defaults:
 
 ```swift
 func save(memoryRecords: [MemoryRecord]) async throws
 func memoryRecords() async throws -> [MemoryRecord]
 ```
 
-- [ ] Add `[UUID: MemoryRecord]` to local and vault snapshots using `decodeIfPresent ?? [:]`; save a complete compiler result in one locked/encrypted update and read by `updatedAt`, kind, UUID.
-- [ ] Test local restart and legacy snapshots. Test encrypted restart and scan all vault bytes for statement/evidence plaintext.
-- [ ] Include memory emptiness in vault guards without changing authenticated data or migration meaning.
-- [ ] Run focused repository tests and commit `feat: persist encrypted temporal memory ledger`.
+- [x] Add `[UUID: MemoryRecord]` to local and vault snapshots using `decodeIfPresent ?? [:]`; save a complete compiler result in one locked/encrypted update and read by `updatedAt`, kind, UUID.
+- [x] Test local restart and legacy snapshots. Test encrypted restart and scan all vault bytes for statement/evidence plaintext.
+- [x] Include memory emptiness in vault guards without changing authenticated data or migration meaning.
+- [x] Run focused repository tests and commit `feat: persist encrypted temporal memory ledger`.
 
 ### Task 4: Compile idempotently and connect current memory to Recall
 

@@ -123,6 +123,7 @@ private func temporaryDirectory() -> URL {
 
     #expect(try await repository.focusSessions().isEmpty)
     #expect(try await repository.transcriptionCorrections().isEmpty)
+    #expect(try await repository.memoryRecords().isEmpty)
 }
 
 @Test func transcriptionCorrectionSurvivesEncryptedRestartWithoutPlaintext() async throws {
@@ -146,6 +147,26 @@ private func temporaryDirectory() -> URL {
         let data = try Data(contentsOf: file)
         #expect(data.range(of: Data(correction.recognized.utf8)) == nil)
         #expect(data.range(of: Data(correction.corrected.utf8)) == nil)
+    }
+}
+
+@Test func workingMemoryLedgerSurvivesEncryptedRestartWithoutPlaintext() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let record = encryptedMemoryRecord()
+    let writer = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+
+    try await writer.save(memoryRecords: [record])
+
+    let reader = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    #expect(try await reader.memoryRecords() == [record])
+    for file in try FileManager.default.contentsOfDirectory(
+        at: directory,
+        includingPropertiesForKeys: nil
+    ) {
+        let data = try Data(contentsOf: file)
+        #expect(data.range(of: Data(record.statement.utf8)) == nil)
+        #expect(data.range(of: Data(record.evidence[0].excerpt.utf8)) == nil)
     }
 }
 
@@ -500,6 +521,24 @@ private func interruptedPair(marker: String) throws -> (intention: Intention, se
     )
     try session.interrupt(at: packet.capturedAt)
     return (intention, session)
+}
+
+private func encryptedMemoryRecord() -> MemoryRecord {
+    let id = UUID(uuidString: "60000000-0000-0000-0000-000000000001")!
+    let date = Date(timeIntervalSince1970: 60)
+    return MemoryRecord(
+        id: id,
+        kind: .decision,
+        statement: "Distinct encrypted memory statement",
+        confidence: 1,
+        evidence: [MemoryEvidence(
+            evidenceID: RecallEvidenceID(kind: .capture, id: id),
+            excerpt: "decision: Distinct encrypted memory statement",
+            occurredAt: date
+        )],
+        createdAt: date,
+        updatedAt: date
+    )
 }
 
 private struct TestActionClarifier: ClarificationProvider {

@@ -93,6 +93,7 @@ private struct LegacySnapshot: Codable {
     #expect(try await repository.proposal(captureID: capture.id) == nil)
     #expect(try await repository.captures(disposition: .unclear).isEmpty)
     #expect(try await repository.transcriptionCorrections().isEmpty)
+    #expect(try await repository.memoryRecords().isEmpty)
 }
 
 @Test func transcriptionCorrectionsSurviveDevelopmentRestartWithStableOrdering() async throws {
@@ -115,6 +116,23 @@ private struct LegacySnapshot: Codable {
 
     let reader = try JSONFileThoughtRepository(directory: directory)
     #expect(try await reader.transcriptionCorrections() == [earlier, later])
+}
+
+@Test func workingMemoryLedgerSurvivesDevelopmentRestartAndReplacesAtomically() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let older = localMemoryRecord(id: 1, updatedAt: Date(timeIntervalSince1970: 10))
+    let newer = localMemoryRecord(id: 2, updatedAt: Date(timeIntervalSince1970: 20))
+    let writer = try JSONFileThoughtRepository(directory: directory)
+
+    try await writer.save(memoryRecords: [older, newer])
+    let reader = try JSONFileThoughtRepository(directory: directory)
+    #expect(try await reader.memoryRecords() == [newer, older])
+
+    try await reader.save(memoryRecords: [older])
+    let replaced = try JSONFileThoughtRepository(directory: directory)
+    #expect(try await replaced.memoryRecords() == [older])
 }
 
 @Test func dispositionReadsHaveStableOrderingForEqualTimestamps() async throws {
@@ -265,5 +283,22 @@ private func localTestIntention() -> Intention {
         state: .open,
         createdAt: Date(timeIntervalSince1970: 1),
         returnPacket: nil
+    )
+}
+
+private func localMemoryRecord(id: Int, updatedAt: Date) -> MemoryRecord {
+    let recordID = UUID(uuidString: String(format: "50000000-0000-0000-0000-%012d", id))!
+    return MemoryRecord(
+        id: recordID,
+        kind: .fact,
+        statement: "Local memory \(id)",
+        confidence: 1,
+        evidence: [MemoryEvidence(
+            evidenceID: RecallEvidenceID(kind: .capture, id: recordID),
+            excerpt: "remember: Local memory \(id)",
+            occurredAt: updatedAt
+        )],
+        createdAt: updatedAt,
+        updatedAt: updatedAt
     )
 }
