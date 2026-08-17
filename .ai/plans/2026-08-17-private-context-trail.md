@@ -58,11 +58,11 @@ public protocol ContextTrailProviding: Sendable {
 
 ### Task 2: Persist settings and evidence inside existing stores
 
-- [ ] Add safe protocol defaults for `save(contextTrailSettings:)`, `contextTrailSettings()`, `append(contextTrailEvent:)`, `contextTrailEvents()`, and `replace(contextTrailEvents:)`; unsupported writes throw `.contextTrailUnsupported`, reads return private/empty.
-- [ ] Add settings and `[UUID: ContextTrailEvent]` to local/vault snapshots using `decodeIfPresent`; stable reads order by observation time then UUID and replacement writes the bounded complete set atomically.
-- [ ] Include context events/settings in vault non-empty guards without changing authenticated data or development migration semantics.
-- [ ] Test local/vault restart and legacy decode. Scan every vault-side file for a distinctive application name and bundle identifier.
-- [ ] Run `Scripts/test.sh --filter 'contextTrail|ContextTrail'` and commit `feat: persist encrypted context trail evidence`.
+- [x] Add safe protocol defaults for `save(contextTrailSettings:)`, `contextTrailSettings()`, `append(contextTrailEvent:)`, `contextTrailEvents()`, and `replace(contextTrailEvents:)`; unsupported writes throw `.contextTrailUnsupported`, reads return private/empty.
+- [x] Add settings and `[UUID: ContextTrailEvent]` to local/vault snapshots using `decodeIfPresent`; stable reads order by observation time then UUID and replacement writes the bounded complete set atomically.
+- [x] Include context events/settings in vault non-empty guards without changing authenticated data or development migration semantics.
+- [x] Test local/vault restart and legacy decode. Scan every vault-side file for a distinctive application name and bundle identifier.
+- [x] Run `Scripts/test.sh --filter 'contextTrail|ContextTrail'` and commit `feat: persist encrypted context trail evidence`.
 
 ### Task 3: Gate recording and enrich Return packets
 

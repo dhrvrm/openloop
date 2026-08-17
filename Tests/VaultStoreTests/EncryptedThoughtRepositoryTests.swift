@@ -124,6 +124,8 @@ private func temporaryDirectory() -> URL {
     #expect(try await repository.focusSessions().isEmpty)
     #expect(try await repository.transcriptionCorrections().isEmpty)
     #expect(try await repository.memoryRecords().isEmpty)
+    #expect(try await repository.contextTrailSettings() == ContextTrailSettings())
+    #expect(try await repository.contextTrailEvents().isEmpty)
 }
 
 @Test func transcriptionCorrectionSurvivesEncryptedRestartWithoutPlaintext() async throws {
@@ -167,6 +169,38 @@ private func temporaryDirectory() -> URL {
         let data = try Data(contentsOf: file)
         #expect(data.range(of: Data(record.statement.utf8)) == nil)
         #expect(data.range(of: Data(record.evidence[0].excerpt.utf8)) == nil)
+    }
+}
+
+@Test func contextTrailSurvivesEncryptedRestartWithoutIdentityPlaintext() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let application = try ApplicationContext(
+        bundleIdentifier: "dev.openloop.distinct-private-context",
+        applicationName: "Distinct Private Context Editor"
+    )
+    let event = ContextTrailEvent(
+        intentionID: UUID(),
+        focusSessionID: UUID(),
+        observedAt: Date(timeIntervalSince1970: 80),
+        application: application
+    )
+    let settings = ContextTrailSettings(mode: .focusTrail, retentionHours: 6)
+    let writer = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+
+    try await writer.save(contextTrailSettings: settings)
+    try await writer.append(contextTrailEvent: event)
+
+    let reader = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    #expect(try await reader.contextTrailSettings() == settings)
+    #expect(try await reader.contextTrailEvents() == [event])
+    for file in try FileManager.default.contentsOfDirectory(
+        at: directory,
+        includingPropertiesForKeys: nil
+    ) {
+        let data = try Data(contentsOf: file)
+        #expect(data.range(of: Data(application.bundleIdentifier.utf8)) == nil)
+        #expect(data.range(of: Data(application.applicationName.utf8)) == nil)
     }
 }
 

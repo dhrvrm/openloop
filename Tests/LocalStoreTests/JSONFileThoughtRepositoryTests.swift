@@ -94,6 +94,8 @@ private struct LegacySnapshot: Codable {
     #expect(try await repository.captures(disposition: .unclear).isEmpty)
     #expect(try await repository.transcriptionCorrections().isEmpty)
     #expect(try await repository.memoryRecords().isEmpty)
+    #expect(try await repository.contextTrailSettings() == ContextTrailSettings())
+    #expect(try await repository.contextTrailEvents().isEmpty)
 }
 
 @Test func transcriptionCorrectionsSurviveDevelopmentRestartWithStableOrdering() async throws {
@@ -133,6 +135,43 @@ private struct LegacySnapshot: Codable {
     try await reader.save(memoryRecords: [older])
     let replaced = try JSONFileThoughtRepository(directory: directory)
     #expect(try await replaced.memoryRecords() == [older])
+}
+
+@Test func contextTrailSettingsAndEventsSurviveDevelopmentRestartAndReplace() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let sessionID = UUID()
+    let intentionID = UUID()
+    let application = try ApplicationContext(
+        bundleIdentifier: "dev.openloop.local-context",
+        applicationName: "Local Context Editor"
+    )
+    let earlier = ContextTrailEvent(
+        intentionID: intentionID,
+        focusSessionID: sessionID,
+        observedAt: Date(timeIntervalSince1970: 10),
+        application: application
+    )
+    let later = ContextTrailEvent(
+        intentionID: intentionID,
+        focusSessionID: sessionID,
+        observedAt: Date(timeIntervalSince1970: 20),
+        application: application
+    )
+    let settings = ContextTrailSettings(mode: .focusTrail, retentionHours: 4)
+    let writer = try JSONFileThoughtRepository(directory: directory)
+
+    try await writer.save(contextTrailSettings: settings)
+    try await writer.append(contextTrailEvent: later)
+    try await writer.append(contextTrailEvent: earlier)
+
+    let reader = try JSONFileThoughtRepository(directory: directory)
+    #expect(try await reader.contextTrailSettings() == settings)
+    #expect(try await reader.contextTrailEvents() == [earlier, later])
+    try await reader.replace(contextTrailEvents: [later])
+    let replaced = try JSONFileThoughtRepository(directory: directory)
+    #expect(try await replaced.contextTrailEvents() == [later])
 }
 
 @Test func dispositionReadsHaveStableOrderingForEqualTimestamps() async throws {

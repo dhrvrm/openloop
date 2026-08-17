@@ -10,6 +10,8 @@ private struct Snapshot: Codable {
     var suggestionEvents: [UUID: SuggestionEvent] = [:]
     var transcriptionCorrections: [UUID: TranscriptionCorrection] = [:]
     var memoryRecords: [UUID: MemoryRecord] = [:]
+    var contextTrailSettings = ContextTrailSettings()
+    var contextTrailEvents: [UUID: ContextTrailEvent] = [:]
 
     private enum CodingKeys: String, CodingKey {
         case captures
@@ -20,6 +22,8 @@ private struct Snapshot: Codable {
         case suggestionEvents
         case transcriptionCorrections
         case memoryRecords
+        case contextTrailSettings
+        case contextTrailEvents
     }
 
     init() {}
@@ -51,6 +55,14 @@ private struct Snapshot: Codable {
         memoryRecords = try container.decodeIfPresent(
             [UUID: MemoryRecord].self,
             forKey: .memoryRecords
+        ) ?? [:]
+        contextTrailSettings = try container.decodeIfPresent(
+            ContextTrailSettings.self,
+            forKey: .contextTrailSettings
+        ) ?? ContextTrailSettings()
+        contextTrailEvents = try container.decodeIfPresent(
+            [UUID: ContextTrailEvent].self,
+            forKey: .contextTrailEvents
         ) ?? [:]
     }
 }
@@ -214,6 +226,30 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
 
     public func memoryRecords() async throws -> [MemoryRecord] {
         snapshot.memoryRecords.values.sorted(by: Self.memoryRecordOrder)
+    }
+
+    public func save(contextTrailSettings: ContextTrailSettings) async throws {
+        try update { $0.contextTrailSettings = contextTrailSettings }
+    }
+
+    public func contextTrailSettings() async throws -> ContextTrailSettings {
+        snapshot.contextTrailSettings
+    }
+
+    public func append(contextTrailEvent: ContextTrailEvent) async throws {
+        try update { $0.contextTrailEvents[contextTrailEvent.id] = contextTrailEvent }
+    }
+
+    public func contextTrailEvents() async throws -> [ContextTrailEvent] {
+        snapshot.contextTrailEvents.values.sorted(by: ContextTrailPolicy.eventComesBefore)
+    }
+
+    public func replace(contextTrailEvents: [ContextTrailEvent]) async throws {
+        try update { snapshot in
+            snapshot.contextTrailEvents = Dictionary(
+                uniqueKeysWithValues: contextTrailEvents.map { ($0.id, $0) }
+            )
+        }
     }
 
     public func allCaptures() async throws -> [RawCapture] {

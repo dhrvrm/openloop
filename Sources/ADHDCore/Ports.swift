@@ -24,6 +24,11 @@ public protocol ThoughtRepository: Sendable {
     func transcriptionCorrections() async throws -> [TranscriptionCorrection]
     func save(memoryRecords: [MemoryRecord]) async throws
     func memoryRecords() async throws -> [MemoryRecord]
+    func save(contextTrailSettings: ContextTrailSettings) async throws
+    func contextTrailSettings() async throws -> ContextTrailSettings
+    func append(contextTrailEvent: ContextTrailEvent) async throws
+    func contextTrailEvents() async throws -> [ContextTrailEvent]
+    func replace(contextTrailEvents: [ContextTrailEvent]) async throws
     func allCaptures() async throws -> [RawCapture]
     func allIntentions() async throws -> [Intention]
 }
@@ -33,6 +38,7 @@ public enum ThoughtRepositoryCompatibilityError: Error, Equatable {
     case resurfacingUnsupported
     case voiceLearningUnsupported
     case workingMemoryUnsupported
+    case contextTrailUnsupported
 }
 
 public enum ThoughtRepositoryFocusError: Error, Equatable {
@@ -90,6 +96,22 @@ public extension ThoughtRepository {
     }
 
     func memoryRecords() async throws -> [MemoryRecord] { [] }
+
+    func save(contextTrailSettings: ContextTrailSettings) async throws {
+        throw ThoughtRepositoryCompatibilityError.contextTrailUnsupported
+    }
+
+    func contextTrailSettings() async throws -> ContextTrailSettings { ContextTrailSettings() }
+
+    func append(contextTrailEvent: ContextTrailEvent) async throws {
+        throw ThoughtRepositoryCompatibilityError.contextTrailUnsupported
+    }
+
+    func contextTrailEvents() async throws -> [ContextTrailEvent] { [] }
+
+    func replace(contextTrailEvents: [ContextTrailEvent]) async throws {
+        throw ThoughtRepositoryCompatibilityError.contextTrailUnsupported
+    }
 
     func allCaptures() async throws -> [RawCapture] { [] }
 

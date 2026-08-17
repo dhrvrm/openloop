@@ -13,6 +13,8 @@ private struct VaultSnapshot: Codable {
     var suggestionEvents: [UUID: SuggestionEvent] = [:]
     var transcriptionCorrections: [UUID: TranscriptionCorrection] = [:]
     var memoryRecords: [UUID: MemoryRecord] = [:]
+    var contextTrailSettings = ContextTrailSettings()
+    var contextTrailEvents: [UUID: ContextTrailEvent] = [:]
 
     private enum CodingKeys: String, CodingKey {
         case captures
@@ -23,6 +25,8 @@ private struct VaultSnapshot: Codable {
         case suggestionEvents
         case transcriptionCorrections
         case memoryRecords
+        case contextTrailSettings
+        case contextTrailEvents
     }
 
     init() {}
@@ -54,6 +58,14 @@ private struct VaultSnapshot: Codable {
         memoryRecords = try container.decodeIfPresent(
             [UUID: MemoryRecord].self,
             forKey: .memoryRecords
+        ) ?? [:]
+        contextTrailSettings = try container.decodeIfPresent(
+            ContextTrailSettings.self,
+            forKey: .contextTrailSettings
+        ) ?? ContextTrailSettings()
+        contextTrailEvents = try container.decodeIfPresent(
+            [UUID: ContextTrailEvent].self,
+            forKey: .contextTrailEvents
         ) ?? [:]
     }
 }
@@ -231,6 +243,32 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         return snapshot.memoryRecords.values.sorted(by: Self.memoryRecordOrder)
     }
 
+    public func save(contextTrailSettings: ContextTrailSettings) async throws {
+        try update { $0.contextTrailSettings = contextTrailSettings }
+    }
+
+    public func contextTrailSettings() async throws -> ContextTrailSettings {
+        try synchronize()
+        return snapshot.contextTrailSettings
+    }
+
+    public func append(contextTrailEvent: ContextTrailEvent) async throws {
+        try update { $0.contextTrailEvents[contextTrailEvent.id] = contextTrailEvent }
+    }
+
+    public func contextTrailEvents() async throws -> [ContextTrailEvent] {
+        try synchronize()
+        return snapshot.contextTrailEvents.values.sorted(by: ContextTrailPolicy.eventComesBefore)
+    }
+
+    public func replace(contextTrailEvents: [ContextTrailEvent]) async throws {
+        try update { snapshot in
+            snapshot.contextTrailEvents = Dictionary(
+                uniqueKeysWithValues: contextTrailEvents.map { ($0.id, $0) }
+            )
+        }
+    }
+
     public func allCaptures() async throws -> [RawCapture] {
         try synchronize()
         return snapshot.captures.values.sorted(by: Self.captureOrder)
@@ -251,6 +289,8 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
             && snapshot.suggestionEvents.isEmpty
             && snapshot.transcriptionCorrections.isEmpty
             && snapshot.memoryRecords.isEmpty
+            && snapshot.contextTrailSettings == ContextTrailSettings()
+            && snapshot.contextTrailEvents.isEmpty
     }
 
     public var counts: VaultCounts {
@@ -280,7 +320,9 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
                   candidate.resurfacingRules.isEmpty,
                   candidate.suggestionEvents.isEmpty,
                   candidate.transcriptionCorrections.isEmpty,
-                  candidate.memoryRecords.isEmpty else {
+                  candidate.memoryRecords.isEmpty,
+                  candidate.contextTrailSettings == ContextTrailSettings(),
+                  candidate.contextTrailEvents.isEmpty else {
                 throw VaultStoreError.vaultNotEmpty
             }
             candidate.captures = Dictionary(uniqueKeysWithValues: value.captures.map { ($0.id, $0) })
