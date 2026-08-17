@@ -20,11 +20,14 @@ public protocol ThoughtRepository: Sendable {
     func resurfacingRules() async throws -> [ResurfacingRule]
     func append(suggestionEvent: SuggestionEvent) async throws
     func suggestionEvents() async throws -> [SuggestionEvent]
+    func save(transcriptionCorrection: TranscriptionCorrection) async throws
+    func transcriptionCorrections() async throws -> [TranscriptionCorrection]
 }
 
 public enum ThoughtRepositoryCompatibilityError: Error, Equatable {
     case focusSessionsUnsupported
     case resurfacingUnsupported
+    case voiceLearningUnsupported
 }
 
 public enum ThoughtRepositoryFocusError: Error, Equatable {
@@ -70,6 +73,12 @@ public extension ThoughtRepository {
     }
 
     func suggestionEvents() async throws -> [SuggestionEvent] { [] }
+
+    func save(transcriptionCorrection: TranscriptionCorrection) async throws {
+        throw ThoughtRepositoryCompatibilityError.voiceLearningUnsupported
+    }
+
+    func transcriptionCorrections() async throws -> [TranscriptionCorrection] { [] }
 }
 
 public protocol ClarificationProvider: Sendable {
