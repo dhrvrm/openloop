@@ -198,6 +198,14 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         snapshot.transcriptionCorrections.values.sorted(by: Self.transcriptionCorrectionOrder)
     }
 
+    public func allCaptures() async throws -> [RawCapture] {
+        snapshot.captures.values.sorted(by: Self.captureOrder)
+    }
+
+    public func allIntentions() async throws -> [Intention] {
+        snapshot.intentions.values.sorted(by: Self.intentionOrder)
+    }
+
     func snapshotCaptures() -> [RawCapture] {
         snapshot.captures.values.sorted(by: Self.captureOrder)
     }

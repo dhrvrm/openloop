@@ -22,6 +22,8 @@ public protocol ThoughtRepository: Sendable {
     func suggestionEvents() async throws -> [SuggestionEvent]
     func save(transcriptionCorrection: TranscriptionCorrection) async throws
     func transcriptionCorrections() async throws -> [TranscriptionCorrection]
+    func allCaptures() async throws -> [RawCapture]
+    func allIntentions() async throws -> [Intention]
 }
 
 public enum ThoughtRepositoryCompatibilityError: Error, Equatable {
@@ -79,6 +81,10 @@ public extension ThoughtRepository {
     }
 
     func transcriptionCorrections() async throws -> [TranscriptionCorrection] { [] }
+
+    func allCaptures() async throws -> [RawCapture] { [] }
+
+    func allIntentions() async throws -> [Intention] { [] }
 }
 
 public protocol ClarificationProvider: Sendable {

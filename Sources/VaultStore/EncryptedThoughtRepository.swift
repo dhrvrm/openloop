@@ -212,6 +212,16 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         )
     }
 
+    public func allCaptures() async throws -> [RawCapture] {
+        try synchronize()
+        return snapshot.captures.values.sorted(by: Self.captureOrder)
+    }
+
+    public func allIntentions() async throws -> [Intention] {
+        try synchronize()
+        return snapshot.intentions.values.sorted(by: Self.intentionOrder)
+    }
+
     public func empty() throws -> Bool {
         try synchronize()
         return snapshot.captures.isEmpty
