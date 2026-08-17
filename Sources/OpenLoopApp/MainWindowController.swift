@@ -6,16 +6,21 @@ private struct MainView: View {
     @ObservedObject var model: AppModel
     @State var selection = 0
     @State private var interruptionItem: NowItem?
+    @FocusState private var recallFieldFocused: Bool
 
     var body: some View {
         TabView(selection: $selection) {
             nowView.tag(0).tabItem { Text("Now") }
             returnView.tag(1).tabItem { Text("Return") }
             laterView.tag(2).tabItem { Text("Later") }
+            recallView.tag(3).tabItem { Text("Recall") }
         }
         .padding(24)
         .frame(minWidth: 600, minHeight: 460)
         .task { await model.refresh() }
+        .onChange(of: selection) { _, tab in
+            if tab == 3 { recallFieldFocused = true }
+        }
         .sheet(isPresented: interruptionPresented) {
             if let item = interruptionItem {
                 InterruptionSheet(model: model, item: item) {
@@ -219,6 +224,77 @@ private struct MainView: View {
         }
     }
 
+    private var recallView: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Recall")
+                    .font(.largeTitle.weight(.semibold))
+                Text("Find stored evidence. Nothing here is generated.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 10) {
+                TextField("Search captures, decisions, return points, and corrections", text: $model.recallQuery)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.title3)
+                    .focused($recallFieldFocused)
+                    .onSubmit { Task { await model.searchRecall(model.recallQuery) } }
+                Button("Search") {
+                    Task { await model.searchRecall(model.recallQuery) }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.recallQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+
+            HStack {
+                Text("⌘⇧F opens Recall")
+                Spacer()
+                Text("Exact + local semantic evidence")
+            }
+            .font(.caption.monospaced())
+            .foregroundStyle(.tertiary)
+
+            if model.isRecalling {
+                ProgressView("Searching on this Mac…")
+                    .frame(maxWidth: .infinity, minHeight: 240)
+            } else if let error = model.recallError {
+                ContentUnavailableView(
+                    "Recall paused",
+                    systemImage: "magnifyingglass",
+                    description: Text(error)
+                )
+            } else if model.recallQuery.isEmpty {
+                ContentUnavailableView(
+                    "Search your evidence",
+                    systemImage: "text.magnifyingglass",
+                    description: Text("Try a name, exact phrase, decision, or restart action.")
+                )
+            } else if model.recallHits.isEmpty {
+                ContentUnavailableView(
+                    "No matching evidence",
+                    systemImage: "magnifyingglass",
+                    description: Text("OpenLoop will not invent an answer.")
+                )
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(model.recallHits) { hit in
+                            RecallEvidenceRow(hit: hit)
+                            Divider()
+                        }
+                    }
+                    .background(
+                        Color(nsColor: .controlBackgroundColor),
+                        in: RoundedRectangle(cornerRadius: 10)
+                    )
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear { recallFieldFocused = true }
+    }
+
     private func openLoopStateLabel(_ state: IntentionState) -> String {
         switch state {
         case .active: "Focusing"
@@ -226,6 +302,67 @@ private struct MainView: View {
         case .interrupted: "Return point saved"
         case .closed: "Finished"
         case .released: "Released"
+        }
+    }
+}
+
+private struct RecallEvidenceRow: View {
+    let hit: RecallHit
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(hit.title).font(.headline)
+                    Text(evidenceLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(hit.occurredAt, style: .relative)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            Text(hit.excerpt)
+                .lineLimit(4)
+                .textSelection(.enabled)
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(hit.contributions) { contribution in
+                    HStack(spacing: 8) {
+                        Text(contributionLabel(contribution.kind))
+                            .font(.caption)
+                            .frame(width: 105, alignment: .leading)
+                        GeometryReader { proxy in
+                            ZStack(alignment: .leading) {
+                                Rectangle().fill(Color.secondary.opacity(0.12))
+                                Rectangle().fill(Color.accentColor.opacity(0.7))
+                                    .frame(width: proxy.size.width * min(1, max(0, contribution.value)))
+                            }
+                        }
+                        .frame(height: 4)
+                    }
+                }
+            }
+            .accessibilityElement(children: .combine)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var evidenceLabel: String {
+        switch hit.evidenceID.kind {
+        case .capture: "CAPTURE"
+        case .intention: "INTENTION"
+        case .returnPacket: "RETURN PACKET"
+        case .correction: "VOICE CORRECTION"
+        }
+    }
+
+    private func contributionLabel(_ kind: RecallContributionKind) -> String {
+        switch kind {
+        case .exactPhrase: "Exact phrase"
+        case .tokenCoverage: "Shared words"
+        case .semanticSimilarity: "Local meaning"
         }
     }
 }

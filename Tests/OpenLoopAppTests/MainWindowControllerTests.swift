@@ -35,13 +35,21 @@ private struct WindowUnusedClarifier: ClarificationProvider {
     )
     let controller = MainWindowController(model: model)
 
-    controller.show(tab: 2)
+    controller.show(tab: 3)
     await Task.yield()
 
-    #expect(controller.selectedTabForTesting == 2)
+    #expect(controller.selectedTabForTesting == 3)
     #expect(controller.isVisibleForTesting)
     #expect(controller.windowNumberForTesting > 0)
     controller.closeForTesting()
+}
+
+@Test func recallUsesADistinctCommandShiftFBinding() {
+    #expect(GlobalHotKeyBinding.quickCapture.id == 1)
+    #expect(GlobalHotKeyBinding.voiceCapture.id == 2)
+    #expect(GlobalHotKeyBinding.recall.id == 3)
+    #expect(GlobalHotKeyBinding.recall.keyCode != GlobalHotKeyBinding.voiceCapture.keyCode)
+    #expect(GlobalHotKeyBinding.recall.modifiers == GlobalHotKeyBinding.quickCapture.modifiers)
 }
 
 @MainActor

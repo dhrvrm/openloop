@@ -6,6 +6,22 @@ enum GlobalHotKeyError: Error {
     case register(OSStatus)
 }
 
+struct GlobalHotKeyBinding: Equatable {
+    let keyCode: UInt32
+    let modifiers: UInt32
+    let id: UInt32
+
+    static let quickCapture = GlobalHotKeyBinding(
+        keyCode: UInt32(kVK_Space), modifiers: UInt32(cmdKey | shiftKey), id: 1
+    )
+    static let voiceCapture = GlobalHotKeyBinding(
+        keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(cmdKey | shiftKey), id: 2
+    )
+    static let recall = GlobalHotKeyBinding(
+        keyCode: UInt32(kVK_ANSI_F), modifiers: UInt32(cmdKey | shiftKey), id: 3
+    )
+}
+
 final class GlobalHotKey: @unchecked Sendable {
     private var eventHandler: EventHandlerRef?
     private var hotKey: EventHotKeyRef?

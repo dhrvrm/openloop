@@ -57,6 +57,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private var mainWindow: MainWindowController?
     private var hotKey: GlobalHotKey?
     private var voiceHotKey: GlobalHotKey?
+    private var recallHotKey: GlobalHotKey?
     private var voiceCapture: VoiceCaptureWindowController?
     private var model: AppModel?
     private var pauseMenuItem: NSMenuItem?
@@ -156,15 +157,28 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 model.commandError = "Quick Capture shortcut is unavailable. Use Capture in the menu."
             }
             do {
+                let binding = GlobalHotKeyBinding.voiceCapture
                 voiceHotKey = try GlobalHotKey(
-                    keyCode: UInt32(kVK_ANSI_R),
-                    modifiers: UInt32(cmdKey | shiftKey),
-                    id: 2
+                    keyCode: binding.keyCode,
+                    modifiers: binding.modifiers,
+                    id: binding.id
                 ) { [weak voiceCapture] _ in
                     voiceCapture?.toggle()
                 }
             } catch {
                 model.resurfacingError = "Voice shortcut is unavailable. Use Record & Transcribe in the menu."
+            }
+            do {
+                let binding = GlobalHotKeyBinding.recall
+                recallHotKey = try GlobalHotKey(
+                    keyCode: binding.keyCode,
+                    modifiers: binding.modifiers,
+                    id: binding.id
+                ) { [weak self] _ in
+                    self?.mainWindow?.show(tab: 3)
+                }
+            } catch {
+                model.recallError = "Recall shortcut is unavailable. Use Recall in the menu."
             }
         } catch {
             NSApp.presentError(error)
@@ -517,6 +531,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     @objc private func showNow() { presentWorkspace(tab: 0) }
     @objc private func showReturn() { mainWindow?.show(tab: 1) }
     @objc private func showLater() { mainWindow?.show(tab: 2) }
+    @objc private func showRecall() { mainWindow?.show(tab: 3) }
     @objc private func pauseOrContinue() {
         guard let model, let item = model.now, let focus = item.focus else { return }
         Task {
@@ -571,6 +586,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         pauseMenuItem = pauseItem
         menu.addItem(withTitle: "Return", action: #selector(showReturn), keyEquivalent: "")
         menu.addItem(withTitle: "Later", action: #selector(showLater), keyEquivalent: "")
+        let recallItem = menu.addItem(
+            withTitle: "Recall",
+            action: #selector(showRecall),
+            keyEquivalent: "f"
+        )
+        recallItem.keyEquivalentModifierMask = [.command, .shift]
         menu.addItem(.separator())
         let privateMode = NSMenuItem(
             title: "Private Mode — no background sensing",
