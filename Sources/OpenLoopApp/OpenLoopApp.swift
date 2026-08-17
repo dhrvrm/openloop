@@ -73,9 +73,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             let service = ProcessInfo.processInfo.environment["OPENLOOP_KEYCHAIN_SERVICE"]
                 ?? "dev.openloop.adhd.vault"
             let keyProvider = KeychainVaultKeyProvider(service: service)
+            let rootKeyData = try keyProvider.loadOrCreateKey()
             let repository = try EncryptedThoughtRepository(
                 directory: directory,
-                keyProvider: keyProvider
+                keyData: rootKeyData
             )
             let loop = ThoughtLoop(repository: repository, clarifier: RuleClarificationProvider())
             let contextProvider = FrontmostApplicationReferenceProvider()
@@ -86,11 +87,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 )
             )
             let resurfacingLoop = ResurfacingLoop(repository: repository)
+            let recallLoop = RecallLoop(
+                source: RecallDocumentSource(repository: repository),
+                indexStore: try EncryptedRecallIndexStore(
+                    directory: directory,
+                    rootKeyData: rootKeyData
+                ),
+                embeddingProvider: NaturalLanguageEmbeddingProvider()
+            )
             let model = AppModel(
                 loop: loop,
                 readModels: ThoughtReadModels(repository: repository),
                 focusLoop: focusLoop,
-                resurfacingLoop: resurfacingLoop
+                resurfacingLoop: resurfacingLoop,
+                recallSearch: recallLoop
             )
             _ = try await DevelopmentStoreMigrator().migrateIfNeeded(
                 from: directory,

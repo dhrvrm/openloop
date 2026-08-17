@@ -15,22 +15,60 @@ final class AppModel: ObservableObject {
     @Published var suggestions: [ContextualSuggestion] = []
     @Published var resurfacingRules: [ResurfacingRule] = []
     @Published var resurfacingError: String?
+    @Published var recallQuery = ""
+    @Published var recallHits: [RecallHit] = []
+    @Published var isRecalling = false
+    @Published var recallError: String?
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
     private let focusLoop: FocusLoop?
     private let resurfacingLoop: ResurfacingLoop?
+    private let recallSearch: (any RecallSearching)?
+    private var recallGeneration = 0
 
     init(
         loop: ThoughtLoop,
         readModels: ThoughtReadModels,
         focusLoop: FocusLoop? = nil,
-        resurfacingLoop: ResurfacingLoop? = nil
+        resurfacingLoop: ResurfacingLoop? = nil,
+        recallSearch: (any RecallSearching)? = nil
     ) {
         self.loop = loop
         self.readModels = readModels
         self.focusLoop = focusLoop
         self.resurfacingLoop = resurfacingLoop
+        self.recallSearch = recallSearch
+    }
+
+    func searchRecall(_ text: String) async {
+        let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        recallGeneration += 1
+        let generation = recallGeneration
+        recallQuery = query
+        recallError = nil
+        guard !query.isEmpty else {
+            recallHits = []
+            isRecalling = false
+            return
+        }
+        guard let recallSearch else {
+            recallHits = []
+            recallError = "Recall is unavailable in this build."
+            return
+        }
+        isRecalling = true
+        do {
+            let result = try await recallSearch.retrieve(RecallQuery(text: query))
+            guard generation == recallGeneration else { return }
+            recallHits = result.hits
+            isRecalling = false
+        } catch {
+            guard generation == recallGeneration else { return }
+            recallHits = []
+            isRecalling = false
+            recallError = "Exact search is still available after reopening Recall."
+        }
     }
 
     func refreshContext(_ application: ApplicationContext?, at date: Date = .now) async {

@@ -149,6 +149,22 @@ public struct RecallHit: Equatable, Identifiable, Sendable {
     public let occurredAt: Date
     public let score: Double
     public let contributions: [RecallContribution]
+
+    public init(
+        evidenceID: RecallEvidenceID,
+        title: String,
+        excerpt: String,
+        occurredAt: Date,
+        score: Double,
+        contributions: [RecallContribution]
+    ) {
+        self.evidenceID = evidenceID
+        self.title = title
+        self.excerpt = excerpt
+        self.occurredAt = occurredAt
+        self.score = score
+        self.contributions = contributions
+    }
 }
 
 public struct RecallResult: Equatable, Sendable {

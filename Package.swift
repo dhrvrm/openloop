@@ -33,6 +33,7 @@ let package = Package(
                 .linkedFramework("AppKit"),
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("Carbon"),
+                .linkedFramework("NaturalLanguage"),
                 .linkedFramework("Security"),
                 .linkedFramework("Speech"),
             ]
