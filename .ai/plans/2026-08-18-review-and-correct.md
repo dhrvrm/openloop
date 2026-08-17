@@ -186,33 +186,41 @@ git commit -m "feat: make Later a review surface"
 ### Task 5: Document and package Increment 8
 
 **Files:**
+- Modify: `Sources/VaultStore/VaultKeyProvider.swift`
+- Modify: `Sources/OpenLoopApp/OpenLoopApp.swift`
+- Modify: `Scripts/build-app.sh`
+- Test: `Tests/VaultStoreTests/EncryptedThoughtRepositoryTests.swift`
 - Modify: `docs/INCREMENTS.md`
 - Modify: `docs/DECISIONS.md`
 - Modify: `docs/DATA.md`
 - Modify: `Resources/Info.plist`
 - Modify: `.ai/plans/2026-08-18-review-and-correct.md`
 
-- [ ] **Step 1: Record the product boundary**
+- [x] **Step 1: Record the product boundary**
 
 Document Increment 8 as human clarification review, decision D-020 as append-only local correction evidence, and the correction record in the vault data inventory. State that review cannot silently rewrite an active or interrupted focus and that the original raw capture remains immutable.
 
-- [ ] **Step 2: Set the application version to 0.8.0**
+- [x] **Step 1a: Stop repeated Keychain prompts in changing local builds**
+
+Add a focused provider test proving the first local build migrates the existing Keychain key into a macOS-protected owner-only file and later builds load that same key without calling the fallback. Mark only `Scripts/build-app.sh` bundles as local development builds; non-local/Developer ID builds retain the Keychain provider. Existing encrypted vault data must remain readable and no key bytes may be logged.
+
+- [x] **Step 2: Set the application version to 0.8.0**
 
 Update `CFBundleShortVersionString` from `0.7.0` to `0.8.0` without changing the bundle identifier.
 
-- [ ] **Step 3: Run one focused acceptance pass**
+- [x] **Step 3: Run one focused acceptance pass**
 
-Run: `Scripts/test.sh --filter 'humanReview|clarificationCorrection|reviewQueue|AppModelReview|laterWindow'`
+Run: `Scripts/test.sh --filter 'humanReview|clarificationCorrection|reviewQueue|AppModelReview|laterWindow|localDevelopmentKey|audioTapCallbackBridge'`
 
 Expected: all Increment 8 focused tests pass with zero failures.
 
-- [ ] **Step 4: Build, sign, and launch the application bundle**
+- [x] **Step 4: Build and sign the application bundle without launching it**
 
-Run: `Scripts/build-app.sh`, terminate only the currently running Increment 7 bundle if present, then `open '.artifacts/app/OpenLoop ADHD.app'`.
+Run: `Scripts/build-app.sh`. Do not call `open` or otherwise activate the app; the user explicitly asked that builds remain closed.
 
-Expected: the release arm64 bundle builds, ad-hoc signature verification succeeds, and the 0.8.0 GUI launches.
+Expected: the release arm64 bundle builds, ad-hoc signature verification succeeds, and no OpenLoop process is launched.
 
-- [ ] **Step 5: Mark the plan complete and commit the increment**
+- [x] **Step 5: Mark the plan complete and commit the increment**
 
 ```bash
 git add .ai/plans/2026-08-18-review-and-correct.md docs Resources/Info.plist

@@ -17,6 +17,14 @@ its retention period so later processing remains auditable.
 A proposed classification, desired outcome, and smallest next action. The raw
 capture remains available, and user corrections become new revisions.
 
+### Clarification correction
+
+An append-only local review event containing the capture identity, review time,
+previous proposal when present, and corrected proposal. The current proposal is
+updated for fast display, while correction history preserves how the meaning
+changed. Corrections are encrypted with the rest of the vault and never alter
+the immutable raw capture.
+
 ### Focus state
 
 The active intention, start time, elapsed-time state, relevant local references,
@@ -91,7 +99,9 @@ Compression quality is measured through:
 ## Local encryption
 
 1. Generate a random vault root key on the Mac.
-2. Store the root key in macOS Keychain.
+2. Store the root key in macOS Keychain for provisioned builds. Rapidly changing
+   local ad-hoc builds migrate the same key once to an owner-only, file-protected
+   Application Support file so unstable code-hash ACLs do not block launch.
 3. Derive separate database, audio, export, and diagnostic keys using HKDF.
 4. Encrypt bulk objects using authenticated encryption such as AES-GCM or
    ChaCha20-Poly1305.

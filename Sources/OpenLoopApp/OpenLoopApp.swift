@@ -98,7 +98,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             let directory = dataDirectory()
             let service = ProcessInfo.processInfo.environment["OPENLOOP_KEYCHAIN_SERVICE"]
                 ?? "dev.openloop.adhd.vault"
-            let keyProvider = KeychainVaultKeyProvider(service: service)
+            let keychainProvider = KeychainVaultKeyProvider(service: service)
+            let keyProvider: any VaultKeyProvider
+            if Bundle.main.object(forInfoDictionaryKey: "OpenLoopLocalDevelopmentBuild") as? Bool
+                == true {
+                keyProvider = MigratingLocalVaultKeyProvider(
+                    fileURL: directory.appendingPathComponent("root-key.local"),
+                    fallback: keychainProvider
+                )
+            } else {
+                keyProvider = keychainProvider
+            }
             let rootKeyData = try keyProvider.loadOrCreateKey()
             let repository = try EncryptedThoughtRepository(
                 directory: directory,
@@ -230,7 +240,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
 
     private func runDiagnosticIfRequested(
         directory: URL,
-        keyProvider: KeychainVaultKeyProvider,
+        keyProvider: any VaultKeyProvider,
         repository: EncryptedThoughtRepository,
         loop: ThoughtLoop,
         model: AppModel
@@ -547,7 +557,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
 
     private func runResurfacingDiagnostic(
         directory: URL,
-        keyProvider: KeychainVaultKeyProvider,
+        keyProvider: any VaultKeyProvider,
         repository: EncryptedThoughtRepository,
         loop: ThoughtLoop
     ) async throws {

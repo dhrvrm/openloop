@@ -85,16 +85,24 @@ instant capture, restart durability, and migration from the development JSON
 file. SQLite remains the intended adapter when exact search, FTS5, or dataset
 size makes indexed queries observable product behavior.
 
-## D-012 — Ad-hoc builds use the standard macOS login Keychain
+## D-012 — Local ad-hoc builds migrate away from unstable Keychain ACLs
 
 Status: accepted for trusted testing.
 
 Data Protection Keychain access requires signed application-identifier and
 access-group entitlements that macOS does not grant to the current ad-hoc build.
-The Increment 1 vault key therefore remains a generic-password item in the local
-login Keychain. A Developer ID/provisioned build may move it to the Data
-Protection Keychain later; the application does not claim device-only key
-semantics in the current distribution.
+The original root key therefore lived in the login Keychain, whose legacy ACL
+binds an ad-hoc application to its exact changing code hash. Every rebuilt app
+then triggered password prompts before the workspace could appear.
+
+Bundles produced by the local build script now migrate that same key once into
+Application Support as an owner-only `0600` file written with complete file
+protection. Existing encrypted data remains readable and subsequent local
+rebuilds do not re-trigger Keychain approval. The provider rejects symbolic,
+non-regular, or incorrectly sized key files and never logs key bytes. A
+Developer ID/provisioned bundle is not marked as a local development build and
+continues to use Keychain; the local artifact does not claim hardware- or
+Keychain-backed root-key protection.
 
 ## D-013 — Focus lifecycle pairs are persisted atomically
 
@@ -214,3 +222,21 @@ Return, but ambient evidence cannot create a task, capture, memory, notification
 or obligation. System audio remains excluded until measured recovery benefit,
 battery cost, false-draft behavior, review UX, and a separate explicit consent
 contract justify its additional complexity.
+
+## D-020 — Human clarification review is append-only evidence
+
+Status: accepted.
+
+Rule-based clarification remains a proposal, not an irreversible obligation.
+Later exposes the original immutable capture beside its current disposition and
+lets the user choose one action, memory, later thought, release, or an explicitly
+unclear state. An action requires both a desired outcome and one visible next
+step; human-reviewed proposals carry full confidence because they record the
+user's decision rather than a model estimate.
+
+Each accepted review appends a correction containing the prior proposal, the
+new proposal, and review time. The vault writes that correction, current
+proposal, and compatible intention state atomically. Reclassifying an unopened
+action releases its intention without deleting either capture or history.
+Active, interrupted, closed, and released intentions cannot be revised through
+this flow, preventing a background review from rewriting work already in motion.

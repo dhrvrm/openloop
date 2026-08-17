@@ -12,6 +12,9 @@ if [[ -e "$app_bundle" ]]; then
 fi
 /bin/mkdir -p "$contents_dir/MacOS" "$contents_dir/Resources"
 /usr/bin/ditto "$openloop_root/Resources/Info.plist" "$contents_dir/Info.plist"
+/usr/libexec/PlistBuddy \
+    -c "Add :OpenLoopLocalDevelopmentBuild bool true" \
+    "$contents_dir/Info.plist"
 /usr/bin/ditto \
     "$openloop_root/.build/arm64-apple-macosx/release/OpenLoopADHD" \
     "$contents_dir/MacOS/OpenLoopADHD"

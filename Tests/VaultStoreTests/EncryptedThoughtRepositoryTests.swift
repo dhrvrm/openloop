@@ -8,6 +8,16 @@ import Testing
 
 private let fixedKey = Data(repeating: 0x42, count: 32)
 
+private struct FixedTestKeyProvider: VaultKeyProvider {
+    let key: Data
+    func loadOrCreateKey() throws -> Data { key }
+}
+
+private struct FailingTestKeyProvider: VaultKeyProvider {
+    struct Failure: Error {}
+    func loadOrCreateKey() throws -> Data { throw Failure() }
+}
+
 private struct SchemaOneVaultSnapshot: Codable {
     var captures: [UUID: RawCapture]
     var proposals: [UUID: ClarificationProposal]
@@ -35,6 +45,26 @@ private func temporaryDirectory() -> URL {
 
     #expect(first.count == 32)
     #expect(first == second)
+}
+
+@Test func localDevelopmentKeyMigratesOnceWithoutFutureFallback() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let keyFileURL = directory.appendingPathComponent("root-key.local")
+    let first = MigratingLocalVaultKeyProvider(
+        fileURL: keyFileURL,
+        fallback: FixedTestKeyProvider(key: fixedKey)
+    )
+
+    #expect(try first.loadOrCreateKey() == fixedKey)
+    let attributes = try FileManager.default.attributesOfItem(atPath: keyFileURL.path)
+    #expect(attributes[.posixPermissions] as? NSNumber == NSNumber(value: 0o600))
+
+    let reopened = MigratingLocalVaultKeyProvider(
+        fileURL: keyFileURL,
+        fallback: FailingTestKeyProvider()
+    )
+    #expect(try reopened.loadOrCreateKey() == fixedKey)
 }
 
 @Test func encryptedThoughtsSurviveRestartWithoutPlaintext() async throws {

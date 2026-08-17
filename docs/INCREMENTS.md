@@ -139,6 +139,25 @@ Independent systems:
 Exit gate: ambient mode demonstrably improves recovered context without harming
 battery budgets or flooding the user with false tasks.
 
+## Increment 8 — Review and Correct
+
+Behavior: the user can inspect what OpenLoop understood, calmly correct its
+disposition or smallest next action, and release a capture without losing the
+original evidence.
+
+Independent systems:
+
+- unified clarification-review projection;
+- validated human correction command;
+- append-only correction history;
+- atomic corrected proposal and intention persistence;
+- inline Later review experience.
+
+Exit gate: an unclarified or automatically classified capture can become an
+action, memory, later thought, release, or remain unclear in one inline flow;
+relaunch preserves the decision and its correction evidence. Active and
+interrupted focus cannot be silently rewritten.
+
 ## Sequence rule
 
 Experiments may happen early, but an increment cannot become a dependency until
