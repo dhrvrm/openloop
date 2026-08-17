@@ -15,9 +15,10 @@
 **Files:**
 - Modify: `Sources/ADHDCore/Clarification.swift`
 - Modify: `Sources/ADHDCore/ThoughtLoop.swift`
+- Modify: `Sources/ADHDCore/Ports.swift`
 - Test: `Tests/ADHDCoreTests/ThoughtLoopTests.swift`
 
-- [ ] **Step 1: Write the failing correction transition test**
+- [x] **Step 1: Write the failing correction transition test**
 
 Add a test that captures an automatically proposed action, reviews it as memory, and asserts that the existing open intention becomes released while the corrected proposal is memory and the correction retains the previous action proposal.
 
@@ -41,15 +42,15 @@ Add a test that captures an automatically proposed action, reviews it as memory,
 }
 ```
 
-- [ ] **Step 2: Run the focused test and confirm RED**
+- [x] **Step 2: Run the focused test and confirm RED**
 
 Run: `Scripts/test.sh --filter humanReviewReclassifiesAnOpenActionWithoutLosingHistory`
 
 Expected: compilation fails because `ThoughtLoop.review` and the correction result do not exist.
 
-- [ ] **Step 3: Add the correction values and review command**
+- [x] **Step 3: Add the correction values and review command**
 
-Define `ClarificationCorrection` with a stable ID, capture ID, review date, optional previous proposal, and corrected proposal. Add `ThoughtLoop.review(...)` that validates a human-confidence proposal, creates or revises an open action intention, releases an open intention for non-action dispositions, rejects changes to active/interrupted/terminal intentions, and asks the repository to persist the coupled result.
+Define `ClarificationCorrection` with a stable ID, capture ID, review date, optional previous proposal, and corrected proposal. Add compatible repository defaults for capture lookup and correction application. Add `ThoughtLoop.review(...)` that validates a human-confidence proposal, creates or revises an open action intention, releases an open intention for non-action dispositions, rejects changes to active/interrupted/terminal intentions, and asks the repository to persist the coupled result.
 
 ```swift
 public struct ClarificationCorrection: Codable, Equatable, Identifiable, Sendable {
@@ -61,16 +62,16 @@ public struct ClarificationCorrection: Codable, Equatable, Identifiable, Sendabl
 }
 ```
 
-- [ ] **Step 4: Run the focused test and confirm GREEN**
+- [x] **Step 4: Run the focused test and confirm GREEN**
 
 Run: `Scripts/test.sh --filter humanReviewReclassifiesAnOpenActionWithoutLosingHistory`
 
 Expected: one test passes.
 
-- [ ] **Step 5: Commit the core transition**
+- [x] **Step 5: Commit the core transition**
 
 ```bash
-git add Sources/ADHDCore/Clarification.swift Sources/ADHDCore/ThoughtLoop.swift Tests/ADHDCoreTests/ThoughtLoopTests.swift
+git add Sources/ADHDCore/Clarification.swift Sources/ADHDCore/ThoughtLoop.swift Sources/ADHDCore/Ports.swift Tests/ADHDCoreTests/ThoughtLoopTests.swift
 git commit -m "feat: add human clarification review"
 ```
 
@@ -96,7 +97,7 @@ Expected: compilation fails because repository correction APIs and snapshot stor
 
 - [ ] **Step 3: Add repository APIs and atomic adapters**
 
-Extend `ThoughtRepository` with capture lookup, correction application, and correction history. Give protocol defaults so fixture repositories remain source compatible. Concrete JSON and encrypted stores perform the proposal, intention, and correction write in one locked snapshot update; their custom decoders default a missing corrections field to an empty dictionary.
+Override the compatible repository seam in the concrete JSON and encrypted stores so proposal, intention, and correction are written in one locked snapshot update; their custom decoders default a missing corrections field to an empty dictionary.
 
 ```swift
 func apply(

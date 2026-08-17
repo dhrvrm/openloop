@@ -2,6 +2,8 @@ import Foundation
 
 public enum ThoughtLoopError: Error, Equatable {
     case intentionNotFound(UUID)
+    case captureNotFound(UUID)
+    case intentionCannotBeReviewed(UUID, IntentionState)
 }
 
 public struct CaptureResult: Sendable {
@@ -48,6 +50,67 @@ public struct ThoughtLoop: Sendable {
             if (try? await clarify(capture)) != nil { recovered += 1 }
         }
         return recovered
+    }
+
+    public func review(
+        captureID: UUID,
+        disposition: Disposition,
+        desiredOutcome: String?,
+        nextAction: String?,
+        at date: Date
+    ) async throws -> ClarificationCorrection {
+        guard let capture = try await repository.capture(id: captureID) else {
+            throw ThoughtLoopError.captureNotFound(captureID)
+        }
+        let previousProposal = try await repository.proposal(captureID: captureID)
+        let proposal = try ClarificationProposal(
+            captureID: captureID,
+            disposition: disposition,
+            desiredOutcome: desiredOutcome,
+            nextAction: nextAction,
+            confidence: 1
+        )
+        let currentIntention = try await repository.intention(id: captureID)
+        let reviewedIntention: Intention?
+
+        if var currentIntention {
+            guard currentIntention.state == .open else {
+                throw ThoughtLoopError.intentionCannotBeReviewed(
+                    currentIntention.id,
+                    currentIntention.state
+                )
+            }
+            if disposition == .action,
+               let outcome = proposal.desiredOutcome,
+               let action = proposal.nextAction {
+                reviewedIntention = Intention(
+                    id: currentIntention.id,
+                    sourceCaptureID: currentIntention.sourceCaptureID,
+                    desiredOutcome: outcome,
+                    nextAction: action,
+                    state: .open,
+                    createdAt: currentIntention.createdAt,
+                    returnPacket: nil
+                )
+            } else {
+                try currentIntention.transition(to: .released)
+                reviewedIntention = currentIntention
+            }
+        } else {
+            reviewedIntention = makeIntention(from: proposal, capture: capture)
+        }
+
+        let correction = ClarificationCorrection(
+            captureID: captureID,
+            reviewedAt: date,
+            previousProposal: previousProposal,
+            proposal: proposal
+        )
+        try await repository.apply(
+            clarificationCorrection: correction,
+            intention: reviewedIntention
+        )
+        return correction
     }
 
     private func makeIntention(

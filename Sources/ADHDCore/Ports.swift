@@ -2,8 +2,14 @@ import Foundation
 
 public protocol ThoughtRepository: Sendable {
     func save(capture: RawCapture) async throws
+    func capture(id: UUID) async throws -> RawCapture?
     func save(proposal: ClarificationProposal) async throws
     func save(proposal: ClarificationProposal, intention: Intention?) async throws
+    func apply(
+        clarificationCorrection: ClarificationCorrection,
+        intention: Intention?
+    ) async throws
+    func clarificationCorrections(captureID: UUID?) async throws -> [ClarificationCorrection]
     func save(intention: Intention) async throws
     func unclarifiedCaptures() async throws -> [RawCapture]
     func capturesRequiringClarification() async throws -> [RawCapture]
@@ -46,9 +52,25 @@ public enum ThoughtRepositoryFocusError: Error, Equatable {
 }
 
 public extension ThoughtRepository {
+    func capture(id: UUID) async throws -> RawCapture? {
+        try await allCaptures().first { $0.id == id }
+    }
+
     func save(proposal: ClarificationProposal, intention: Intention?) async throws {
         try await save(proposal: proposal)
         if let intention { try await save(intention: intention) }
+    }
+
+    func apply(
+        clarificationCorrection: ClarificationCorrection,
+        intention: Intention?
+    ) async throws {
+        try await save(proposal: clarificationCorrection.proposal, intention: intention)
+    }
+
+    func clarificationCorrections(captureID: UUID? = nil) async throws
+        -> [ClarificationCorrection] {
+        []
     }
 
     func unclarifiedCaptures() async throws -> [RawCapture] { [] }

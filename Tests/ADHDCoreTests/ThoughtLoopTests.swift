@@ -10,6 +10,7 @@ private actor MemoryRepository: ThoughtRepository {
     func save(capture: RawCapture) async throws { captures[capture.id] = capture }
     func save(proposal: ClarificationProposal) async throws { proposals[proposal.captureID] = proposal }
     func save(intention: Intention) async throws { intentions[intention.id] = intention }
+    func capture(id: UUID) async throws -> RawCapture? { captures[id] }
     func proposal(captureID: UUID) async throws -> ClarificationProposal? { proposals[captureID] }
     func captures(disposition: Disposition) async throws -> [RawCapture] {
         captures.values.filter { proposals[$0.id]?.disposition == disposition }
@@ -30,6 +31,24 @@ private actor MemoryRepository: ThoughtRepository {
     }
 
     func captureCount() -> Int { captures.count }
+}
+
+@Test func humanReviewReclassifiesAnOpenActionWithoutLosingHistory() async throws {
+    let repository = MemoryRepository()
+    let loop = ThoughtLoop(repository: repository, clarifier: FixedClarifier())
+    let result = try await loop.capture(text: "Riya prefers email", at: .now)
+
+    let review = try await loop.review(
+        captureID: result.capture.id,
+        disposition: .memory,
+        desiredOutcome: nil,
+        nextAction: nil,
+        at: Date(timeIntervalSince1970: 50)
+    )
+
+    #expect(review.proposal.disposition == .memory)
+    #expect(review.previousProposal?.disposition == .action)
+    #expect(try await repository.intention(id: result.capture.id)?.state == .released)
 }
 
 private struct FixedClarifier: ClarificationProvider {

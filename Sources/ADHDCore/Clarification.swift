@@ -46,3 +46,25 @@ public struct ClarificationProposal: Codable, Equatable, Sendable {
         self.confidence = confidence
     }
 }
+
+public struct ClarificationCorrection: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let captureID: UUID
+    public let reviewedAt: Date
+    public let previousProposal: ClarificationProposal?
+    public let proposal: ClarificationProposal
+
+    public init(
+        id: UUID = UUID(),
+        captureID: UUID,
+        reviewedAt: Date,
+        previousProposal: ClarificationProposal?,
+        proposal: ClarificationProposal
+    ) {
+        self.id = id
+        self.captureID = captureID
+        self.reviewedAt = reviewedAt
+        self.previousProposal = previousProposal
+        self.proposal = proposal
+    }
+}
