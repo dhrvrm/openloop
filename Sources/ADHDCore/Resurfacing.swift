@@ -255,6 +255,35 @@ public struct ResurfacingLoop: Sendable {
         return suggestions
     }
 
+    public func rules() async throws -> [ResurfacingRule] {
+        try await repository.resurfacingRules()
+    }
+
+    @discardableResult
+    public func link(
+        intentionID: UUID,
+        to application: ApplicationContext,
+        at date: Date
+    ) async throws -> ResurfacingRule {
+        guard let intention = try await repository.intention(id: intentionID) else {
+            throw ResurfacingLoopError.intentionNotFound
+        }
+        guard intention.state == .open else {
+            throw ResurfacingLoopError.intentionNotOpen
+        }
+        let rule = ResurfacingRule(
+            intentionID: intentionID,
+            application: application,
+            createdAt: date
+        )
+        try await repository.save(resurfacingRule: rule)
+        return rule
+    }
+
+    public func unlink(intentionID: UUID) async throws {
+        try await repository.deleteResurfacingRule(intentionID: intentionID)
+    }
+
     @discardableResult
     public func recordFeedback(
         _ feedback: ResurfacingFeedback,
@@ -265,7 +294,9 @@ public struct ResurfacingLoop: Sendable {
         guard let intention = try await repository.intention(id: intentionID) else {
             throw ResurfacingLoopError.intentionNotFound
         }
-        guard intention.state == .open else {
+        let validState = intention.state == .open
+            || (feedback == .started && intention.state == .active)
+        guard validState else {
             throw ResurfacingLoopError.intentionNotOpen
         }
         guard try await repository.resurfacingRules().contains(where: {

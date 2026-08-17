@@ -13,6 +13,7 @@ final class AppModel: ObservableObject {
     @Published var openLoops: [OpenLoopItem] = []
     @Published var currentApplication: ApplicationContext?
     @Published var suggestions: [ContextualSuggestion] = []
+    @Published var resurfacingRules: [ResurfacingRule] = []
     @Published var resurfacingError: String?
 
     private let loop: ThoughtLoop
@@ -40,12 +41,115 @@ final class AppModel: ObservableObject {
         resurfacingError = nil
         guard let application else { return }
         do {
+            resurfacingRules = try await resurfacingLoop.rules()
             suggestions = try await resurfacingLoop.suggest(
                 for: ContextEvent(observedAt: date, application: application),
                 at: date
             )
         } catch {
             resurfacingError = "Suggestions are quiet for now. Your stored work is safe."
+        }
+    }
+
+    func isLinked(_ intentionID: UUID, to application: ApplicationContext) -> Bool {
+        resurfacingRules.contains {
+            $0.intentionID == intentionID
+                && $0.application.bundleIdentifier == application.bundleIdentifier
+        }
+    }
+
+    @discardableResult
+    func linkSuggestion(
+        _ intentionID: UUID,
+        to application: ApplicationContext,
+        at date: Date = .now
+    ) async -> Bool {
+        guard let resurfacingLoop else { return false }
+        resurfacingError = nil
+        do {
+            _ = try await resurfacingLoop.link(
+                intentionID: intentionID,
+                to: application,
+                at: date
+            )
+            currentApplication = application
+            resurfacingRules = try await resurfacingLoop.rules()
+            suggestions = try await resurfacingLoop.suggest(
+                for: ContextEvent(observedAt: date, application: application),
+                at: date
+            )
+            return true
+        } catch {
+            resurfacingError = "That context preference could not be saved. Your open loop is safe."
+            return false
+        }
+    }
+
+    @discardableResult
+    func unlinkSuggestion(_ intentionID: UUID) async -> Bool {
+        guard let resurfacingLoop else { return false }
+        resurfacingError = nil
+        do {
+            try await resurfacingLoop.unlink(intentionID: intentionID)
+            resurfacingRules = try await resurfacingLoop.rules()
+            suggestions.removeAll { $0.intentionID == intentionID }
+            return true
+        } catch {
+            resurfacingError = "That context preference could not be saved. Your open loop is safe."
+            return false
+        }
+    }
+
+    @discardableResult
+    func startSuggestion(_ intentionID: UUID, at date: Date = .now) async -> Bool {
+        guard await startFocus(intentionID),
+              let application = currentApplication,
+              let resurfacingLoop else {
+            return false
+        }
+        do {
+            _ = try await resurfacingLoop.recordFeedback(
+                .started,
+                intentionID: intentionID,
+                application: application,
+                at: date
+            )
+            suggestions.removeAll { $0.intentionID == intentionID }
+            return true
+        } catch {
+            resurfacingError = "Focus started. Its suggestion feedback could not be saved."
+            suggestions.removeAll { $0.intentionID == intentionID }
+            return true
+        }
+    }
+
+    func deferSuggestion(_ intentionID: UUID, at date: Date = .now) async -> Bool {
+        await applyFeedback(.later, intentionID: intentionID, at: date)
+    }
+
+    func silenceSuggestion(_ intentionID: UUID, at date: Date = .now) async -> Bool {
+        await applyFeedback(.never, intentionID: intentionID, at: date)
+    }
+
+    private func applyFeedback(
+        _ feedback: ResurfacingFeedback,
+        intentionID: UUID,
+        at date: Date
+    ) async -> Bool {
+        guard let application = currentApplication, let resurfacingLoop else { return false }
+        resurfacingError = nil
+        do {
+            _ = try await resurfacingLoop.recordFeedback(
+                feedback,
+                intentionID: intentionID,
+                application: application,
+                at: date
+            )
+            suggestions.removeAll { $0.intentionID == intentionID }
+            return true
+        } catch {
+            resurfacingError = "That suggestion choice could not be saved. Your open loop is safe."
+            return false
         }
     }
 

@@ -32,51 +32,86 @@ private struct MainView: View {
         )
     }
 
-    @ViewBuilder private var nowView: some View {
-        if let item = model.now {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("CURRENT INTENTION")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(item.desiredOutcome)
-                        .font(.title2)
-                        .fontWeight(.semibold)
+    private var nowView: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 20) {
+                if let item = model.now {
+                    currentIntention(item)
+                } else if model.suggestions.isEmpty {
+                    ContentUnavailableView(
+                        model.returns.isEmpty ? "Nothing active" : "Your place is saved",
+                        systemImage: model.returns.isEmpty
+                            ? "circle.dashed"
+                            : "arrow.uturn.backward.circle",
+                        description: Text(
+                            model.returns.isEmpty
+                                ? "Capture an action when it arrives."
+                                : "Open Return when you are ready to continue."
+                        )
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 330)
                 }
-                Divider()
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("NEXT ACTION")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(item.nextAction)
-                        .font(.title3)
-                        .textSelection(.enabled)
-                }
-                if item.focus != nil {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        Text(ElapsedCue.text(seconds: item.elapsed(at: context.date)))
-                            .font(.callout.monospacedDigit())
+
+                if model.suggestions.isEmpty == false {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("RELEVANT HERE")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("A linked open loop, shown without a notification.")
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                     }
+                    ForEach(model.suggestions) { suggestion in
+                        ContextSuggestionView(model: model, suggestion: suggestion)
+                    }
+                    Text("1 explicit app match required · 4-hour cooldown · up to 2")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityLabel(
+                            "Suggestion algorithm: one explicit application match required, "
+                                + "four hour cooldown, up to two suggestions"
+                        )
                 }
-                Spacer()
-                if let error = model.commandError {
+
+                if let error = model.commandError ?? model.resurfacingError {
                     Text(error).font(.callout).foregroundStyle(.secondary)
                 }
-                focusControls(item)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            ContentUnavailableView(
-                model.returns.isEmpty ? "Nothing active" : "Your place is saved",
-                systemImage: model.returns.isEmpty ? "circle.dashed" : "arrow.uturn.backward.circle",
-                description: Text(
-                    model.returns.isEmpty
-                        ? "Capture an action when it arrives."
-                        : "Open Return when you are ready to continue."
-                )
-            )
         }
+    }
+
+    private func currentIntention(_ item: NowItem) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text("CURRENT INTENTION")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(item.desiredOutcome)
+                    .font(.title2)
+                    .fontWeight(.semibold)
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                Text("NEXT ACTION")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(item.nextAction)
+                    .font(.title3)
+                    .textSelection(.enabled)
+            }
+            if item.focus != nil {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    Text(ElapsedCue.text(seconds: item.elapsed(at: context.date)))
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            focusControls(item)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder private func focusControls(_ item: NowItem) -> some View {
@@ -140,6 +175,27 @@ private struct MainView: View {
                                     Text(openLoopStateLabel(item.state))
                                         .font(.caption)
                                         .foregroundStyle(.tertiary)
+                                    if item.state == .open,
+                                       let application = model.currentApplication {
+                                        Button(
+                                            model.isLinked(item.intentionID, to: application)
+                                                ? "Stop suggesting here"
+                                                : "Suggest in \(application.applicationName)"
+                                        ) {
+                                            Task {
+                                                if model.isLinked(item.intentionID, to: application) {
+                                                    await model.unlinkSuggestion(item.intentionID)
+                                                } else {
+                                                    await model.linkSuggestion(
+                                                        item.intentionID,
+                                                        to: application
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        .font(.callout)
+                                        .buttonStyle(.link)
+                                    }
                                 }
                                 .padding(.vertical, 6)
                             }
@@ -171,6 +227,83 @@ private struct MainView: View {
         case .closed: "Finished"
         case .released: "Released"
         }
+    }
+}
+
+private struct ContextSuggestionView: View {
+    @ObservedObject var model: AppModel
+    let suggestion: ContextualSuggestion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(suggestion.desiredOutcome)
+                    .font(.headline)
+                Text(suggestion.nextAction)
+                    .font(.title3)
+                    .textSelection(.enabled)
+            }
+            VStack(alignment: .leading, spacing: 9) {
+                Text("WHY NOW · \(suggestion.why.uppercased())")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ForEach(suggestion.contributions) { contribution in
+                    RelevanceContributionBar(contribution: contribution)
+                }
+            }
+            HStack(spacing: 10) {
+                Button("Start") {
+                    Task { await model.startSuggestion(suggestion.intentionID) }
+                }
+                .buttonStyle(.borderedProminent)
+                Button("Later") {
+                    Task { await model.deferSuggestion(suggestion.intentionID) }
+                }
+                Button("Never suggest") {
+                    Task { await model.silenceSuggestion(suggestion.intentionID) }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            Color.accentColor.opacity(0.08),
+            in: RoundedRectangle(cornerRadius: 12)
+        )
+    }
+}
+
+private struct RelevanceContributionBar: View {
+    let contribution: RelevanceContribution
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(contribution.label)
+                    .font(.callout)
+                Spacer()
+                Text(contribution.explanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.secondary.opacity(0.14))
+                    Capsule()
+                        .fill(Color.accentColor)
+                        .frame(
+                            width: proxy.size.width * min(
+                                1,
+                                contribution.value / RelevanceScorer.threshold
+                            )
+                        )
+                }
+            }
+            .frame(height: 7)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(contribution.label)
+        .accessibilityValue(contribution.explanation)
     }
 }
 

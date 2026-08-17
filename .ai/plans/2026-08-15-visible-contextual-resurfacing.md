@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make OpenLoop launch as an immediately visible macOS workspace, expose every stored open loop, and resurface at most two relevant intentions from explicit local application context with a deterministic, inspectable explanation and one-action suppression.
+**Goal:** Make OpenLoop launch as an immediately visible macOS workspace, expose every stored open loop, provide one-key-chord on-device voice capture, and resurface at most two relevant intentions from explicit local application context with a deterministic, inspectable explanation and one-action suppression.
 
 **Architecture:** `ADHDCore` owns context values, explicit intention-context rules, suggestion history, deterministic relevance scoring, cooldown policy, and the resurfacing orchestration loop. `ThoughtRepository` gains backward-compatible context-rule and suggestion-history persistence, with atomic encrypted production writes where a suggestion and its history must stay aligned. `OpenLoopApp` remains a native SwiftUI/AppKit application: it becomes a regular Dock app, opens the main window on launch/reopen, observes only an on-demand frontmost-app snapshot, and renders a calm suggestion panel plus a native signal graph. The five product surfaces remain Capture, Now, Return, Later, and Recall; Increment 3 adds resurfacing to Now and stored open loops to Later rather than inventing another screen.
 
@@ -17,6 +17,9 @@
 - Do not require the user to discover a menu-bar icon before seeing their data. Dock reopen must restore the workspace.
 - Show all non-closed, non-released intentions in Later's open-loop library; do not duplicate the current or interrupted item there without visibly identifying its state.
 - Suggestions are local, explainable, and triggered by an on-demand context snapshot when the workspace appears. Do not add background monitoring, notifications, accounts, network access, telemetry, Accessibility, or Automation permissions.
+- `Command-Shift-R` starts voice recording immediately and pressing it again stops and saves the transcript through the ordinary capture path. Speech recognition must require on-device support; never fall back to a network recognizer.
+- Recording must always have a visible red/status indicator and live transcript, stop cleanly at the system's one-minute recognition limit, and discard empty audio without creating a capture.
+- Request microphone and speech-recognition permission only on the first explicit recording action. Denial must produce recovery guidance without losing existing work.
 - A suggestion requires an explicit user-authored application link. No title/content surveillance and no inferred semantic profile.
 - Use a deterministic score with named contributions. An application match contributes `1.0`; the eligibility threshold is `1.0`. Sort ties by oldest intention creation date then UUID and return at most two suggestions.
 - Rate-limit per intention: a shown suggestion enters a four-hour cooldown. `Later` suppresses it for one day. `Never` suppresses it permanently. Each control is one action and survives relaunch.
@@ -36,6 +39,8 @@
 - `Sources/OpenLoopApp/AppModel.swift`: library, context-linking, suggestion refresh, and feedback commands.
 - `Sources/OpenLoopApp/MainWindowController.swift`: visible workspace, suggestion panel, contribution graph, and open-loop library.
 - `Sources/OpenLoopApp/OpenLoopApp.swift`: foreground lifecycle, launch/reopen behavior, production wiring, and packaged diagnostics.
+- `Sources/OpenLoopApp/VoiceTranscriptionController.swift`: permission, on-device recognition, audio lifecycle, and testable state transitions.
+- `Sources/OpenLoopApp/VoiceCaptureWindowController.swift`: always-visible recording/transcript panel.
 - `Resources/Info.plist`: regular-app policy and Increment 3 version.
 - `Scripts/verify-increment-3.sh`: full Increment 3 exit gate.
 - `README.md`, `docs/DECISIONS.md`: user behavior and architecture decision.
@@ -206,33 +211,71 @@ Commit: `feat: observe foreground context only on demand`.
 - Modify: `Sources/OpenLoopApp/MainWindowController.swift`
 - Modify: `Tests/OpenLoopAppTests/AppModelResurfacingTests.swift`
 
-- [ ] **Step 1: Write failing app-model tests**
+- [x] **Step 1: Write failing app-model tests**
 
 Verify context refresh publishes suggestions; linking an open loop to the current application persists a rule; unlinking removes it; Start begins focus and clears the suggestion; Later and Never apply feedback and immediately remove it; failures keep stored work intact and use neutral error text.
 
-- [ ] **Step 2: Add context controls to the open-loop library**
+- [x] **Step 2: Add context controls to the open-loop library**
 
 Each eligible Later row offers `Suggest in <Application>` or `Stop suggesting here` based on the current on-demand context. Make the action explicit; never auto-link from capture text.
 
-- [ ] **Step 3: Add the calm Now suggestion panel**
+- [x] **Step 3: Add the calm Now suggestion panel**
 
 Place up to two suggestions beneath the current intention or in Now's empty state. Show outcome, exact next action, `Why now: linked to <Application>`, and Start/Later/Never controls. Do not show scores as performance metrics.
 
-- [ ] **Step 4: Render an accessible explanation graph**
+- [x] **Step 4: Render an accessible explanation graph**
 
 For each named contribution, render a labeled native horizontal bar whose width is proportional to contribution/threshold and whose accessibility value states its cause. Display the algorithm summary (`1 explicit match required`, `4-hour cooldown`, `up to 2`) as quiet explanatory text rather than a dashboard.
 
-- [ ] **Step 5: Refine native visual hierarchy**
+- [x] **Step 5: Refine native visual hierarchy**
 
 Use warm system-neutral surfaces, flat section containers, restrained accent color, generous spacing, and native typography. Avoid gradients, heavy shadows, nested cards, tiny text, and decorative analytics. Keep the window usable at 660×540 and accessible under Dynamic Type.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run `Scripts/test.sh --filter OpenLoopAppTests && Scripts/test.sh && swift build -c release`.
 
 Commit: `feat: explain contextual suggestions in the workspace`.
 
-### Task 8: Prove packaged Increment 3 behavior and hand off a running GUI
+### Task 8: Add one-shortcut on-device recording and transcription
+
+**Files:**
+- Create: `Sources/OpenLoopApp/VoiceTranscriptionController.swift`
+- Create: `Sources/OpenLoopApp/VoiceCaptureWindowController.swift`
+- Modify: `Sources/OpenLoopApp/GlobalHotKey.swift`
+- Modify: `Sources/OpenLoopApp/OpenLoopApp.swift`
+- Modify: `Sources/OpenLoopApp/AppModel.swift`
+- Modify: `Package.swift`
+- Modify: `Resources/Info.plist`
+- Create: `Tests/OpenLoopAppTests/VoiceTranscriptionControllerTests.swift`
+
+- [ ] **Step 1: Write failing controller tests with fake audio/recognition ports**
+
+Verify one toggle moves idle → requesting permission → recording, partial results replace the visible transcript, a second toggle stops and saves one normalized transcript through the existing capture model, empty audio saves nothing, errors return to idle with useful copy, and permission denial preserves all stored work.
+
+- [ ] **Step 2: Generalize global hot-key registration safely**
+
+Allow an explicit key code, modifiers, and unique ID while keeping the existing `Command-Shift-Space` capture registration unchanged. Register `Command-Shift-R` as the sole voice toggle and add a diagnostic that proves both hot keys register concurrently.
+
+- [ ] **Step 3: Implement on-device live speech recognition**
+
+Use `AVAudioEngine` plus `SFSpeechAudioBufferRecognitionRequest`, set partial results and dictation hint, require `supportsOnDeviceRecognition` and `requiresOnDeviceRecognition = true`, cap sessions at one minute, and tear down taps/tasks on every exit path. Do not retain or write raw audio.
+
+- [ ] **Step 4: Build the visible voice panel and capture handoff**
+
+Show a small floating panel immediately with permission/recording status, a red recording indicator, elapsed time, live editable transcript, `Command-Shift-R to stop and save`, and explicit Cancel/Stop & Save controls. Successful stop calls `AppModel.submitCapture` so encryption and clarification remain unchanged.
+
+- [ ] **Step 5: Add privacy metadata and package linkage**
+
+Link AVFoundation and Speech, add `NSMicrophoneUsageDescription` and `NSSpeechRecognitionUsageDescription`, and state in both strings that audio is transcribed on device and not retained.
+
+- [ ] **Step 6: Run tests and commit**
+
+Run `Scripts/test.sh --filter 'VoiceTranscriptionControllerTests|OpenLoopAppTests' && Scripts/test.sh && swift build -c release`.
+
+Commit: `feat: capture on-device speech with one shortcut`.
+
+### Task 9: Prove packaged Increment 3 behavior and hand off a running GUI
 
 **Files:**
 - Modify: `Sources/OpenLoopApp/OpenLoopApp.swift`
@@ -247,7 +290,7 @@ Commit: `feat: explain contextual suggestions in the workspace`.
 
 - [ ] **Step 2: Add the full Increment 3 gate**
 
-`Scripts/verify-increment-3.sh` runs all tests and a release build; packages and signs the app; runs window, resurfacing, focus-recovery, capture-latency, and hot-key diagnostics in temporary isolated vaults/Keychain services; scans all data for distinctive resurfacing and focus plaintext; mounts the DMG; and verifies the app plus Applications link.
+`Scripts/verify-increment-3.sh` runs all tests and a release build; packages and signs the app; runs window, resurfacing, focus-recovery, capture-latency, dual-hot-key, and voice-controller diagnostics in temporary isolated vaults/Keychain services; verifies the packaged privacy usage strings and Speech/AVFoundation linkage; scans all data for distinctive resurfacing, transcript, and focus plaintext; mounts the DMG; and verifies the app plus Applications link.
 
 - [ ] **Step 3: Perform visual GUI verification**
 
@@ -273,4 +316,4 @@ Resolve the exact old OpenLoop process path, terminate only that stale app insta
 
 Commit: `test: verify visible contextual resurfacing`.
 
-Expected final evidence: all tests and release build pass; packaged window diagnostic proves the GUI is visible; only explicitly linked intentions resurface; every suggestion explains its application match; cooldown/Later/Never survive relaunch; vault scans reveal no sensitive plaintext; Increment 1/2 latency, hot-key, focus, and Return gates remain green; inspected screenshots show all stored open loops and readable controls; the signed DMG mounts; and the current Increment 3 app is running with an on-screen workspace.
+Expected final evidence: all tests and release build pass; packaged window diagnostic proves the GUI is visible; `Command-Shift-R` toggles a visible on-device recording flow and saves through encrypted capture; only explicitly linked intentions resurface; every suggestion explains its application match; cooldown/Later/Never survive relaunch; vault scans reveal no sensitive plaintext; Increment 1/2 latency, hot-key, focus, and Return gates remain green; inspected screenshots show all stored open loops and readable controls; the signed DMG mounts; and the current Increment 3 app is running with an on-screen workspace.
