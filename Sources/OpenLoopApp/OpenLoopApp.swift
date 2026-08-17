@@ -34,7 +34,9 @@ private final class DiagnosticVoiceTranscriber: VoiceTranscribing {
     func requestAuthorization() async -> VoiceAuthorization { .authorized }
 
     func start(
+        configuration: SpeechProviderConfiguration,
         onTranscript: @escaping @MainActor @Sendable (String, Bool) -> Void,
+        onAudioLevel: @escaping @MainActor @Sendable (Double) -> Void,
         onFailure: @escaping @MainActor @Sendable (String) -> Void
     ) throws {
         transcriptHandler = onTranscript

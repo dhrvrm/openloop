@@ -8,23 +8,30 @@ private final class FakeVoiceTranscriber: VoiceTranscribing {
     var startCount = 0
     var stopCount = 0
     var cancelCount = 0
+    var configurations: [SpeechProviderConfiguration] = []
     private var update: (@MainActor @Sendable (String, Bool) -> Void)?
+    private var audioLevel: (@MainActor @Sendable (Double) -> Void)?
     private var failure: (@MainActor @Sendable (String) -> Void)?
 
     func requestAuthorization() async -> VoiceAuthorization { authorization }
 
     func start(
+        configuration: SpeechProviderConfiguration,
         onTranscript: @escaping @MainActor @Sendable (String, Bool) -> Void,
+        onAudioLevel: @escaping @MainActor @Sendable (Double) -> Void,
         onFailure: @escaping @MainActor @Sendable (String) -> Void
     ) throws {
         startCount += 1
+        configurations.append(configuration)
         update = onTranscript
+        audioLevel = onAudioLevel
         failure = onFailure
     }
 
     func stop() { stopCount += 1 }
     func cancel() { cancelCount += 1 }
     func emit(_ text: String, final: Bool = false) { update?(text, final) }
+    func emitLevel(_ value: Double) { audioLevel?(value) }
     func fail(_ message: String) { failure?(message) }
 }
 
@@ -169,4 +176,45 @@ private final class VoiceSaveProbe {
     #expect(saveCount == 0)
     #expect(controller.state == .idle)
     #expect(controller.transcript.isEmpty)
+}
+
+@MainActor
+@Test func providerReceivesPrivateVocabularyAndActivityIsBoundedAndReset() async {
+    let transcriber = FakeVoiceTranscriber()
+    var vocabularyRequests = 0
+    let controller = VoiceTranscriptionController(
+        transcriber: transcriber,
+        vocabulary: {
+            vocabularyRequests += 1
+            return ["Kuvam", "Open Xcode"]
+        }
+    ) { _ in true }
+
+    await controller.toggle()
+
+    #expect(vocabularyRequests == 1)
+    #expect(transcriber.configurations == [SpeechProviderConfiguration(
+        contextualPhrases: ["Kuvam", "Open Xcode"],
+        requiresOnDeviceRecognition: true
+    )])
+    transcriber.emitLevel(2)
+    #expect(controller.audioLevel == 1)
+    #expect(controller.hasDetectedSpeech)
+    transcriber.emitLevel(-1)
+    #expect(controller.audioLevel == 0)
+    #expect(controller.hasDetectedSpeech == false)
+    controller.cancel()
+    #expect(controller.audioLevel == 0)
+}
+
+@Test func audioLevelNormalizationAndVoiceActivityAreDeterministic() {
+    #expect(AudioLevelNormalizer.normalized(rms: 0) == 0)
+    #expect(AudioLevelNormalizer.normalized(rms: .nan) == 0)
+    #expect(AudioLevelNormalizer.normalized(rms: 0.001) == 0)
+    #expect(AudioLevelNormalizer.normalized(rms: 1) == 1)
+    #expect(AudioLevelNormalizer.normalized(rms: 0.01) > 0.3)
+    #expect(AudioLevelNormalizer.normalized(rms: 0.01) < 0.34)
+    let detector = VoiceActivityDetector()
+    #expect(detector.detects(level: 0.119) == false)
+    #expect(detector.detects(level: 0.12))
 }

@@ -8,12 +8,39 @@ enum VoiceAuthorization: Equatable {
     case denied(String)
 }
 
+struct SpeechProviderConfiguration: Equatable, Sendable {
+    let contextualPhrases: [String]
+    let requiresOnDeviceRecognition: Bool
+}
+
+enum AudioLevelNormalizer {
+    static func normalized(rms: Double) -> Double {
+        guard rms.isFinite, rms > 0 else { return 0 }
+        let decibels = 20 * log10(rms)
+        return min(1, max(0, (decibels + 60) / 60))
+    }
+}
+
+struct VoiceActivityDetector: Sendable {
+    let threshold: Double
+
+    init(threshold: Double = 0.12) {
+        self.threshold = threshold
+    }
+
+    func detects(level: Double) -> Bool {
+        level >= threshold
+    }
+}
+
 @MainActor
 protocol VoiceTranscribing: AnyObject {
     func requestAuthorization() async -> VoiceAuthorization
     func start(
-        onTranscript: @escaping @MainActor (String, Bool) -> Void,
-        onFailure: @escaping @MainActor (String) -> Void
+        configuration: SpeechProviderConfiguration,
+        onTranscript: @escaping @MainActor @Sendable (String, Bool) -> Void,
+        onAudioLevel: @escaping @MainActor @Sendable (Double) -> Void,
+        onFailure: @escaping @MainActor @Sendable (String) -> Void
     ) throws
     func stop()
     func cancel()
@@ -33,19 +60,25 @@ final class VoiceTranscriptionController: ObservableObject {
     @Published var transcript = ""
     @Published private(set) var statusMessage = ""
     @Published private(set) var startedAt: Date?
+    @Published private(set) var audioLevel = 0.0
+    @Published private(set) var hasDetectedSpeech = false
 
     private let transcriber: any VoiceTranscribing
     private let save: @MainActor (String) async -> Bool
     private let maximumDuration: Duration
+    private let vocabulary: @MainActor @Sendable () async -> [String]
+    private let activityDetector = VoiceActivityDetector()
     private var durationTask: Task<Void, Never>?
 
     init(
         transcriber: any VoiceTranscribing,
         maximumDuration: Duration = .seconds(60),
+        vocabulary: @escaping @MainActor @Sendable () async -> [String] = { [] },
         save: @escaping @MainActor (String) async -> Bool
     ) {
         self.transcriber = transcriber
         self.maximumDuration = maximumDuration
+        self.vocabulary = vocabulary
         self.save = save
     }
 
@@ -70,6 +103,7 @@ final class VoiceTranscriptionController: ObservableObject {
         durationTask?.cancel()
         durationTask = nil
         transcriber.cancel()
+        resetActivity()
         transcript = ""
         statusMessage = ""
         startedAt = nil
@@ -82,11 +116,17 @@ final class VoiceTranscriptionController: ObservableObject {
         state = .requestingPermission
         switch await transcriber.requestAuthorization() {
         case .denied(let message):
+            resetActivity()
             statusMessage = message
             state = .failed
         case .authorized:
             do {
+                let phrases = Array((await vocabulary()).prefix(100))
                 try transcriber.start(
+                    configuration: SpeechProviderConfiguration(
+                        contextualPhrases: phrases,
+                        requiresOnDeviceRecognition: true
+                    ),
                     onTranscript: { [weak self] text, isFinal in
                         guard let self else { return }
                         self.transcript = text
@@ -95,6 +135,12 @@ final class VoiceTranscriptionController: ObservableObject {
                                 await self?.stopAndSave()
                             }
                         }
+                    },
+                    onAudioLevel: { [weak self] value in
+                        guard let self else { return }
+                        let bounded = min(1, max(0, value.isFinite ? value : 0))
+                        self.audioLevel = bounded
+                        self.hasDetectedSpeech = self.activityDetector.detects(level: bounded)
                     },
                     onFailure: { [weak self] message in
                         self?.handleFailure(message)
@@ -106,6 +152,7 @@ final class VoiceTranscriptionController: ObservableObject {
                 startDurationLimit()
             } catch {
                 transcriber.cancel()
+                resetActivity()
                 statusMessage = "Recording could not start. Check the selected microphone."
                 state = .failed
             }
@@ -117,6 +164,7 @@ final class VoiceTranscriptionController: ObservableObject {
         durationTask?.cancel()
         durationTask = nil
         transcriber.stop()
+        resetActivity()
         startedAt = nil
         await saveTranscript()
     }
@@ -146,6 +194,7 @@ final class VoiceTranscriptionController: ObservableObject {
         durationTask?.cancel()
         durationTask = nil
         transcriber.cancel()
+        resetActivity()
         startedAt = nil
         statusMessage = message
         state = .failed
@@ -158,6 +207,11 @@ final class VoiceTranscriptionController: ObservableObject {
             guard Task.isCancelled == false else { return }
             await self?.stopAndSave()
         }
+    }
+
+    private func resetActivity() {
+        audioLevel = 0
+        hasDetectedSpeech = false
     }
 
     private var normalizedTranscript: String {
@@ -202,10 +256,13 @@ final class OnDeviceSpeechTranscriber: VoiceTranscribing {
     }
 
     func start(
-        onTranscript: @escaping @MainActor (String, Bool) -> Void,
-        onFailure: @escaping @MainActor (String) -> Void
+        configuration: SpeechProviderConfiguration,
+        onTranscript: @escaping @MainActor @Sendable (String, Bool) -> Void,
+        onAudioLevel: @escaping @MainActor @Sendable (Double) -> Void,
+        onFailure: @escaping @MainActor @Sendable (String) -> Void
     ) throws {
-        guard let recognizer, recognizer.supportsOnDeviceRecognition else {
+        guard configuration.requiresOnDeviceRecognition,
+              let recognizer, recognizer.supportsOnDeviceRecognition else {
             throw VoiceTranscriberError.onDeviceRecognitionUnavailable
         }
         teardown(cancelled: true)
@@ -213,6 +270,7 @@ final class OnDeviceSpeechTranscriber: VoiceTranscribing {
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
         request.requiresOnDeviceRecognition = true
+        request.contextualStrings = Array(configuration.contextualPhrases.prefix(100))
         recognitionRequest = request
         failureHandler = onFailure
         running = true
@@ -231,6 +289,20 @@ final class OnDeviceSpeechTranscriber: VoiceTranscribing {
         let input = audioEngine.inputNode
         let format = input.outputFormat(forBus: 0)
         input.installTap(onBus: 0, bufferSize: 1_024, format: format) { [weak request] buffer, _ in
+            let level: Double
+            if let channel = buffer.floatChannelData?.pointee, buffer.frameLength > 0 {
+                var sum = 0.0
+                for index in 0..<Int(buffer.frameLength) {
+                    let sample = Double(channel[index])
+                    sum += sample * sample
+                }
+                level = AudioLevelNormalizer.normalized(
+                    rms: sqrt(sum / Double(buffer.frameLength))
+                )
+            } else {
+                level = 0
+            }
+            Task { @MainActor in onAudioLevel(level) }
             request?.append(buffer)
         }
         tapInstalled = true
