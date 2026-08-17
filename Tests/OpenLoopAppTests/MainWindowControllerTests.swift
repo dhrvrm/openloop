@@ -14,6 +14,21 @@ private actor EmptyWindowRepository: ThoughtRepository {
     func openIntentions() async throws -> [Intention] { [] }
 }
 
+private actor ReviewWindowRepository: ThoughtRepository {
+    private var storedCaptures: [UUID: RawCapture] = [:]
+
+    func save(capture: RawCapture) async throws { storedCaptures[capture.id] = capture }
+    func capture(id: UUID) async throws -> RawCapture? { storedCaptures[id] }
+    func save(proposal: ClarificationProposal) async throws {}
+    func save(intention: Intention) async throws {}
+    func proposal(captureID: UUID) async throws -> ClarificationProposal? { nil }
+    func captures(disposition: Disposition) async throws -> [RawCapture] { [] }
+    func unclarifiedCaptures() async throws -> [RawCapture] { Array(storedCaptures.values) }
+    func intention(id: UUID) async throws -> Intention? { nil }
+    func openIntentions() async throws -> [Intention] { [] }
+    func allCaptures() async throws -> [RawCapture] { Array(storedCaptures.values) }
+}
+
 private struct WindowUnusedClarifier: ClarificationProvider {
     func propose(for capture: RawCapture) async throws -> ClarificationProposal {
         try ClarificationProposal(
@@ -67,6 +82,28 @@ private actor EnabledWindowContextTrail: ContextTrailProviding {
     #expect(controller.isVisibleForTesting)
     #expect(controller.windowNumberForTesting > 0)
     #expect(await memoryCompiler.calls == 1)
+    controller.closeForTesting()
+}
+
+@MainActor
+@Test func laterWindowShowsCaptureReviewSurface() async throws {
+    let repository = ReviewWindowRepository()
+    let capture = try RawCapture(createdAt: .now, text: "Decide whether to revisit onboarding")
+    try await repository.save(capture: capture)
+    let model = AppModel(
+        loop: ThoughtLoop(repository: repository, clarifier: WindowUnusedClarifier()),
+        readModels: ThoughtReadModels(repository: repository)
+    )
+    _ = await model.refresh()
+    let controller = MainWindowController(model: model)
+
+    controller.show(tab: 2)
+    await Task.yield()
+    await Task.yield()
+
+    #expect(controller.selectedTabForTesting == 2)
+    #expect(controller.isVisibleForTesting)
+    #expect(model.reviewItems.map(\.id) == [capture.id])
     controller.closeForTesting()
 }
 

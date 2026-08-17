@@ -162,21 +162,21 @@ git commit -m "feat: expose capture review queue"
 - Modify: `Sources/OpenLoopApp/MainWindowController.swift`
 - Modify: `Tests/OpenLoopAppTests/MainWindowControllerTests.swift`
 
-- [ ] **Step 1: Add a focused real-window smoke test**
+- [x] **Step 1: Add a focused real-window smoke test**
 
 Create a fixture with one unclear capture, show tab 2 in a real window, and assert the Later surface is visible and the model exposes the review item. This guards integration without brittle pixel assertions.
 
-- [ ] **Step 2: Implement the existing-screen redesign**
+- [x] **Step 2: Implement the existing-screen redesign**
 
 Replace the generic List with a spacious Later header and two quiet groups: “Needs a decision” and “Held safely.” Render capture text as primary evidence, use plain-language labels instead of raw enum values, and add an inline `ClarificationReviewRow` editor. The editor uses a compact menu for disposition, conditionally reveals outcome/action fields for actions, validates before save, supplies Cancel/Save controls, and never opens a modal.
 
-- [ ] **Step 3: Run the focused GUI test**
+- [x] **Step 3: Run the focused GUI test**
 
 Run: `Scripts/test.sh --filter 'laterWindow|AppModelReview'`
 
 Expected: the real-window smoke and AppModel review tests pass.
 
-- [ ] **Step 4: Commit the Later experience**
+- [x] **Step 4: Commit the Later experience**
 
 ```bash
 git add Sources/OpenLoopApp/MainWindowController.swift Tests/OpenLoopAppTests/MainWindowControllerTests.swift

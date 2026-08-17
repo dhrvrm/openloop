@@ -254,66 +254,77 @@ private struct MainView: View {
     }
 
     private var laterView: some View {
-        Group {
-            if model.openLoops.isEmpty && model.later.isEmpty {
+        let needsDecision = model.reviewItems.filter(\.needsDecision)
+        let heldSafely = model.reviewItems.filter { $0.needsDecision == false }
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: 26) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Later")
+                        .font(.largeTitle.weight(.semibold))
+                    Text("A quiet place to decide what a capture means. Nothing here is overdue.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: 520, alignment: .leading)
+                }
+
+                if let error = model.reviewError {
+                    Label(error, systemImage: "info.circle")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
+                if model.reviewItems.isEmpty {
                 ContentUnavailableView(
                     "Nothing stored yet",
                     systemImage: "tray",
-                    description: Text("Captured actions and notes will stay visible here.")
+                        description: Text("Captures you want to decide on or hold safely will appear here.")
                 )
-            } else {
-                List {
-                    if model.openLoops.isEmpty == false {
-                        Section("Open loops") {
-                            ForEach(model.openLoops) { item in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(item.desiredOutcome)
-                                        .font(.headline)
-                                    Text(item.nextAction)
-                                        .foregroundStyle(.secondary)
-                                    Text(openLoopStateLabel(item.state))
-                                        .font(.caption)
-                                        .foregroundStyle(.tertiary)
-                                    if item.state == .open,
-                                       let application = model.currentApplication {
-                                        Button(
-                                            model.isLinked(item.intentionID, to: application)
-                                                ? "Stop suggesting here"
-                                                : "Suggest in \(application.applicationName)"
-                                        ) {
-                                            Task {
-                                                if model.isLinked(item.intentionID, to: application) {
-                                                    await model.unlinkSuggestion(item.intentionID)
-                                                } else {
-                                                    await model.linkSuggestion(
-                                                        item.intentionID,
-                                                        to: application
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        .font(.callout)
-                                        .buttonStyle(.link)
-                                    }
-                                }
-                                .padding(.vertical, 6)
-                            }
-                        }
+                    .frame(maxWidth: .infinity, minHeight: 300)
+                } else {
+                    if needsDecision.isEmpty == false {
+                        reviewSection(
+                            title: "Needs a decision",
+                            detail: "OpenLoop left these unforced. Choose only when the meaning is clear.",
+                            items: needsDecision
+                        )
                     }
-                    if model.later.isEmpty == false {
-                        Section("Notes and captures") {
-                            ForEach(model.later) { item in
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(item.text)
-                                    Text(item.disposition.rawValue.capitalized)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(.vertical, 5)
-                            }
-                        }
+                    if heldSafely.isEmpty == false {
+                        reviewSection(
+                            title: "Held safely",
+                            detail: "Actions, memories, and later thoughts stay editable until work begins.",
+                            items: heldSafely
+                        )
                     }
                 }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 16)
+        }
+    }
+
+    private func reviewSection(
+        title: String,
+        detail: String,
+        items: [ClarificationReviewItem]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, 10)
+
+            Divider()
+            ForEach(items) { item in
+                ClarificationReviewRow(
+                    model: model,
+                    item: item,
+                    openLoop: model.openLoops.first { $0.sourceCaptureID == item.id }
+                )
+                Divider()
             }
         }
     }
@@ -464,6 +475,193 @@ private struct MainView: View {
         case .active: "Focusing"
         case .open: "Ready"
         case .interrupted: "Return point saved"
+        case .closed: "Finished"
+        case .released: "Released"
+        }
+    }
+}
+
+private struct ClarificationReviewRow: View {
+    @ObservedObject var model: AppModel
+    let item: ClarificationReviewItem
+    let openLoop: OpenLoopItem?
+
+    @State private var isEditing = false
+    @State private var disposition: Disposition
+    @State private var desiredOutcome: String
+    @State private var nextAction: String
+
+    init(model: AppModel, item: ClarificationReviewItem, openLoop: OpenLoopItem?) {
+        self.model = model
+        self.item = item
+        self.openLoop = openLoop
+        _disposition = State(initialValue: item.disposition)
+        _desiredOutcome = State(initialValue: item.desiredOutcome ?? "")
+        _nextAction = State(initialValue: item.nextAction ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(item.text)
+                    .font(.title3.weight(.medium))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 12)
+                Text(dispositionLabel(item.disposition))
+                    .font(.caption.monospaced().weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.secondary.opacity(0.09))
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+            }
+
+            if item.disposition == .action,
+               let outcome = item.desiredOutcome,
+               let action = item.nextAction {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(outcome)
+                        .font(.callout.weight(.medium))
+                    Label(action, systemImage: "arrow.forward")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if isEditing {
+                editor
+            } else {
+                controls
+            }
+        }
+        .padding(.vertical, 14)
+    }
+
+    private var editor: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Keep this as")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Picker("Keep this as", selection: $disposition) {
+                    ForEach(reviewDispositions, id: \.self) { value in
+                        Text(dispositionLabel(value)).tag(value)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                Spacer()
+            }
+
+            if disposition == .action {
+                TextField("What would done look like?", text: $desiredOutcome)
+                    .textFieldStyle(.roundedBorder)
+                TextField("What is the smallest visible next action?", text: $nextAction)
+                    .textFieldStyle(.roundedBorder)
+            } else if disposition == .release {
+                Text("Release removes this from Later. Its original encrypted capture remains available to Recall.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 10) {
+                Button("Cancel") {
+                    resetDraft()
+                    isEditing = false
+                }
+                Button("Save review") {
+                    Task {
+                        let saved = await model.applyClarificationReview(
+                            captureID: item.id,
+                            disposition: disposition,
+                            desiredOutcome: disposition == .action ? desiredOutcome : nil,
+                            nextAction: disposition == .action ? nextAction : nil
+                        )
+                        if saved { isEditing = false }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.isSavingReview)
+            }
+        }
+        .padding(12)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    @ViewBuilder private var controls: some View {
+        HStack(spacing: 12) {
+            if let openLoop, openLoop.state == .open {
+                Button("Start focus") {
+                    Task { await model.startFocus(openLoop.intentionID) }
+                }
+                .buttonStyle(.borderedProminent)
+                if let application = model.currentApplication {
+                    Button(
+                        model.isLinked(openLoop.intentionID, to: application)
+                            ? "Stop suggesting here"
+                            : "Suggest in \(application.applicationName)"
+                    ) {
+                        Task {
+                            if model.isLinked(openLoop.intentionID, to: application) {
+                                await model.unlinkSuggestion(openLoop.intentionID)
+                            } else {
+                                await model.linkSuggestion(openLoop.intentionID, to: application)
+                            }
+                        }
+                    }
+                    .buttonStyle(.link)
+                }
+            }
+
+            if item.isEditable {
+                if item.needsDecision {
+                    Button("Decide") {
+                        resetDraft()
+                        isEditing = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Button("Review") {
+                        resetDraft()
+                        isEditing = true
+                    }
+                    .buttonStyle(.bordered)
+                }
+            } else if let state = item.intentionState {
+                Text(intentionStateLabel(state))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var reviewDispositions: [Disposition] {
+        [.action, .memory, .later, .release, .unclear]
+    }
+
+    private func resetDraft() {
+        disposition = item.disposition
+        desiredOutcome = item.desiredOutcome ?? ""
+        nextAction = item.nextAction ?? ""
+    }
+
+    private func dispositionLabel(_ value: Disposition) -> String {
+        switch value {
+        case .action: "One action"
+        case .memory: "Remember"
+        case .later: "Consider later"
+        case .release: "Release"
+        case .unclear: "Not sure yet"
+        }
+    }
+
+    private func intentionStateLabel(_ state: IntentionState) -> String {
+        switch state {
+        case .active: "In focus — review is paused"
+        case .interrupted: "Return point saved — review is paused"
+        case .open: "Ready"
         case .closed: "Finished"
         case .released: "Released"
         }
