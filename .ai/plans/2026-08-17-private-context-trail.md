@@ -75,13 +75,13 @@ public protocol ContextTrailProviding: Sendable {
 
 ### Task 4: Connect explicit runtime observation without background policy leaks
 
-- [ ] Add `ApplicationContextObserver` that converts `NSWorkspace.didActivateApplicationNotification` into `ApplicationContext`, ignores OpenLoop itself/incomplete identities, and calls one async handler. It stores nothing and owns no enablement decision.
-- [ ] Inject `ContextTrailProviding` into `AppModel`; publish `contextTrailSettings`, `contextEpisodes`, `isUpdatingContextTrail`, and `contextTrailError`.
-- [ ] Add `setContextTrailEnabled(_:)`, `observeApplication(_:)`, and `refreshContextTrail()`; preserve prior episodes on read failure and keep capture/focus/recall errors independent.
-- [ ] Refresh the trail after focus start/pause/continue/interruption/finish, and record the known current application immediately after explicit enablement or focus start.
-- [ ] Wire the observer only after the model and menu exist; retain/remove the notification token with app lifetime.
-- [ ] Test no call before notification, identity filtering, model opt-in/opt-out, failure containment, and observation without a focus producing no episode.
-- [ ] Run `Scripts/test.sh --filter 'AppModelContextTrailTests|ApplicationContextObserverTests'` and commit `feat: observe application context only during opted-in focus`.
+- [x] Add `ApplicationContextObserver` that converts `NSWorkspace.didActivateApplicationNotification` into `ApplicationContext`, ignores OpenLoop itself/incomplete identities, and calls one async handler. It stores nothing and owns no enablement decision.
+- [x] Inject `ContextTrailProviding` into `AppModel`; publish `contextTrailSettings`, `contextEpisodes`, `isUpdatingContextTrail`, and `contextTrailError`.
+- [x] Add `setContextTrailEnabled(_:)`, `observeApplication(_:)`, and `refreshContextTrail()`; preserve prior episodes on read failure and keep capture/focus/recall errors independent.
+- [x] Refresh the trail after focus start/pause/continue/interruption/finish, and record the known current application immediately after explicit enablement or focus start.
+- [x] Wire the observer only after the model and menu exist; retain/remove the notification token with app lifetime.
+- [x] Test no call before notification, identity filtering, model opt-in/opt-out, failure containment, and observation without a focus producing no episode.
+- [x] Run `Scripts/test.sh --filter 'AppModelContextTrailTests|ApplicationContextObserverTests'` and commit `feat: observe application context only during opted-in focus`.
 
 ### Task 5: Make context and privacy legible in the existing GUI
 

@@ -85,6 +85,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private var model: AppModel?
     private var pauseMenuItem: NSMenuItem?
     private var contextProvider: FrontmostApplicationReferenceProvider?
+    private var applicationContextObserver: ApplicationContextObserver?
     private var workspaceLifecycle: WorkspaceLifecycle?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -135,7 +136,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 focusLoop: focusLoop,
                 resurfacingLoop: resurfacingLoop,
                 recallSearch: recallLoop,
-                workingMemory: workingMemory
+                workingMemory: workingMemory,
+                contextTrail: contextTrailLoop
             )
             _ = try await DevelopmentStoreMigrator().migrateIfNeeded(
                 from: directory,
@@ -175,6 +177,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             self.voiceCapture = voiceCapture
             self.model = model
             self.contextProvider = contextProvider
+            let applicationContextObserver = ApplicationContextObserver { [weak model] application in
+                Task { await model?.observeApplication(application) }
+            }
+            applicationContextObserver.start()
+            self.applicationContextObserver = applicationContextObserver
             let workspaceLifecycle = WorkspaceLifecycle { [weak self] tab in
                 self?.presentWorkspace(tab: tab)
             }
@@ -182,6 +189,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             configureMenu(quickCapture: quickCapture, mainWindow: mainWindow)
             await contextProvider.snapshot()
             await model.refreshContext(await contextProvider.currentContext())
+            await model.refreshContextTrail()
             mainWindow.show(tab: 0)
             do {
                 hotKey = try GlobalHotKey { [weak quickCapture] startedAt in
@@ -646,6 +654,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         }
     }
     @objc private func quit() { NSApp.terminate(nil) }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        applicationContextObserver?.stop()
+    }
 
     private func presentWorkspace(tab: Int) {
         Task { [weak self] in

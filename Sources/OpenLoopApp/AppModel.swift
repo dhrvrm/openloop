@@ -22,6 +22,10 @@ final class AppModel: ObservableObject {
     @Published var memoryRecords: [MemoryRecord] = []
     @Published var isCompilingMemory = false
     @Published var memoryError: String?
+    @Published var contextTrailSettings = ContextTrailSettings()
+    @Published var contextEpisodes: [ContextEpisode] = []
+    @Published var isUpdatingContextTrail = false
+    @Published var contextTrailError: String?
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -29,6 +33,7 @@ final class AppModel: ObservableObject {
     private let resurfacingLoop: ResurfacingLoop?
     private let recallSearch: (any RecallSearching)?
     private let workingMemory: (any WorkingMemoryCompiling)?
+    private let contextTrail: (any ContextTrailProviding)?
     private var recallGeneration = 0
 
     init(
@@ -37,7 +42,8 @@ final class AppModel: ObservableObject {
         focusLoop: FocusLoop? = nil,
         resurfacingLoop: ResurfacingLoop? = nil,
         recallSearch: (any RecallSearching)? = nil,
-        workingMemory: (any WorkingMemoryCompiling)? = nil
+        workingMemory: (any WorkingMemoryCompiling)? = nil,
+        contextTrail: (any ContextTrailProviding)? = nil
     ) {
         self.loop = loop
         self.readModels = readModels
@@ -45,6 +51,49 @@ final class AppModel: ObservableObject {
         self.resurfacingLoop = resurfacingLoop
         self.recallSearch = recallSearch
         self.workingMemory = workingMemory
+        self.contextTrail = contextTrail
+    }
+
+    func refreshContextTrail(at date: Date = .now) async {
+        guard let contextTrail else { return }
+        do {
+            let settings = try await contextTrail.settings()
+            let episodes = try await contextTrail.currentEpisodes(at: date)
+            contextTrailSettings = settings
+            contextEpisodes = episodes
+            contextTrailError = nil
+        } catch {
+            contextTrailError = "Context trail paused. Focus and capture remain safe."
+        }
+    }
+
+    func setContextTrailEnabled(_ enabled: Bool, at date: Date = .now) async {
+        guard !isUpdatingContextTrail, let contextTrail else { return }
+        isUpdatingContextTrail = true
+        contextTrailError = nil
+        defer { isUpdatingContextTrail = false }
+        do {
+            contextTrailSettings = try await contextTrail.setEnabled(enabled)
+            if enabled, let currentApplication {
+                _ = try await contextTrail.observe(currentApplication, at: date)
+            }
+            contextEpisodes = try await contextTrail.currentEpisodes(at: date)
+        } catch {
+            contextTrailError = "Privacy preference could not be saved. No new context was accepted."
+        }
+    }
+
+    func observeApplication(_ application: ApplicationContext, at date: Date = .now) async {
+        currentApplication = application
+        guard let contextTrail else { return }
+        do {
+            _ = try await contextTrail.observe(application, at: date)
+            contextTrailSettings = try await contextTrail.settings()
+            contextEpisodes = try await contextTrail.currentEpisodes(at: date)
+            contextTrailError = nil
+        } catch {
+            contextTrailError = "Context trail paused. Focus and capture remain safe."
+        }
     }
 
     func refreshMemory() async {
@@ -310,7 +359,12 @@ final class AppModel: ObservableObject {
         commandError = nil
         do {
             _ = try await operation(focusLoop)
-            return await refresh()
+            let refreshed = await refresh()
+            if let contextTrail, let currentApplication {
+                _ = try? await contextTrail.observe(currentApplication, at: .now)
+            }
+            await refreshContextTrail()
+            return refreshed
         } catch let FocusLoopError.currentFocusExists(id) {
             commandError = id == now?.intentionID
                 ? "This intention is already in focus."

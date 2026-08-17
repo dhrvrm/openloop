@@ -80,6 +80,14 @@ import Testing
 }
 
 @Test func contextTrailRecordsOnlyEnabledActiveFocusAndDeduplicatesConsecutiveApps() async throws {
+    let noFocusRepository = ContextTrailRepository()
+    let noFocusLoop = ContextTrailLoop(repository: noFocusRepository)
+    _ = try await noFocusLoop.setEnabled(true)
+    #expect(try await noFocusLoop.observe(
+        contextApplication("dev.no-focus", "No Focus"),
+        at: Date(timeIntervalSince1970: 1)
+    ) == nil)
+
     let repository = ContextTrailRepository()
     let session = FocusSession(
         id: UUID(),
