@@ -85,13 +85,13 @@ public protocol ContextTrailProviding: Sendable {
 
 ### Task 5: Make context and privacy legible in the existing GUI
 
-- [ ] Replace the disabled menu label with an actionable item: `Private Mode — on` when disabled and `Focus Context — on` when enabled; state updates whenever the menu opens.
-- [ ] Add a restrained privacy line to Now describing exactly `Application names only · active focus only · 8-hour maximum` and a native toggle disabled only during a persistence command.
-- [ ] Render episodes as a horizontally scrolling node-and-arrow flow: application name, relative start/end, and observation count. Use system typography, one desaturated accent, tight inner radii, and no nested card stack.
-- [ ] Provide explicit states: private (“Nothing is observed”), enabled/no focus (“Start focus to begin”), enabled/empty (“Waiting for an app switch”), and inline failure (“Trail paused; focus remains safe”).
-- [ ] Keep Return presentation flat; context-trail references already appear under References with selectable text.
-- [ ] Test Recall/Now navigation remains intact, menu toggling calls the model, and the real window can render private plus enabled-empty states.
-- [ ] Run `Scripts/test.sh --filter 'AppModelContextTrailTests|MainWindowControllerTests'` and commit `feat: show a private context flow in now`.
+- [x] Replace the disabled menu label with an actionable item: `Private Mode — on` when disabled and `Focus Context — on` when enabled; state updates whenever the menu opens.
+- [x] Add a restrained privacy line to Now describing exactly `Application names only · active focus only · 8-hour maximum` and a native toggle disabled only during a persistence command.
+- [x] Render episodes as a horizontally scrolling node-and-arrow flow: application name, relative start/end, and observation count. Use system typography, one desaturated accent, tight inner radii, and no nested card stack.
+- [x] Provide explicit states: private (“Nothing is observed”), enabled/no focus (“Start focus to begin”), enabled/empty (“Waiting for an app switch”), and inline failure (“Trail paused; focus remains safe”).
+- [x] Keep Return presentation flat; context-trail references already appear under References with selectable text.
+- [x] Test Recall/Now navigation remains intact, menu toggling calls the model, and the real window can render private plus enabled-empty states.
+- [x] Run `Scripts/test.sh --filter 'AppModelContextTrailTests|MainWindowControllerTests'` and commit `feat: show a private context flow in now`.
 
 ### Task 6: Add fixture quality evidence and document the boundary
 

@@ -84,6 +84,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private var voiceCapture: VoiceCaptureWindowController?
     private var model: AppModel?
     private var pauseMenuItem: NSMenuItem?
+    private var privateModeMenuItem: NSMenuItem?
     private var contextProvider: FrontmostApplicationReferenceProvider?
     private var applicationContextObserver: ApplicationContextObserver?
     private var workspaceLifecycle: WorkspaceLifecycle?
@@ -654,6 +655,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         }
     }
     @objc private func quit() { NSApp.terminate(nil) }
+    @objc private func toggleContextTrail() {
+        guard let model else { return }
+        Task { await model.setContextTrailEnabled(!model.contextTrailSettings.isEnabled) }
+    }
 
     func applicationWillTerminate(_ notification: Notification) {
         applicationContextObserver?.stop()
@@ -709,12 +714,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         recallItem.keyEquivalentModifierMask = [.command, .shift]
         menu.addItem(.separator())
         let privateMode = NSMenuItem(
-            title: "Private Mode — no background sensing",
-            action: nil,
+            title: ContextTrailMenuPresentation.title(for: .privateMode),
+            action: #selector(toggleContextTrail),
             keyEquivalent: ""
         )
         privateMode.state = .on
-        privateMode.isEnabled = false
+        privateModeMenuItem = privateMode
         menu.addItem(privateMode)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit OpenLoop", action: #selector(quit), keyEquivalent: "q")
@@ -724,6 +729,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if let model, let privateModeMenuItem {
+            privateModeMenuItem.title = ContextTrailMenuPresentation.title(
+                for: model.contextTrailSettings.mode
+            )
+            privateModeMenuItem.isEnabled = !model.isUpdatingContextTrail
+        }
         guard let pauseMenuItem else { return }
         switch model?.now?.focus?.state {
         case .active:
@@ -744,6 +755,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         }
         return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/OpenLoopADHD", isDirectory: true)
+    }
+}
+
+enum ContextTrailMenuPresentation {
+    static func title(for mode: ContextCollectionMode) -> String {
+        switch mode {
+        case .privateMode: "Private Mode — on"
+        case .focusTrail: "Focus Context — on"
+        }
     }
 }
 

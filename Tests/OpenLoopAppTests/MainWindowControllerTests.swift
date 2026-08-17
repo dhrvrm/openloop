@@ -34,6 +34,20 @@ private actor WindowMemoryCompiler: WorkingMemoryCompiling {
     }
 }
 
+private actor EnabledWindowContextTrail: ContextTrailProviding {
+    func settings() async throws -> ContextTrailSettings {
+        ContextTrailSettings(mode: .focusTrail)
+    }
+    func setEnabled(_ enabled: Bool) async throws -> ContextTrailSettings {
+        ContextTrailSettings(mode: enabled ? .focusTrail : .privateMode)
+    }
+    func observe(
+        _ application: ApplicationContext,
+        at date: Date
+    ) async throws -> ContextTrailEvent? { nil }
+    func currentEpisodes(at date: Date) async throws -> [ContextEpisode] { [] }
+}
+
 @MainActor
 @Test func mainWorkspaceShowsTheRequestedSurfaceInARealWindow() async {
     let repository = EmptyWindowRepository()
@@ -62,6 +76,31 @@ private actor WindowMemoryCompiler: WorkingMemoryCompiling {
     #expect(GlobalHotKeyBinding.recall.id == 3)
     #expect(GlobalHotKeyBinding.recall.keyCode != GlobalHotKeyBinding.voiceCapture.keyCode)
     #expect(GlobalHotKeyBinding.recall.modifiers == GlobalHotKeyBinding.quickCapture.modifiers)
+}
+
+@Test func contextTrailMenuCopyMakesTheActivePrivacyModeExplicit() {
+    #expect(ContextTrailMenuPresentation.title(for: .privateMode) == "Private Mode — on")
+    #expect(ContextTrailMenuPresentation.title(for: .focusTrail) == "Focus Context — on")
+}
+
+@MainActor
+@Test func nowWindowRendersEnabledContextEmptyState() async {
+    let repository = EmptyWindowRepository()
+    let model = AppModel(
+        loop: ThoughtLoop(repository: repository, clarifier: WindowUnusedClarifier()),
+        readModels: ThoughtReadModels(repository: repository),
+        contextTrail: EnabledWindowContextTrail()
+    )
+    await model.refreshContextTrail()
+    let controller = MainWindowController(model: model)
+
+    controller.show(tab: 0)
+    await Task.yield()
+
+    #expect(model.contextTrailSettings.mode == .focusTrail)
+    #expect(controller.selectedTabForTesting == 0)
+    #expect(controller.isVisibleForTesting)
+    controller.closeForTesting()
 }
 
 @MainActor

@@ -44,6 +44,14 @@ private struct MainView: View {
     private var nowView: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Now")
+                        .font(.largeTitle.weight(.semibold))
+                    Text("One intention, with enough context to return.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+
                 if let item = model.now {
                     currentIntention(item)
                 } else if model.suggestions.isEmpty {
@@ -60,6 +68,8 @@ private struct MainView: View {
                     )
                     .frame(maxWidth: .infinity, minHeight: 330)
                 }
+
+                contextTrailPanel
 
                 if model.suggestions.isEmpty == false {
                     VStack(alignment: .leading, spacing: 5) {
@@ -120,7 +130,87 @@ private struct MainView: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.72))
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Color.accentColor.opacity(0.7))
+                .frame(width: 3)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var contextTrailPanel: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Context trail")
+                        .font(.title3.weight(.semibold))
+                    Text("Application names only · active focus only · 8-hour maximum")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Toggle(
+                    "Keep an application trail during focus",
+                    isOn: Binding(
+                        get: { model.contextTrailSettings.isEnabled },
+                        set: { enabled in
+                            Task { await model.setContextTrailEnabled(enabled) }
+                        }
+                    )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .disabled(model.isUpdatingContextTrail)
+                .accessibilityLabel("Keep an application trail during focus")
+            }
+
+            contextTrailContent
+
+            if let error = model.contextTrailError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private var contextTrailContent: some View {
+        if !model.contextTrailSettings.isEnabled {
+            Label("Private Mode is on. Nothing is observed or retained.", systemImage: "lock.fill")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else if model.now?.focus == nil {
+            Label("Start focus to begin a private application trail.", systemImage: "circle.dotted")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else if model.now?.focus?.state == .paused {
+            Label("Focus is paused. No new context is being recorded.", systemImage: "pause.circle")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else if model.contextEpisodes.isEmpty {
+            Label("Waiting for an app switch. OpenLoop records no window or document names.", systemImage: "arrow.triangle.branch")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        } else {
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 9) {
+                    ForEach(Array(model.contextEpisodes.enumerated()), id: \.element.id) { index, episode in
+                        if index > 0 {
+                            Image(systemName: "arrow.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                                .accessibilityHidden(true)
+                        }
+                        ContextEpisodeNode(episode: episode)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .scrollIndicators(.hidden)
+        }
     }
 
     @ViewBuilder private func focusControls(_ item: NowItem) -> some View {
@@ -377,6 +467,35 @@ private struct MainView: View {
         case .closed: "Finished"
         case .released: "Released"
         }
+    }
+}
+
+private struct ContextEpisodeNode: View {
+    let episode: ContextEpisode
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(episode.application.applicationName)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+            HStack(spacing: 4) {
+                Text(episode.startedAt, style: .time)
+                if episode.lastObservedAt != episode.startedAt {
+                    Text("–")
+                    Text(episode.lastObservedAt, style: .time)
+                }
+                if episode.observationCount > 1 {
+                    Text("· \(episode.observationCount) signals")
+                }
+            }
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 9)
+        .background(Color.accentColor.opacity(0.09))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -699,7 +818,7 @@ final class MainWindowController {
         hostingController = NSHostingController(rootView: MainView(model: model))
         window = NSWindow(contentViewController: hostingController)
         window.title = "OpenLoop ADHD"
-        window.setContentSize(NSSize(width: 660, height: 540))
+        window.setContentSize(NSSize(width: 760, height: 620))
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
     }
 
