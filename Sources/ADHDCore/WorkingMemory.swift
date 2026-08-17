@@ -377,3 +377,136 @@ public struct DeterministicMemoryExtractionProvider: MemoryExtractionProvider, S
         return (original, replacement)
     }
 }
+
+public enum MemoryEvaluationExpectedState: String, Codable, Equatable, Sendable {
+    case active
+    case contradicted
+    case superseded
+    case evidenceExpired
+}
+
+public struct MemoryEvaluationExpectation: Codable, Equatable, Sendable {
+    public let statement: String
+    public let state: MemoryEvaluationExpectedState
+
+    public init(statement: String, state: MemoryEvaluationExpectedState) {
+        self.statement = statement
+        self.state = state
+    }
+}
+
+public struct MemoryEvaluationFixture: Codable, Equatable, Sendable {
+    public let documents: [RecallDocument]
+    public let expectations: [MemoryEvaluationExpectation]
+    public let contradictionGroups: [[String]]
+
+    public init(
+        documents: [RecallDocument],
+        expectations: [MemoryEvaluationExpectation],
+        contradictionGroups: [[String]]
+    ) {
+        self.documents = documents
+        self.expectations = expectations
+        self.contradictionGroups = contradictionGroups
+    }
+}
+
+public struct MemoryEvaluationReport: Equatable, Sendable {
+    public let acceptedMemoryCount: Int
+    public let evidenceCoverage: Double?
+    public let contradictionPreservation: Double?
+    public let currentStateAccuracy: Double?
+
+    public init(
+        records: [MemoryRecord],
+        documents: [RecallDocument],
+        expectations: [MemoryEvaluationExpectation],
+        contradictionGroups: [[String]]
+    ) {
+        acceptedMemoryCount = records.count
+        if records.isEmpty {
+            evidenceCoverage = nil
+        } else {
+            let documented = records.filter { record in
+                !record.evidence.isEmpty && record.evidence.allSatisfy { evidence in
+                    documents.contains {
+                        $0.evidenceID == evidence.evidenceID
+                            && !evidence.excerpt.isEmpty
+                            && $0.text.contains(evidence.excerpt)
+                    }
+                }
+            }.count
+            evidenceCoverage = Double(documented) / Double(records.count)
+        }
+
+        if expectations.isEmpty {
+            currentStateAccuracy = nil
+        } else {
+            let correct = expectations.filter { expectation in
+                records.contains {
+                    TemporalMemoryLedger.normalized($0.statement)
+                        == TemporalMemoryLedger.normalized(expectation.statement)
+                        && Self.expectedState(for: $0.state) == expectation.state
+                }
+            }.count
+            currentStateAccuracy = Double(correct) / Double(expectations.count)
+        }
+
+        if contradictionGroups.isEmpty {
+            contradictionPreservation = nil
+        } else {
+            let preserved = contradictionGroups.filter { group in
+                group.allSatisfy { statement in
+                    records.contains { record in
+                        TemporalMemoryLedger.normalized(record.statement)
+                            == TemporalMemoryLedger.normalized(statement)
+                            && Self.isUnresolved(record.state)
+                    }
+                }
+            }.count
+            contradictionPreservation = Double(preserved) / Double(contradictionGroups.count)
+        }
+    }
+
+    private static func expectedState(for state: MemoryState) -> MemoryEvaluationExpectedState {
+        switch state {
+        case .active: .active
+        case .contradicted: .contradicted
+        case .superseded: .superseded
+        case .evidenceExpired: .evidenceExpired
+        }
+    }
+
+    private static func isUnresolved(_ state: MemoryState) -> Bool {
+        switch state {
+        case .active, .contradicted: true
+        case .superseded, .evidenceExpired: false
+        }
+    }
+}
+
+public struct MemoryFixtureEvaluator: Sendable {
+    public init() {}
+
+    public func evaluate(_ fixture: MemoryEvaluationFixture) async throws -> MemoryEvaluationReport {
+        let provider = DeterministicMemoryExtractionProvider()
+        let validator = MemoryEvidenceValidator()
+        let ledger = TemporalMemoryLedger()
+        var records: [MemoryRecord] = []
+        for candidate in try await provider.candidates(from: fixture.documents) {
+            try validator.validate(candidate, against: fixture.documents)
+            records = ledger.applying(
+                candidate,
+                to: records,
+                at: candidate.evidence.occurredAt
+            )
+        }
+        records = ledger.revalidated(records, against: fixture.documents)
+        return MemoryEvaluationReport(
+            records: records,
+            documents: fixture.documents,
+            expectations: fixture.expectations,
+            contradictionGroups: fixture.contradictionGroups
+        )
+    }
+}

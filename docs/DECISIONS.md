@@ -172,3 +172,21 @@ The checked-in evaluation fixture exercises top-five ranking and exact latency,
 but it is not evidence that real personal recall meets the 95% roadmap gate.
 That acceptance decision requires a representative private query set gathered
 through actual use.
+
+## D-018 — Working memory requires explicit evidence and preserves temporal history
+
+Status: accepted.
+
+Compressed working memory is derived only from explicit user markers and stored
+transcription corrections. Every accepted atomic statement retains its exact
+excerpt, evidence identity, and date in the existing encrypted vault. The
+compiler runs when Recall is activated or explicitly refreshed; capture never
+waits for extraction, validation, or ledger persistence.
+
+Equivalent statements merge evidence under one versioned record. Only an
+explicit `correction: old -> new` may supersede an exact normalized prior
+statement, and the superseded record remains inspectable. Conflicting statements
+without that correction evidence remain unresolved rather than allowing a rule
+or model to select a winner. Deleted source evidence changes availability to
+expired but does not erase the ledger excerpt or its history. The UI and fixture
+report these states directly and do not present generated certainty.

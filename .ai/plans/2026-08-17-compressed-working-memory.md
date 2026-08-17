@@ -97,15 +97,15 @@ func memoryRecords() async throws -> [MemoryRecord]
 
 ### Task 6: Add deterministic quality reporting and document Increment 6
 
-- [ ] Add `MemoryEvaluationReport` for evidence coverage, contradiction preservation, current-state accuracy, and accepted-memory count. Empty input returns nil rates.
-- [ ] Add `Tests/Fixtures/memory-evaluation.json` and `--memory-evaluation` stable diagnostic output labeled fixture.
-- [ ] Document explicit markers, evidence retention, supersession/history, demand-driven compilation, and the lack of generated claims. Record D-018. Set bundle version 0.6.0.
-- [ ] Mark this plan complete and run only:
+- [x] Add `MemoryEvaluationReport` for evidence coverage, contradiction preservation, current-state accuracy, and accepted-memory count. Empty input returns nil rates.
+- [x] Add `Tests/Fixtures/memory-evaluation.json` and `--memory-evaluation` stable diagnostic output labeled fixture.
+- [x] Document explicit markers, evidence retention, supersession/history, demand-driven compilation, and the lack of generated claims. Record D-018. Set bundle version 0.6.0.
+- [x] Mark this plan complete and run only:
 
 ```bash
 Scripts/test.sh --filter 'WorkingMemoryTests|transcriptionMemory|AppModelMemoryTests|RecallTests'
 ```
 
-- [ ] Commit `feat: complete compressed working memory`.
+- [x] Commit `feat: complete compressed working memory`.
 
 Expected focused evidence: unmarked prose creates nothing; every accepted record has exact evidence; equivalent evidence merges; explicit corrections supersede without deletion; missing source evidence is visible; the vault exposes no memory plaintext; Recall ranks current corrections ahead of history; compilation is idempotent and capture-independent.

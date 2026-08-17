@@ -180,6 +180,40 @@ import Testing
     })
 }
 
+@Test func memoryEvaluationReportsCoverageContradictionsAndCurrentState() async throws {
+    let fixture = MemoryEvaluationFixture(
+        documents: [
+            memoryDocument(id: 80, text: "remember: Launch is Friday"),
+            memoryDocument(id: 81, text: "remember: Launch is Monday"),
+            memoryDocument(id: 82, text: "prefer: Weekly review"),
+            memoryDocument(id: 83, text: "correction: Weekly review -> Daily review"),
+            memoryDocument(id: 84, text: "ordinary prose is ignored"),
+        ],
+        expectations: [
+            MemoryEvaluationExpectation(statement: "Launch is Friday", state: .active),
+            MemoryEvaluationExpectation(statement: "Launch is Monday", state: .active),
+            MemoryEvaluationExpectation(statement: "Weekly review", state: .superseded),
+            MemoryEvaluationExpectation(statement: "Daily review", state: .active),
+        ],
+        contradictionGroups: [["Launch is Friday", "Launch is Monday"]]
+    )
+
+    let report = try await MemoryFixtureEvaluator().evaluate(fixture)
+
+    #expect(report.acceptedMemoryCount == 4)
+    #expect(report.evidenceCoverage == 1)
+    #expect(report.contradictionPreservation == 1)
+    #expect(report.currentStateAccuracy == 1)
+
+    let empty = MemoryEvaluationReport(
+        records: [], documents: [], expectations: [], contradictionGroups: []
+    )
+    #expect(empty.acceptedMemoryCount == 0)
+    #expect(empty.evidenceCoverage == nil)
+    #expect(empty.contradictionPreservation == nil)
+    #expect(empty.currentStateAccuracy == nil)
+}
+
 private func memoryDocument(id: Int, text: String) -> RecallDocument {
     RecallDocument(
         evidenceID: RecallEvidenceID(

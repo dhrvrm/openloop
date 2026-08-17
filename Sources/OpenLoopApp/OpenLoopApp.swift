@@ -393,6 +393,29 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 exit(EXIT_FAILURE)
             }
 
+        case "--memory-evaluation":
+            guard arguments.count > 1 else {
+                print("memory-fixture-error=missing-fixture")
+                exit(EXIT_FAILURE)
+            }
+            do {
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                let fixture = try decoder.decode(
+                    MemoryEvaluationFixture.self,
+                    from: Data(contentsOf: URL(fileURLWithPath: arguments[1]))
+                )
+                let report = try await MemoryFixtureEvaluator().evaluate(fixture)
+                print("memory-fixture-accepted=\(report.acceptedMemoryCount)")
+                print("memory-fixture-evidence-coverage=\(Self.metricText(report.evidenceCoverage))")
+                print("memory-fixture-contradiction-preservation=\(Self.metricText(report.contradictionPreservation))")
+                print("memory-fixture-current-state-accuracy=\(Self.metricText(report.currentStateAccuracy))")
+                return true
+            } catch {
+                print("memory-fixture-error=malformed-fixture")
+                exit(EXIT_FAILURE)
+            }
+
         case "--resurfacing-test":
             try await runResurfacingDiagnostic(
                 directory: directory,

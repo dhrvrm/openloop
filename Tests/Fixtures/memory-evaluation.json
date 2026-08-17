@@ -1,0 +1,20 @@
+{
+  "documents": [
+    {"evidenceID":{"kind":"capture","id":"80000000-0000-0000-0000-000000000001"},"title":"Capture","text":"decision: Ship the smaller release","occurredAt":"2026-08-10T10:00:00Z"},
+    {"evidenceID":{"kind":"capture","id":"80000000-0000-0000-0000-000000000002"},"title":"Capture","text":"remember: Launch is Friday","occurredAt":"2026-08-11T10:00:00Z"},
+    {"evidenceID":{"kind":"capture","id":"80000000-0000-0000-0000-000000000003"},"title":"Capture","text":"remember: Launch is Monday","occurredAt":"2026-08-12T10:00:00Z"},
+    {"evidenceID":{"kind":"capture","id":"80000000-0000-0000-0000-000000000004"},"title":"Capture","text":"prefer: Weekly review","occurredAt":"2026-08-13T10:00:00Z"},
+    {"evidenceID":{"kind":"capture","id":"80000000-0000-0000-0000-000000000005"},"title":"Capture","text":"correction: Weekly review -> Daily review","occurredAt":"2026-08-14T10:00:00Z"},
+    {"evidenceID":{"kind":"capture","id":"80000000-0000-0000-0000-000000000006"},"title":"Capture","text":"This ordinary note must not become memory","occurredAt":"2026-08-15T10:00:00Z"}
+  ],
+  "expectations": [
+    {"statement":"Ship the smaller release","state":"active"},
+    {"statement":"Launch is Friday","state":"active"},
+    {"statement":"Launch is Monday","state":"active"},
+    {"statement":"Weekly review","state":"superseded"},
+    {"statement":"Daily review","state":"active"}
+  ],
+  "contradictionGroups": [
+    ["Launch is Friday", "Launch is Monday"]
+  ]
+}

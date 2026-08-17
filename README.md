@@ -231,6 +231,31 @@ corpus gate. That gate requires representative queries from actual use. The
 exact-search target remains under 100 ms p95 and local semantic retrieval under
 300 ms p95.
 
+## Compressed Working Memory
+
+Recall now compiles a small temporal ledger only from explicit evidence markers:
+`remember:`, `decision:`, `commitment:` or `promise:`, `prefer:` or
+`preference:`, `question:`, and `correction: old -> new`. Stored voice
+corrections are also eligible. Ordinary notes and action prose never become
+memory, and OpenLoop does not generate claims or fill missing context.
+
+Every accepted statement keeps its exact source excerpt and evidence identity in
+the encrypted vault. Equivalent statements merge evidence. An explicit
+correction supersedes the matching prior statement without deleting it;
+unresolved conflicting statements remain visible. If source evidence later
+disappears, the statement remains in history with an “evidence expired” state.
+
+Compilation starts only when Recall opens or “Refresh evidence” is pressed, so
+Quick Capture has no memory-compilation dependency. The checked-in fixture
+reports evidence coverage, contradiction preservation, current-state accuracy,
+and the number of accepted memories:
+
+```bash
+swift run OpenLoopADHD --memory-evaluation Tests/Fixtures/memory-evaluation.json
+```
+
+These are deterministic fixture metrics, not a claim about a personal corpus.
+
 Run `Scripts/verify-increment-3.sh` to execute all tests, build and sign the app,
 verify the visible foreground lifecycle, contextual scoring and suppression,
 voice-controller capture, dual global hot keys, encrypted-at-rest markers,
