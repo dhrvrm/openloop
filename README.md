@@ -107,10 +107,12 @@ swift run thought-loop captures later
 
 ## Instant Capture app
 
-The Increment 1 menu-bar app uses Command-Shift-Space for Quick Capture and
-provides quiet Now and Later surfaces. Raw text is accepted into an AES-GCM
+The macOS app uses Command-Shift-Space for Quick Capture and provides quiet Now,
+Return, and Later surfaces. Raw text is accepted into an AES-GCM
 encrypted local vault before Quick Capture closes; its 256-bit root key is owned
-by macOS Keychain. The app has no account, network dependency, or telemetry.
+by macOS Keychain. The app launches as a regular Dock application and opens its
+workspace immediately; the menu-bar entry remains available. The app has no
+account, network dependency, or telemetry.
 
 Run `Scripts/verify-increment-1.sh` to test the core, measure capture latency,
 inspect the encrypted vault, build and ad-hoc sign the app, and mount-check the
@@ -130,8 +132,8 @@ permission.
 Interrupted work leaves Now and appears in Return. Its packet remains encrypted
 on disk and can be resumed after quitting and reopening the app; Resume restores
 the saved next action rather than asking for reconstruction. The menu-bar item
-exposes Capture, Now, Pause/Continue, Return, Later, and the current private-mode
-status. No ambient sensing is active in this increment.
+exposes Capture, Record & Transcribe, Now, Pause/Continue, Return, Later, and the
+current private-mode status. No background sensing is active.
 
 Run `Scripts/verify-increment-2.sh` to execute all tests, prove an exact Return
 packet survives a fresh encrypted-repository instance, scan for packet plaintext,
@@ -149,3 +151,39 @@ swift run thought-loop close <id>
 
 Set `OPENLOOP_DATA_DIR` to use an isolated development vault. Without it, the
 CLI stores data in `~/Library/Application Support/OpenLoopADHD`.
+
+## Visible library and contextual resurfacing
+
+Later exposes every unfinished open loop with its desired outcome, exact next
+action, and neutral state, followed by non-action notes and captures. An open
+loop can be explicitly linked to the application that was foreground when
+OpenLoop opened by choosing `Suggest in <Application>`. OpenLoop samples that
+application only on launch, Dock reopen, or the Now menu action; it does not
+watch application activity in the background.
+
+At most two linked open loops can appear in Now. Every suggestion states its
+reason and shows the complete relevance contribution as a native bar. The
+algorithm requires one explicit application match, then uses a four-hour
+per-loop cooldown. `Later` silences a suggestion for one day and `Never suggest`
+silences it permanently; both are single actions. There are no overdue states,
+streaks, urgency scores, or notifications.
+
+## On-device voice capture
+
+Press Command-Shift-R once to open a visible recording panel and begin live
+transcription. Press the same shortcut again to stop and save. The transcript
+uses the same encrypted capture path as typed text and remains editable if a
+save fails. Empty recordings are discarded, and sessions stop after one minute.
+
+OpenLoop requires Apple's on-device speech recognizer and never falls back to a
+network recognizer. Raw microphone audio is streamed only into the recognizer;
+OpenLoop does not write or retain it. The first explicit use asks for Microphone
+and Speech Recognition permission. If the current Dictation language has no
+on-device recognizer, OpenLoop reports that limitation instead of uploading
+audio.
+
+Run `Scripts/verify-increment-3.sh` to execute all tests, build and sign the app,
+verify the visible foreground lifecycle, contextual scoring and suppression,
+voice-controller capture, dual global hot keys, encrypted-at-rest markers,
+capture latency, privacy usage strings, framework linkage, and the mounted DMG.
+The artifact remains `.artifacts/OpenLoop-ADHD.dmg`.

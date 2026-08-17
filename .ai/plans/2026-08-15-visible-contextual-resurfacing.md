@@ -277,6 +277,10 @@ Commit: `feat: capture on-device speech with one shortcut`.
 
 ### Task 9: Prove packaged Increment 3 behavior and hand off a running GUI
 
+> Verification note: the packaged gate passed once. At the user's direction,
+> subsequent exhaustive visual/review loops are deferred in favor of focused
+> test cases and continued product construction.
+
 **Files:**
 - Modify: `Sources/OpenLoopApp/OpenLoopApp.swift`
 - Create: `Scripts/verify-increment-3.sh`
@@ -284,11 +288,11 @@ Commit: `feat: capture on-device speech with one shortcut`.
 - Modify: `docs/DECISIONS.md`
 - Modify: `.ai/plans/2026-08-15-visible-contextual-resurfacing.md`
 
-- [ ] **Step 1: Add a packaged resurfacing diagnostic**
+- [x] **Step 1: Add a packaged resurfacing diagnostic**
 
 `--resurfacing-test` creates two distinctive open intentions, explicitly links only one to a synthetic application, evaluates it, verifies the exact explanation and one-result selection, evaluates again to prove cooldown, applies Later and Never in separate cases, reopens the encrypted vault, and verifies persisted suppression/history.
 
-- [ ] **Step 2: Add the full Increment 3 gate**
+- [x] **Step 2: Add the full Increment 3 gate**
 
 `Scripts/verify-increment-3.sh` runs all tests and a release build; packages and signs the app; runs window, resurfacing, focus-recovery, capture-latency, dual-hot-key, and voice-controller diagnostics in temporary isolated vaults/Keychain services; verifies the packaged privacy usage strings and Speech/AVFoundation linkage; scans all data for distinctive resurfacing, transcript, and focus plaintext; mounts the DMG; and verifies the app plus Applications link.
 
@@ -296,7 +300,7 @@ Commit: `feat: capture on-device speech with one shortcut`.
 
 Launch the packaged app with isolated seeded diagnostic data, verify an on-screen `OpenLoop ADHD` window via CoreGraphics, capture Now and Later screenshots, and inspect them for clipping, hierarchy, readable explanation bars, stored-loop visibility, and usable controls at the minimum window size.
 
-- [ ] **Step 4: Document delivered behavior and decision**
+- [x] **Step 4: Document delivered behavior and decision**
 
 Update README usage for visible launch, Dock reopen, open-loop library, explicit context linking, Why now, Later, and Never. Record the decision to use explicit application rules plus on-demand context and deterministic scoring instead of ambient/semantic inference.
 
@@ -308,7 +312,7 @@ Run placeholder scan (`TODO|FIXME|stub|placeholder`), inspect the diff for unrel
 
 Review against the Increment 3 exit gate, foreground lifecycle, suggestion caps/cooldowns, one-action suppression, legacy compatibility, encryption, accessibility, and packaged verification. Resolve every blocking finding and rerun affected checks.
 
-- [ ] **Step 7: Replace the stale running build and show the result**
+- [x] **Step 7: Replace the stale running build and show the result**
 
 Resolve the exact old OpenLoop process path, terminate only that stale app instance, launch the new packaged Increment 3 app, and verify its window is on screen. Do not touch user data outside the app's normal vault.
 

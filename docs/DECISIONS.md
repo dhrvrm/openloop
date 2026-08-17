@@ -106,3 +106,27 @@ new current intention. Every coupled intention/session lifecycle change is saved
 in one repository snapshot write so relaunch cannot observe half a transition.
 Older active or interrupted intentions without a focus-session record are
 upgraded when they next start or resume.
+
+## D-014 — Contextual resurfacing requires an explicit application rule
+
+Status: accepted.
+
+Increment 3 samples the foreground application's bundle identifier and readable
+name only when the visible workspace is requested. An intention is eligible only
+after the user explicitly links it to that application. One exact match supplies
+the entire inspectable relevance score; the policy returns at most two results,
+applies a four-hour shown cooldown, and persists one-day or permanent suppression
+inside the encrypted vault. OpenLoop does not observe window titles, documents,
+typed content, or background application changes.
+
+## D-015 — Voice capture is on-device, ephemeral audio into durable text
+
+Status: accepted.
+
+Command-Shift-R toggles a visible recording session backed by Apple Speech and
+AVAudioEngine. Recognition is allowed only when the current recognizer declares
+on-device support and the request explicitly requires on-device recognition;
+there is no network fallback. Audio buffers are not written to disk or retained.
+Only the normalized transcript crosses the existing capture interface, where it
+receives the same encrypted persistence, clarification, and recovery behavior as
+typed text. Sessions are visibly indicated and capped at one minute.
