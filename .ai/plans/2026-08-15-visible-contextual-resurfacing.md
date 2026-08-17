@@ -249,27 +249,27 @@ Commit: `feat: explain contextual suggestions in the workspace`.
 - Modify: `Resources/Info.plist`
 - Create: `Tests/OpenLoopAppTests/VoiceTranscriptionControllerTests.swift`
 
-- [ ] **Step 1: Write failing controller tests with fake audio/recognition ports**
+- [x] **Step 1: Write failing controller tests with fake audio/recognition ports**
 
 Verify one toggle moves idle → requesting permission → recording, partial results replace the visible transcript, a second toggle stops and saves one normalized transcript through the existing capture model, empty audio saves nothing, errors return to idle with useful copy, and permission denial preserves all stored work.
 
-- [ ] **Step 2: Generalize global hot-key registration safely**
+- [x] **Step 2: Generalize global hot-key registration safely**
 
 Allow an explicit key code, modifiers, and unique ID while keeping the existing `Command-Shift-Space` capture registration unchanged. Register `Command-Shift-R` as the sole voice toggle and add a diagnostic that proves both hot keys register concurrently.
 
-- [ ] **Step 3: Implement on-device live speech recognition**
+- [x] **Step 3: Implement on-device live speech recognition**
 
 Use `AVAudioEngine` plus `SFSpeechAudioBufferRecognitionRequest`, set partial results and dictation hint, require `supportsOnDeviceRecognition` and `requiresOnDeviceRecognition = true`, cap sessions at one minute, and tear down taps/tasks on every exit path. Do not retain or write raw audio.
 
-- [ ] **Step 4: Build the visible voice panel and capture handoff**
+- [x] **Step 4: Build the visible voice panel and capture handoff**
 
 Show a small floating panel immediately with permission/recording status, a red recording indicator, elapsed time, live editable transcript, `Command-Shift-R to stop and save`, and explicit Cancel/Stop & Save controls. Successful stop calls `AppModel.submitCapture` so encryption and clarification remain unchanged.
 
-- [ ] **Step 5: Add privacy metadata and package linkage**
+- [x] **Step 5: Add privacy metadata and package linkage**
 
 Link AVFoundation and Speech, add `NSMicrophoneUsageDescription` and `NSSpeechRecognitionUsageDescription`, and state in both strings that audio is transcribed on device and not retained.
 
-- [ ] **Step 6: Run tests and commit**
+- [x] **Step 6: Run tests and commit**
 
 Run `Scripts/test.sh --filter 'VoiceTranscriptionControllerTests|OpenLoopAppTests' && Scripts/test.sh && swift build -c release`.
 

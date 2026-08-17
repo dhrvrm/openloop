@@ -31,8 +31,10 @@ let package = Package(
             dependencies: ["ADHDCore", "LocalStore", "RuleClarifier", "VaultStore"],
             linkerSettings: [
                 .linkedFramework("AppKit"),
+                .linkedFramework("AVFoundation"),
                 .linkedFramework("Carbon"),
                 .linkedFramework("Security"),
+                .linkedFramework("Speech"),
             ]
         ),
         .testTarget(name: "ADHDCoreTests", dependencies: ["ADHDCore"]),

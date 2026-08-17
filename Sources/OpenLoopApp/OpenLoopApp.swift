@@ -1,5 +1,6 @@
 import ADHDCore
 import AppKit
+import Carbon
 import Darwin
 import Foundation
 import LocalStore
@@ -32,6 +33,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private var quickCapture: QuickCaptureController?
     private var mainWindow: MainWindowController?
     private var hotKey: GlobalHotKey?
+    private var voiceHotKey: GlobalHotKey?
+    private var voiceCapture: VoiceCaptureWindowController?
     private var model: AppModel?
     private var pauseMenuItem: NSMenuItem?
     private var contextProvider: FrontmostApplicationReferenceProvider?
@@ -84,8 +87,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             }
             let quickCapture = QuickCaptureController(model: model)
             let mainWindow = MainWindowController(model: model)
+            let voiceController = VoiceTranscriptionController(
+                transcriber: OnDeviceSpeechTranscriber()
+            ) { [weak model] transcript in
+                await model?.submitCapture(transcript) ?? false
+            }
+            let voiceCapture = VoiceCaptureWindowController(controller: voiceController)
             self.quickCapture = quickCapture
             self.mainWindow = mainWindow
+            self.voiceCapture = voiceCapture
             self.model = model
             self.contextProvider = contextProvider
             let workspaceLifecycle = WorkspaceLifecycle { [weak self] tab in
@@ -95,6 +105,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             configureMenu(quickCapture: quickCapture, mainWindow: mainWindow)
             hotKey = try GlobalHotKey { [weak quickCapture] startedAt in
                 quickCapture?.show(startedAt: startedAt)
+            }
+            voiceHotKey = try GlobalHotKey(
+                keyCode: UInt32(kVK_ANSI_R),
+                modifiers: UInt32(cmdKey | shiftKey),
+                id: 2
+            ) { [weak voiceCapture] _ in
+                voiceCapture?.toggle()
             }
             workspaceLifecycle.showInitialWorkspace()
         } catch {
@@ -158,9 +175,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             return true
 
         case "--hotkey-test":
-            let hotKey = try GlobalHotKey { _ in }
-            withExtendedLifetime(hotKey) {
+            let captureHotKey = try GlobalHotKey { _ in }
+            let voiceHotKey = try GlobalHotKey(
+                keyCode: UInt32(kVK_ANSI_R),
+                modifiers: UInt32(cmdKey | shiftKey),
+                id: 2
+            ) { _ in }
+            withExtendedLifetime((captureHotKey, voiceHotKey)) {
                 print("hotkey-registration=passed")
+                print("voice-hotkey-registration=passed")
             }
             return true
 
@@ -272,6 +295,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     }
 
     @objc private func showCapture() { quickCapture?.show() }
+    @objc private func toggleVoiceCapture() { voiceCapture?.toggle() }
     @objc private func showNow() { presentWorkspace(tab: 0) }
     @objc private func showReturn() { mainWindow?.show(tab: 1) }
     @objc private func showLater() { mainWindow?.show(tab: 2) }
@@ -313,6 +337,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         let menu = NSMenu()
         menu.delegate = self
         menu.addItem(withTitle: "Capture", action: #selector(showCapture), keyEquivalent: "")
+        let voiceItem = menu.addItem(
+            withTitle: "Record & Transcribe",
+            action: #selector(toggleVoiceCapture),
+            keyEquivalent: "r"
+        )
+        voiceItem.keyEquivalentModifierMask = [.command, .shift]
         menu.addItem(withTitle: "Now", action: #selector(showNow), keyEquivalent: "")
         let pauseItem = menu.addItem(
             withTitle: "Pause",
@@ -325,7 +355,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         menu.addItem(withTitle: "Later", action: #selector(showLater), keyEquivalent: "")
         menu.addItem(.separator())
         let privateMode = NSMenuItem(
-            title: "Private Mode — no sensing active",
+            title: "Private Mode — no background sensing",
             action: nil,
             keyEquivalent: ""
         )

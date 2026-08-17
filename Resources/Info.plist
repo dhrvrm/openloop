@@ -24,7 +24,11 @@
     </array>
     <key>LSMinimumSystemVersion</key>
     <string>15.0</string>
-    <key>NSHighResolutionCapable</key>
-    <true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>OpenLoop transcribes your voice on this Mac and does not retain audio.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>OpenLoop uses on-device speech recognition to turn your voice into a private capture.</string>
 </dict>
 </plist>
