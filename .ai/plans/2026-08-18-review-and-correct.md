@@ -129,27 +129,27 @@ git commit -m "feat: persist clarification corrections"
 - Test: `Tests/ADHDCoreTests/ReadModelsTests.swift`
 - Test: `Tests/OpenLoopAppTests/AppModelReviewTests.swift`
 
-- [ ] **Step 1: Write failing read-model and command tests**
+- [x] **Step 1: Write failing read-model and command tests**
 
 Assert that the review projection includes original capture text, current proposal fields, whether the classifier has made a decision, and the linked intention state. Assert that AppModel applies a corrected action and refreshes Later/open loops, while a validation failure leaves the item present with calm inline error copy.
 
-- [ ] **Step 2: Run the focused application filter and confirm RED**
+- [x] **Step 2: Run the focused application filter and confirm RED**
 
 Run: `Scripts/test.sh --filter 'reviewQueue|AppModelReview'`
 
 Expected: compilation fails because the review projection and AppModel command do not exist.
 
-- [ ] **Step 3: Add the review projection and application command**
+- [x] **Step 3: Add the review projection and application command**
 
 Add `ClarificationReviewItem` and `ThoughtReadModels.reviewQueue()`. AppModel publishes that queue, refreshes it alongside existing projections, and exposes one guarded `applyClarificationReview(...)` command with specific validation and persistence-safe failure messages.
 
-- [ ] **Step 4: Run the focused application filter and confirm GREEN**
+- [x] **Step 4: Run the focused application filter and confirm GREEN**
 
 Run: `Scripts/test.sh --filter 'reviewQueue|AppModelReview'`
 
 Expected: the focused core/application tests pass.
 
-- [ ] **Step 5: Commit the review projection**
+- [x] **Step 5: Commit the review projection**
 
 ```bash
 git add Sources/ADHDCore/ReadModels.swift Sources/OpenLoopApp/AppModel.swift Tests/ADHDCoreTests/ReadModelsTests.swift Tests/OpenLoopAppTests/AppModelReviewTests.swift

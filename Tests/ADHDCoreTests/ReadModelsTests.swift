@@ -35,6 +35,39 @@ private actor ReadRepository: ThoughtRepository {
     }
     func focusSession(id: UUID) async throws -> FocusSession? { storedFocusSessions[id] }
     func focusSessions() async throws -> [FocusSession] { Array(storedFocusSessions.values) }
+    func allCaptures() async throws -> [RawCapture] { Array(storedCaptures.values) }
+    func allIntentions() async throws -> [Intention] { Array(storedIntentions.values) }
+}
+
+@Test func reviewQueueKeepsOriginalEvidenceAndCurrentDecision() async throws {
+    let repository = ReadRepository()
+    let pending = try RawCapture(
+        createdAt: Date(timeIntervalSince1970: 20),
+        text: "Maybe revisit the onboarding"
+    )
+    let remembered = try RawCapture(
+        createdAt: Date(timeIntervalSince1970: 10),
+        text: "Riya prefers email"
+    )
+    let proposal = try ClarificationProposal(
+        captureID: remembered.id,
+        disposition: .memory,
+        desiredOutcome: nil,
+        nextAction: nil,
+        confidence: 0.72
+    )
+    try await repository.save(capture: pending)
+    try await repository.save(capture: remembered)
+    try await repository.save(proposal: proposal)
+
+    let items = try await ThoughtReadModels(repository: repository).reviewQueue()
+
+    #expect(items.map(\.text) == [pending.text, remembered.text])
+    #expect(items[0].hasProposal == false)
+    #expect(items[0].needsDecision)
+    #expect(items[1].disposition == .memory)
+    #expect(items[1].confidence == 0.72)
+    #expect(items[1].isEditable)
 }
 
 @Test func nowPrefersAnActiveIntention() async throws {

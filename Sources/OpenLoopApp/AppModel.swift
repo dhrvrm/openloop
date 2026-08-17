@@ -11,6 +11,9 @@ final class AppModel: ObservableObject {
     @Published var returns: [ReturnItem] = []
     @Published var later: [LaterItem] = []
     @Published var openLoops: [OpenLoopItem] = []
+    @Published var reviewItems: [ClarificationReviewItem] = []
+    @Published var reviewError: String?
+    @Published var isSavingReview = false
     @Published var currentApplication: ApplicationContext?
     @Published var suggestions: [ContextualSuggestion] = []
     @Published var resurfacingRules: [ResurfacingRule] = []
@@ -288,17 +291,59 @@ final class AppModel: ObservableObject {
     }
 
     @discardableResult
+    func applyClarificationReview(
+        captureID: UUID,
+        disposition: Disposition,
+        desiredOutcome: String?,
+        nextAction: String?,
+        at date: Date = .now
+    ) async -> Bool {
+        guard isSavingReview == false else { return false }
+        isSavingReview = true
+        reviewError = nil
+        defer { isSavingReview = false }
+        do {
+            _ = try await loop.review(
+                captureID: captureID,
+                disposition: disposition,
+                desiredOutcome: desiredOutcome,
+                nextAction: nextAction,
+                at: date
+            )
+            _ = await refresh()
+            return true
+        } catch ClarificationError.actionRequiresNextStep {
+            reviewError = "Add an outcome and one next action."
+            return false
+        } catch ThoughtLoopError.intentionCannotBeReviewed {
+            reviewError = "Active or interrupted work stays unchanged. Finish or release it first."
+            return false
+        } catch {
+            reviewError = "That review could not be saved. The original capture is still safe."
+            return false
+        }
+    }
+
+    @discardableResult
     func refresh() async -> Bool {
         do {
             async let nextNow = readModels.now()
             async let nextReturns = readModels.returns()
             async let nextLater = readModels.later()
             async let nextOpenLoops = readModels.openLoops()
-            let projections = try await (nextNow, nextReturns, nextLater, nextOpenLoops)
+            async let nextReviews = readModels.reviewQueue()
+            let projections = try await (
+                nextNow,
+                nextReturns,
+                nextLater,
+                nextOpenLoops,
+                nextReviews
+            )
             now = projections.0
             returns = projections.1
             later = projections.2
             openLoops = projections.3
+            reviewItems = projections.4
             commandError = nil
             return true
         } catch {

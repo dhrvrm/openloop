@@ -43,9 +43,30 @@ public struct LaterItem: Equatable, Identifiable, Sendable {
     public let disposition: Disposition
 }
 
+public struct ClarificationReviewItem: Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let createdAt: Date
+    public let text: String
+    public let disposition: Disposition
+    public let desiredOutcome: String?
+    public let nextAction: String?
+    public let confidence: Double?
+    public let intentionState: IntentionState?
+    public let hasProposal: Bool
+
+    public var needsDecision: Bool {
+        hasProposal == false || disposition == .unclear
+    }
+
+    public var isEditable: Bool {
+        intentionState == nil || intentionState == .open
+    }
+}
+
 public struct OpenLoopItem: Equatable, Identifiable, Sendable {
     public var id: UUID { intentionID }
     public let intentionID: UUID
+    public let sourceCaptureID: UUID
     public let desiredOutcome: String
     public let nextAction: String
     public let state: IntentionState
@@ -121,10 +142,43 @@ public struct ThoughtReadModels: Sendable {
         }
     }
 
+    public func reviewQueue() async throws -> [ClarificationReviewItem] {
+        let captures = try await repository.allCaptures()
+        let intentions = try await repository.allIntentions()
+        var items: [ClarificationReviewItem] = []
+        for capture in captures {
+            let proposal = try await repository.proposal(captureID: capture.id)
+            guard proposal?.disposition != .release else { continue }
+            let intention = intentions.first { $0.sourceCaptureID == capture.id }
+            if proposal?.disposition == .action,
+               intention?.state == .closed || intention?.state == .released {
+                continue
+            }
+            items.append(
+                ClarificationReviewItem(
+                    id: capture.id,
+                    createdAt: capture.createdAt,
+                    text: capture.text,
+                    disposition: proposal?.disposition ?? .unclear,
+                    desiredOutcome: proposal?.desiredOutcome,
+                    nextAction: proposal?.nextAction,
+                    confidence: proposal?.confidence,
+                    intentionState: intention?.state,
+                    hasProposal: proposal != nil
+                )
+            )
+        }
+        return items.sorted {
+            if $0.createdAt == $1.createdAt { return $0.id.uuidString < $1.id.uuidString }
+            return $0.createdAt > $1.createdAt
+        }
+    }
+
     public func openLoops() async throws -> [OpenLoopItem] {
         try await repository.openIntentions().map {
             OpenLoopItem(
                 intentionID: $0.id,
+                sourceCaptureID: $0.sourceCaptureID,
                 desiredOutcome: $0.desiredOutcome,
                 nextAction: $0.nextAction,
                 state: $0.state,
