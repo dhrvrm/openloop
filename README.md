@@ -205,6 +205,32 @@ benchmark. The provider seam requires on-device recognition and can accept a
 future local adapter, while Apple Speech remains the selected implementation.
 Raw audio remains ephemeral and never enters the vocabulary or benchmark data.
 
+## Personal Recall
+
+Press Command-Shift-F to open Recall. Exact phrases, shared words, and local
+semantic similarity search captures, every intention state, saved return
+packets, and voice corrections. Each result is stored evidence with its source,
+date, excerpt, and separate match contributions; Recall does not generate an
+answer or fill gaps with plausible text.
+
+Apple Natural Language supplies sentence embeddings on this Mac. If that local
+provider is unavailable, exact and shared-word search still work. The derived
+document/vector index is encrypted independently with an HKDF-separated key,
+contains no plaintext sidecar, and can be discarded and rebuilt from the
+authoritative encrypted vault. Capture never waits for indexing.
+
+The reproducible fixture measures top-five evidence retrieval and exact-query
+p95 latency:
+
+```bash
+swift run OpenLoopADHD --recall-evaluation Tests/Fixtures/recall-evaluation.json
+```
+
+Fixture success validates the retrieval harness, not the roadmap's 95% personal
+corpus gate. That gate requires representative queries from actual use. The
+exact-search target remains under 100 ms p95 and local semantic retrieval under
+300 ms p95.
+
 Run `Scripts/verify-increment-3.sh` to execute all tests, build and sign the app,
 verify the visible foreground lifecycle, contextual scoring and suppression,
 voice-controller capture, dual global hot keys, encrypted-at-rest markers,

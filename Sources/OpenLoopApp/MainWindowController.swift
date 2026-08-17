@@ -319,9 +319,12 @@ private struct RecallEvidenceRow: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(hit.occurredAt, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(hit.occurredAt, style: .relative)
+                    Text("Match \(hit.score, format: .number.precision(.fractionLength(2)))")
+                }
+                .font(.caption)
+                .foregroundStyle(.tertiary)
             }
             Text(hit.excerpt)
                 .lineLimit(4)

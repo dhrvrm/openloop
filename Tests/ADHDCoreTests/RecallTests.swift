@@ -138,6 +138,31 @@ private struct FailingEmbeddingProvider: EmbeddingProvider {
     }
 }
 
+@Test func recallEvaluationReportsTopFiveAndExactNearestRankP95() {
+    let id = RecallEvidenceID(kind: .capture, id: UUID())
+    let hit = RecallHit(
+        evidenceID: id, title: "Capture", excerpt: "Evidence",
+        occurredAt: .distantPast, score: 1,
+        contributions: [RecallContribution(kind: .exactPhrase, value: 1)]
+    )
+    let cases = [
+        RecallEvaluationCase(query: "one", expectedEvidence: [id], exact: true),
+        RecallEvaluationCase(query: "two", expectedEvidence: [id], exact: false),
+    ]
+    let report = RecallEvaluationReport(
+        cases: cases,
+        results: [RecallResult(query: "one", hits: [hit]), RecallResult(query: "two", hits: [])],
+        latenciesMilliseconds: [12, 99]
+    )
+
+    #expect(report.caseCount == 2)
+    #expect(report.topFiveHitRate == 0.5)
+    #expect(report.exactSearchP95Milliseconds == 12)
+    let empty = RecallEvaluationReport(cases: [], results: [], latenciesMilliseconds: [])
+    #expect(empty.topFiveHitRate == nil)
+    #expect(empty.exactSearchP95Milliseconds == nil)
+}
+
 private actor RecallRepository: ThoughtRepository {
     private var captureValues: [RawCapture] = []
     private var intentionValues: [Intention] = []

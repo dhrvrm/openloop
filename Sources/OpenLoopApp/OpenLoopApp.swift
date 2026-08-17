@@ -50,6 +50,29 @@ private final class DiagnosticVoiceTranscriber: VoiceTranscribing {
     }
 }
 
+private struct DiagnosticRecallSource: RecallDocumentProviding {
+    let values: [RecallDocument]
+    func documents() async throws -> [RecallDocument] { values }
+}
+
+private actor DiagnosticRecallIndexStore: RecallIndexStore {
+    private var value: RecallIndexSnapshot?
+    func load() async throws -> RecallIndexSnapshot? { value }
+    func save(_ snapshot: RecallIndexSnapshot) async throws { value = snapshot }
+    func discard() async throws { value = nil }
+}
+
+private struct DiagnosticRecallEmbeddingProvider: EmbeddingProvider {
+    let values: [String: [Double]]
+    var identifier: String { get async { "recall-fixture-v1" } }
+    func vectors(for texts: [String]) async throws -> [[Double]] {
+        try texts.map { text in
+            guard let vector = values[text] else { throw RecallError.embeddingUnavailable }
+            return vector
+        }
+    }
+}
+
 @MainActor
 private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
@@ -242,14 +265,22 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
 
         case "--hotkey-test":
             let captureHotKey = try GlobalHotKey { _ in }
+            let voiceBinding = GlobalHotKeyBinding.voiceCapture
             let voiceHotKey = try GlobalHotKey(
-                keyCode: UInt32(kVK_ANSI_R),
-                modifiers: UInt32(cmdKey | shiftKey),
-                id: 2
+                keyCode: voiceBinding.keyCode,
+                modifiers: voiceBinding.modifiers,
+                id: voiceBinding.id
             ) { _ in }
-            withExtendedLifetime((captureHotKey, voiceHotKey)) {
+            let recallBinding = GlobalHotKeyBinding.recall
+            let recallHotKey = try GlobalHotKey(
+                keyCode: recallBinding.keyCode,
+                modifiers: recallBinding.modifiers,
+                id: recallBinding.id
+            ) { _ in }
+            withExtendedLifetime((captureHotKey, voiceHotKey, recallHotKey)) {
                 print("hotkey-registration=passed")
                 print("voice-hotkey-registration=passed")
+                print("recall-hotkey-registration=passed")
             }
             return true
 
@@ -314,6 +345,44 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 return true
             } catch {
                 print("voice-benchmark-error=malformed-fixture")
+                exit(EXIT_FAILURE)
+            }
+
+        case "--recall-evaluation":
+            guard arguments.count > 1 else {
+                print("recall-fixture-error=missing-fixture")
+                exit(EXIT_FAILURE)
+            }
+            do {
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                let fixture = try decoder.decode(
+                    RecallEvaluationFixture.self,
+                    from: Data(contentsOf: URL(fileURLWithPath: arguments[1]))
+                )
+                let recall = RecallLoop(
+                    source: DiagnosticRecallSource(values: fixture.documents),
+                    indexStore: DiagnosticRecallIndexStore(),
+                    embeddingProvider: DiagnosticRecallEmbeddingProvider(values: fixture.vectors)
+                )
+                var results: [RecallResult] = []
+                var latencies: [Double] = []
+                for evaluation in fixture.cases {
+                    let started = ContinuousClock.now
+                    results.append(try await recall.retrieve(RecallQuery(text: evaluation.query)))
+                    latencies.append(Self.milliseconds(since: started))
+                }
+                let report = RecallEvaluationReport(
+                    cases: fixture.cases,
+                    results: results,
+                    latenciesMilliseconds: latencies
+                )
+                print("recall-fixture-cases=\(report.caseCount)")
+                print("recall-fixture-top-five-hit-rate=\(Self.metricText(report.topFiveHitRate))")
+                print("recall-fixture-exact-p95-ms=\(Self.metricText(report.exactSearchP95Milliseconds))")
+                return true
+            } catch {
+                print("recall-fixture-error=malformed-fixture")
                 exit(EXIT_FAILURE)
             }
 

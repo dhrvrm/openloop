@@ -37,7 +37,11 @@ public struct RecallDocument: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-public struct RecallDocumentSource: Sendable {
+public protocol RecallDocumentProviding: Sendable {
+    func documents() async throws -> [RecallDocument]
+}
+
+public struct RecallDocumentSource: RecallDocumentProviding, Sendable {
     private let repository: any ThoughtRepository
 
     public init(repository: any ThoughtRepository) {
@@ -215,12 +219,12 @@ public protocol RecallSearching: Sendable {
 }
 
 public struct RecallLoop: RecallSearching, Sendable {
-    private let source: RecallDocumentSource
+    private let source: any RecallDocumentProviding
     private let indexStore: any RecallIndexStore
     private let embeddingProvider: any EmbeddingProvider
 
     public init(
-        source: RecallDocumentSource,
+        source: any RecallDocumentProviding,
         indexStore: any RecallIndexStore,
         embeddingProvider: any EmbeddingProvider
     ) {
@@ -349,5 +353,66 @@ public struct RecallLoop: RecallSearching, Sendable {
             return lhs.evidenceID.kind.rawValue < rhs.evidenceID.kind.rawValue
         }
         return lhs.evidenceID.id.uuidString < rhs.evidenceID.id.uuidString
+    }
+}
+
+public struct RecallEvaluationCase: Codable, Equatable, Sendable {
+    public let query: String
+    public let expectedEvidence: [RecallEvidenceID]
+    public let exact: Bool
+
+    public init(query: String, expectedEvidence: [RecallEvidenceID], exact: Bool) {
+        self.query = query
+        self.expectedEvidence = expectedEvidence
+        self.exact = exact
+    }
+}
+
+public struct RecallEvaluationFixture: Codable, Equatable, Sendable {
+    public let documents: [RecallDocument]
+    public let cases: [RecallEvaluationCase]
+    public let vectors: [String: [Double]]
+
+    public init(
+        documents: [RecallDocument],
+        cases: [RecallEvaluationCase],
+        vectors: [String: [Double]]
+    ) {
+        self.documents = documents
+        self.cases = cases
+        self.vectors = vectors
+    }
+}
+
+public struct RecallEvaluationReport: Equatable, Sendable {
+    public let caseCount: Int
+    public let topFiveHitRate: Double?
+    public let exactSearchP95Milliseconds: Double?
+
+    public init(
+        cases: [RecallEvaluationCase],
+        results: [RecallResult],
+        latenciesMilliseconds: [Double]
+    ) {
+        caseCount = cases.count
+        guard !cases.isEmpty, cases.count == results.count else {
+            topFiveHitRate = nil
+            exactSearchP95Milliseconds = nil
+            return
+        }
+        let matches = zip(cases, results).filter { evaluation, result in
+            let returned = Set(result.hits.prefix(5).map(\.evidenceID))
+            return evaluation.expectedEvidence.contains { returned.contains($0) }
+        }.count
+        topFiveHitRate = Double(matches) / Double(cases.count)
+        let exactLatencies = zip(cases, latenciesMilliseconds).compactMap {
+            $0.0.exact ? $0.1 : nil
+        }.sorted()
+        if exactLatencies.isEmpty {
+            exactSearchP95Milliseconds = nil
+        } else {
+            let rank = max(1, Int(ceil(0.95 * Double(exactLatencies.count))))
+            exactSearchP95Milliseconds = exactLatencies[rank - 1]
+        }
     }
 }

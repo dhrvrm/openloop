@@ -150,3 +150,25 @@ rate and first-partial/final latency are computed from explicit fixtures with
 separate general, name, and technical categories. A future local provider must
 use the same contract and earn selection with personal-corpus evidence; cloud
 fallback is not an allowed provider behavior.
+
+## D-017 — Recall ranks encrypted evidence without generating answers
+
+Status: accepted with personal-corpus quality gate unresolved.
+
+Recall searches raw captures, all intention states, return packets, and voice
+corrections. Results preserve the stored excerpt and expose exact phrase, token
+coverage, and semantic similarity as separate contributions. The product does
+not synthesize an answer, infer a commitment, or hide missing evidence behind a
+confidence statement.
+
+Apple Natural Language sentence embeddings are the selected local semantic
+adapter. Exact retrieval remains independently available when embeddings fail.
+Documents and provider-neutral vectors live in a rebuildable AES-GCM index whose
+key is separated from the vault root with HKDF; there is no plaintext FTS or
+token sidecar. Indexing begins only when Recall is used, so Quick Capture does
+not acquire a retrieval dependency.
+
+The checked-in evaluation fixture exercises top-five ranking and exact latency,
+but it is not evidence that real personal recall meets the 95% roadmap gate.
+That acceptance decision requires a representative private query set gathered
+through actual use.
