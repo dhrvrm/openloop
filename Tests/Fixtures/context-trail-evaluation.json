@@ -1,0 +1,31 @@
+{
+  "observations": [
+    {
+      "event": {"id":"90000000-0000-0000-0000-000000000001","intentionID":"91000000-0000-0000-0000-000000000001","focusSessionID":"92000000-0000-0000-0000-000000000001","observedAt":"2026-08-17T10:00:01Z","application":{"bundleIdentifier":"dev.xcode","applicationName":"Xcode"}},
+      "mode":"privateMode","focusState":"active","expectedAccepted":false
+    },
+    {
+      "event": {"id":"90000000-0000-0000-0000-000000000002","intentionID":"91000000-0000-0000-0000-000000000001","focusSessionID":"92000000-0000-0000-0000-000000000001","observedAt":"2026-08-17T10:00:02Z","application":{"bundleIdentifier":"dev.xcode","applicationName":"Xcode"}},
+      "mode":"focusTrail","focusState":"paused","expectedAccepted":false
+    },
+    {
+      "event": {"id":"90000000-0000-0000-0000-000000000003","intentionID":"91000000-0000-0000-0000-000000000001","focusSessionID":"92000000-0000-0000-0000-000000000001","observedAt":"2026-08-17T10:00:03Z","application":{"bundleIdentifier":"dev.xcode","applicationName":"Xcode"}},
+      "mode":"focusTrail","focusState":"active","expectedAccepted":true
+    },
+    {
+      "event": {"id":"90000000-0000-0000-0000-000000000004","intentionID":"91000000-0000-0000-0000-000000000001","focusSessionID":"92000000-0000-0000-0000-000000000001","observedAt":"2026-08-17T10:00:04Z","application":{"bundleIdentifier":"dev.xcode","applicationName":"Xcode"}},
+      "mode":"focusTrail","focusState":"active","expectedAccepted":true
+    },
+    {
+      "event": {"id":"90000000-0000-0000-0000-000000000005","intentionID":"91000000-0000-0000-0000-000000000001","focusSessionID":"92000000-0000-0000-0000-000000000001","observedAt":"2026-08-17T10:00:05Z","application":{"bundleIdentifier":"com.apple.safari","applicationName":"Safari"}},
+      "mode":"focusTrail","focusState":"active","expectedAccepted":true
+    },
+    {
+      "event": {"id":"90000000-0000-0000-0000-000000000006","intentionID":"91000000-0000-0000-0000-000000000001","focusSessionID":"92000000-0000-0000-0000-000000000001","observedAt":"2026-08-17T10:00:06Z","application":{"bundleIdentifier":"dev.xcode","applicationName":"Xcode"}},
+      "mode":"focusTrail","focusState":"active","expectedAccepted":true
+    }
+  ],
+  "through":"2026-08-17T10:00:10Z",
+  "retentionHours":8,
+  "expectedReferenceApplications":["Xcode","Safari","Xcode"]
+}

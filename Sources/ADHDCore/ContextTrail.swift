@@ -246,6 +246,115 @@ public actor ContextTrailLoop: ContextTrailProviding {
     }
 }
 
+public struct ContextTrailEvaluationObservation: Codable, Equatable, Sendable {
+    public let event: ContextTrailEvent
+    public let mode: ContextCollectionMode
+    public let focusState: FocusSessionState?
+    public let expectedAccepted: Bool
+
+    public init(
+        event: ContextTrailEvent,
+        mode: ContextCollectionMode,
+        focusState: FocusSessionState?,
+        expectedAccepted: Bool
+    ) {
+        self.event = event
+        self.mode = mode
+        self.focusState = focusState
+        self.expectedAccepted = expectedAccepted
+    }
+}
+
+public struct ContextTrailEvaluationFixture: Codable, Equatable, Sendable {
+    public let observations: [ContextTrailEvaluationObservation]
+    public let through: Date
+    public let retentionHours: Int
+    public let expectedReferenceApplications: [String]
+
+    public init(
+        observations: [ContextTrailEvaluationObservation],
+        through: Date,
+        retentionHours: Int,
+        expectedReferenceApplications: [String]
+    ) {
+        self.observations = observations
+        self.through = through
+        self.retentionHours = retentionHours
+        self.expectedReferenceApplications = expectedReferenceApplications
+    }
+}
+
+public struct ContextTrailEvaluationReport: Equatable, Sendable {
+    public let acceptedEventCount: Int
+    public let episodeCompressionRatio: Double?
+    public let falseEventRate: Double?
+    public let returnReferenceCoverage: Double?
+
+    public init(
+        observations: [ContextTrailEvaluationObservation],
+        acceptedEvents: [ContextTrailEvent],
+        episodes: [ContextEpisode],
+        expectedReferenceApplications: [String]
+    ) {
+        acceptedEventCount = acceptedEvents.count
+        episodeCompressionRatio = acceptedEvents.isEmpty
+            ? nil
+            : Double(episodes.count) / Double(acceptedEvents.count)
+
+        let rejected = observations.filter { !$0.expectedAccepted }
+        if rejected.isEmpty {
+            falseEventRate = nil
+        } else {
+            let acceptedIDs = Set(acceptedEvents.map(\.id))
+            let falseEvents = rejected.filter { acceptedIDs.contains($0.event.id) }.count
+            falseEventRate = Double(falseEvents) / Double(rejected.count)
+        }
+
+        if expectedReferenceApplications.isEmpty {
+            returnReferenceCoverage = nil
+        } else {
+            let actual = episodes.map(\.application.applicationName)
+            let matched = zip(expectedReferenceApplications, actual).filter {
+                $0.0 == $0.1
+            }.count
+            returnReferenceCoverage = Double(matched) / Double(expectedReferenceApplications.count)
+        }
+    }
+}
+
+public struct ContextTrailFixtureEvaluator: Sendable {
+    public init() {}
+
+    public func evaluate(
+        _ fixture: ContextTrailEvaluationFixture
+    ) throws -> ContextTrailEvaluationReport {
+        let accepted = fixture.observations.compactMap { observation in
+            observation.mode == .focusTrail && observation.focusState == .active
+                ? observation.event
+                : nil
+        }
+        let sessionIDs = Set(accepted.map(\.focusSessionID))
+        guard sessionIDs.count <= 1 else { throw ContextTrailError.invalidEvaluationInput }
+        let episodes: [ContextEpisode]
+        if let sessionID = sessionIDs.first {
+            episodes = ContextTrailPolicy.episodes(
+                from: accepted,
+                focusSessionID: sessionID,
+                through: fixture.through,
+                retentionHours: fixture.retentionHours
+            )
+        } else {
+            episodes = []
+        }
+        return ContextTrailEvaluationReport(
+            observations: fixture.observations,
+            acceptedEvents: accepted,
+            episodes: episodes,
+            expectedReferenceApplications: fixture.expectedReferenceApplications
+        )
+    }
+}
+
 public struct ContextTrailReferenceProvider: ContextReferenceProvider, Sendable {
     private let repository: any ThoughtRepository
     private let now: @Sendable () -> Date

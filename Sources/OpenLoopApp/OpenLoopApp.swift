@@ -429,6 +429,29 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 exit(EXIT_FAILURE)
             }
 
+        case "--context-trail-evaluation":
+            guard arguments.count > 1 else {
+                print("context-trail-fixture-error=missing-fixture")
+                exit(EXIT_FAILURE)
+            }
+            do {
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                let fixture = try decoder.decode(
+                    ContextTrailEvaluationFixture.self,
+                    from: Data(contentsOf: URL(fileURLWithPath: arguments[1]))
+                )
+                let report = try ContextTrailFixtureEvaluator().evaluate(fixture)
+                print("context-trail-fixture-accepted=\(report.acceptedEventCount)")
+                print("context-trail-fixture-compression-ratio=\(Self.metricText(report.episodeCompressionRatio))")
+                print("context-trail-fixture-false-event-rate=\(Self.metricText(report.falseEventRate))")
+                print("context-trail-fixture-return-coverage=\(Self.metricText(report.returnReferenceCoverage))")
+                return true
+            } catch {
+                print("context-trail-fixture-error=malformed-fixture")
+                exit(EXIT_FAILURE)
+            }
+
         case "--resurfacing-test":
             try await runResurfacingDiagnostic(
                 directory: directory,

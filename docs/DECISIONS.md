@@ -190,3 +190,27 @@ without that correction evidence remain unresolved rather than allowing a rule
 or model to select a winner. Deleted source evidence changes availability to
 expired but does not erase the ledger excerpt or its history. The UI and fixture
 report these states directly and do not present generated certainty.
+
+## D-019 — Ambient context is an explicit focus trail, not background surveillance
+
+Status: accepted with system-audio collection excluded.
+
+Increment 7 implements only the smallest ambient behavior that improves the
+existing interruption loop: an application-name trail bounded to an explicitly
+enabled, active focus session. Private Mode is the default. The observer owns no
+policy or persistence; the core loop rechecks stored mode and active focus before
+accepting each event.
+
+Evidence contains only focus/intention/session identity, observation time,
+normalized application bundle identifier, and readable application name. It is
+encrypted in the existing vault, capped at eight hours and 100 observations per
+session, and erased when the user returns to Private Mode. Paused or absent focus
+cannot produce events. Window/document titles, content, URLs, input, clipboard,
+location, audio, and screenshots are outside this contract.
+
+Consecutive applications form deterministic episodes rendered as a chronological
+flow in Now. Interruption recovery may add one bounded context-trail reference to
+Return, but ambient evidence cannot create a task, capture, memory, notification,
+or obligation. System audio remains excluded until measured recovery benefit,
+battery cost, false-draft behavior, review UX, and a separate explicit consent
+contract justify its additional complexity.

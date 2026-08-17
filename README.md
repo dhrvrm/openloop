@@ -256,6 +256,35 @@ swift run OpenLoopADHD --memory-evaluation Tests/Fixtures/memory-evaluation.json
 
 These are deterministic fixture metrics, not a claim about a personal corpus.
 
+## Private focus context
+
+Private Mode remains the default. From Now or the menu bar, explicitly enable
+Focus Context to retain a short application trail only while a focus session is
+active. OpenLoop stores the focus, session, observation time, normalized bundle
+identifier, and readable application name. It does not collect window or
+document titles, typed text, URLs, clipboard contents, microphone or system
+audio, location, keystrokes, or screenshots.
+
+Consecutive observations of the same application compress into one visible
+episode. The Now surface renders chronological application nodes and arrows;
+pausing focus also pauses collection. Events are bounded to eight hours and 100
+observations per session. Turning Private Mode back on immediately stops new
+collection and erases retained context events. Context never creates tasks,
+captures, memories, or notifications.
+
+When a focused session is interrupted, retained evidence contributes one
+selectable `Context trail — Xcode → Safari` reference to the existing Return
+packet. Manual recovery fields remain authoritative. The deterministic fixture
+reports accepted events, episode compression, false-event rate, and Return
+reference coverage:
+
+```bash
+swift run OpenLoopADHD --context-trail-evaluation Tests/Fixtures/context-trail-evaluation.json
+```
+
+The fixture validates policy wiring only; it is not evidence of battery impact
+or recovery improvement in personal use.
+
 Run `Scripts/verify-increment-3.sh` to execute all tests, build and sign the app,
 verify the visible foreground lifecycle, contextual scoring and suppression,
 voice-controller capture, dual global hot keys, encrypted-at-rest markers,

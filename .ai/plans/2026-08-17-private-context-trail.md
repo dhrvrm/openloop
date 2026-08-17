@@ -95,15 +95,15 @@ public protocol ContextTrailProviding: Sendable {
 
 ### Task 6: Add fixture quality evidence and document the boundary
 
-- [ ] Add `ContextTrailEvaluationReport` with accepted event count, episode compression ratio, false-event rate, and Return-reference coverage; empty denominators return nil.
-- [ ] Add `Tests/Fixtures/context-trail-evaluation.json` and `--context-trail-evaluation` output prefixed `context-trail-fixture-`.
-- [ ] Document opt-in/default-private behavior, exact collected fields, immediate erasure, retention, Return integration, and exclusions. Record D-019 and bump the bundle to 0.7.0.
-- [ ] Mark this plan complete and run only:
+- [x] Add `ContextTrailEvaluationReport` with accepted event count, episode compression ratio, false-event rate, and Return-reference coverage; empty denominators return nil.
+- [x] Add `Tests/Fixtures/context-trail-evaluation.json` and `--context-trail-evaluation` output prefixed `context-trail-fixture-`.
+- [x] Document opt-in/default-private behavior, exact collected fields, immediate erasure, retention, Return integration, and exclusions. Record D-019 and bump the bundle to 0.7.0.
+- [x] Mark this plan complete and run only:
 
 ```bash
 Scripts/test.sh --filter 'ContextTrailTests|contextTrail|AppModelContextTrailTests|ApplicationContextObserverTests|InterruptionSnapshotTests'
 ```
 
-- [ ] Build/sign the app bundle, relaunch it, confirm version/process, and commit `feat: complete private context trail`.
+- [x] Build/sign the app bundle, relaunch it, confirm version/process, and commit `feat: complete private context trail`.
 
 Expected focused evidence: private mode writes nothing; only active focus accepts observations; app identity is the entire payload; duplicates compress deterministically; disabling erases retained evidence; Return receives a bounded chronological trail; vault files reveal no identity plaintext; failure cannot block capture or focus; and the GUI explains every state without a new screen.

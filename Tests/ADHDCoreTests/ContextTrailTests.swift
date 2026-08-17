@@ -163,6 +163,60 @@ import Testing
     ])
 }
 
+@Test func contextTrailEvaluationReportsPrivacyCompressionAndReturnCoverage() throws {
+    let sessionID = UUID()
+    let intentionID = UUID()
+    let xcode = try contextApplication("dev.xcode", "Xcode")
+    let safari = try contextApplication("com.apple.safari", "Safari")
+    let observations = [
+        ContextTrailEvaluationObservation(
+            event: contextEvent(1, application: xcode, intentionID: intentionID, sessionID: sessionID),
+            mode: .privateMode, focusState: .active, expectedAccepted: false
+        ),
+        ContextTrailEvaluationObservation(
+            event: contextEvent(2, application: xcode, intentionID: intentionID, sessionID: sessionID),
+            mode: .focusTrail, focusState: .paused, expectedAccepted: false
+        ),
+        ContextTrailEvaluationObservation(
+            event: contextEvent(3, application: xcode, intentionID: intentionID, sessionID: sessionID),
+            mode: .focusTrail, focusState: .active, expectedAccepted: true
+        ),
+        ContextTrailEvaluationObservation(
+            event: contextEvent(4, application: xcode, intentionID: intentionID, sessionID: sessionID),
+            mode: .focusTrail, focusState: .active, expectedAccepted: true
+        ),
+        ContextTrailEvaluationObservation(
+            event: contextEvent(5, application: safari, intentionID: intentionID, sessionID: sessionID),
+            mode: .focusTrail, focusState: .active, expectedAccepted: true
+        ),
+        ContextTrailEvaluationObservation(
+            event: contextEvent(6, application: xcode, intentionID: intentionID, sessionID: sessionID),
+            mode: .focusTrail, focusState: .active, expectedAccepted: true
+        ),
+    ]
+    let fixture = ContextTrailEvaluationFixture(
+        observations: observations,
+        through: Date(timeIntervalSince1970: 10),
+        retentionHours: 8,
+        expectedReferenceApplications: ["Xcode", "Safari", "Xcode"]
+    )
+
+    let report = try ContextTrailFixtureEvaluator().evaluate(fixture)
+
+    #expect(report.acceptedEventCount == 4)
+    #expect(report.episodeCompressionRatio == 0.75)
+    #expect(report.falseEventRate == 0)
+    #expect(report.returnReferenceCoverage == 1)
+
+    let empty = ContextTrailEvaluationReport(
+        observations: [], acceptedEvents: [], episodes: [], expectedReferenceApplications: []
+    )
+    #expect(empty.acceptedEventCount == 0)
+    #expect(empty.episodeCompressionRatio == nil)
+    #expect(empty.falseEventRate == nil)
+    #expect(empty.returnReferenceCoverage == nil)
+}
+
 private func contextApplication(_ bundle: String, _ name: String) throws -> ApplicationContext {
     try ApplicationContext(bundleIdentifier: bundle, applicationName: name)
 }
