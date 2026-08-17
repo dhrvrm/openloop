@@ -42,10 +42,10 @@
 
 ### Task 1: Define private, bounded context evidence
 
-- [ ] Add `ContextCollectionMode`, `ContextTrailSettings`, `ContextTrailEvent`, `ContextEpisode`, and `ContextTrailError` with validation that rejects empty identity fields and clamps retention to 1–8 hours.
-- [ ] Define `ContextTrailProviding` and implement deterministic `ContextTrailPolicy.episodes(from:through:)` that sorts observations, removes events outside retention, caps the newest 100 per session, and merges consecutive matching bundle identifiers.
-- [ ] Write tests proving the same app merges, A→B→A remains three episodes, out-of-window observations disappear, and malformed identities cannot enter the trail.
-- [ ] Run `Scripts/test.sh --filter ContextTrailTests` and commit `feat: model private focus context trails`.
+- [x] Add `ContextCollectionMode`, `ContextTrailSettings`, `ContextTrailEvent`, `ContextEpisode`, and `ContextTrailError` with validation that rejects empty identity fields and clamps retention to 1–8 hours.
+- [x] Define `ContextTrailProviding` and implement deterministic `ContextTrailPolicy.episodes(from:through:)` that sorts observations, removes events outside retention, caps the newest 100 per session, and merges consecutive matching bundle identifiers.
+- [x] Write tests proving the same app merges, A→B→A remains three episodes, out-of-window observations disappear, and malformed identities cannot enter the trail.
+- [x] Run `Scripts/test.sh --filter ContextTrailTests` and commit `feat: model private focus context trails`.
 
 ```swift
 public protocol ContextTrailProviding: Sendable {
