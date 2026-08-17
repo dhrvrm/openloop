@@ -24,17 +24,20 @@ public struct RecallDocument: Codable, Equatable, Identifiable, Sendable {
     public let title: String
     public let text: String
     public let occurredAt: Date
+    public let memoryState: MemoryState?
 
     public init(
         evidenceID: RecallEvidenceID,
         title: String,
         text: String,
-        occurredAt: Date
+        occurredAt: Date,
+        memoryState: MemoryState? = nil
     ) {
         self.evidenceID = evidenceID
         self.title = title
         self.text = text
         self.occurredAt = occurredAt
+        self.memoryState = memoryState
     }
 }
 
@@ -53,9 +56,11 @@ public struct RecallDocumentSource: RecallDocumentProviding, Sendable {
         async let captures = repository.allCaptures()
         async let intentions = repository.allIntentions()
         async let corrections = repository.transcriptionCorrections()
+        async let memories = repository.memoryRecords()
         var documents = try await captureDocuments(captures)
         documents.append(contentsOf: try await intentionDocuments(intentions))
         documents.append(contentsOf: try await correctionDocuments(corrections))
+        documents.append(contentsOf: try await memoryDocuments(memories))
         return documents.sorted(by: Self.comesBefore)
     }
 
@@ -107,6 +112,28 @@ public struct RecallDocumentSource: RecallDocumentProviding, Sendable {
                 text: [correction.corrected, correction.recognized].joined(separator: "\n"),
                 occurredAt: correction.createdAt
             )
+        }
+    }
+
+    private func memoryDocuments(_ records: [MemoryRecord]) -> [RecallDocument] {
+        records.map { record in
+            RecallDocument(
+                evidenceID: RecallEvidenceID(kind: .memory, id: record.id),
+                title: Self.memoryTitle(record),
+                text: ([record.statement] + record.evidence.map(\.excerpt)).joined(separator: "\n"),
+                occurredAt: record.updatedAt,
+                memoryState: record.state
+            )
+        }
+    }
+
+    private static func memoryTitle(_ record: MemoryRecord) -> String {
+        let kind = record.kind.rawValue.capitalized
+        return switch record.state {
+        case .active: "\(kind) · Current memory"
+        case .contradicted: "\(kind) · Contradicted memory"
+        case .superseded: "\(kind) · Superseded memory"
+        case .evidenceExpired: "\(kind) · Evidence expired"
         }
     }
 
@@ -267,7 +294,8 @@ public struct RecallLoop: RecallSearching, Sendable {
                     value: semanticValue
                 ))
             }
-            let score = semanticValue.map { 0.65 * lexical + 0.35 * $0 } ?? lexical
+            let baseScore = semanticValue.map { 0.65 * lexical + 0.35 * $0 } ?? lexical
+            let score = baseScore * Self.memoryMultiplier(document.memoryState)
             return RecallHit(
                 evidenceID: document.evidenceID,
                 title: document.title,
@@ -354,6 +382,15 @@ public struct RecallLoop: RecallSearching, Sendable {
             return lhs.evidenceID.kind.rawValue < rhs.evidenceID.kind.rawValue
         }
         return lhs.evidenceID.id.uuidString < rhs.evidenceID.id.uuidString
+    }
+
+    private static func memoryMultiplier(_ state: MemoryState?) -> Double {
+        switch state {
+        case nil, .active: 1
+        case .contradicted: 0.85
+        case .superseded: 0.55
+        case .evidenceExpired: 0.4
+        }
     }
 }
 

@@ -40,16 +40,59 @@ import Testing
         recognized: "call mirror", corrected: "Call Mira",
         createdAt: Date(timeIntervalSince1970: 5)
     )
-    await repository.seed(captures: [capture], intentions: [finished, released], corrections: [correction])
+    let memory = recallMemoryRecord(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000005")!,
+        statement: "The rollout stays deliberately small",
+        state: .active,
+        updatedAt: Date(timeIntervalSince1970: 6)
+    )
+    await repository.seed(
+        captures: [capture], intentions: [finished, released], corrections: [correction],
+        memories: [memory]
+    )
 
     let documents = try await RecallDocumentSource(repository: repository).documents()
 
-    #expect(Set(documents.map(\.evidenceID.kind)) == [.capture, .intention, .returnPacket, .correction])
-    #expect(documents.count == 5)
+    #expect(Set(documents.map(\.evidenceID.kind)) == [.capture, .intention, .returnPacket, .correction, .memory])
+    #expect(documents.count == 6)
     #expect(documents.contains { $0.text.contains("Exact restart action") })
     #expect(documents.contains { $0.text.contains("Old released idea") })
     #expect(documents.contains { $0.title == "Voice correction" && $0.text.contains("Call Mira") })
+    #expect(documents.contains {
+        $0.evidenceID.kind == .memory && $0.memoryState == .active
+            && $0.title.contains("Current memory")
+    })
     #expect(documents.map(\.occurredAt) == documents.map(\.occurredAt).sorted())
+}
+
+@Test func recallRanksCurrentMemoryAheadOfSupersededHistoryButKeepsBothSearchable() async throws {
+    let repository = RecallRepository()
+    let currentID = UUID(uuidString: "10000000-0000-0000-0000-000000000010")!
+    let oldID = UUID(uuidString: "10000000-0000-0000-0000-000000000011")!
+    let current = recallMemoryRecord(
+        id: currentID,
+        statement: "Use daily review",
+        state: .active,
+        updatedAt: Date(timeIntervalSince1970: 20)
+    )
+    let history = recallMemoryRecord(
+        id: oldID,
+        statement: "Use daily review",
+        state: .superseded(by: currentID),
+        updatedAt: Date(timeIntervalSince1970: 10)
+    )
+    await repository.seed(captures: [], intentions: [], corrections: [], memories: [history, current])
+    let loop = RecallLoop(
+        source: RecallDocumentSource(repository: repository),
+        indexStore: MemoryRecallIndexStore(),
+        embeddingProvider: FailingEmbeddingProvider()
+    )
+
+    let result = try await loop.retrieve(RecallQuery(text: "daily review"))
+
+    #expect(result.hits.map(\.evidenceID.id) == [currentID, oldID])
+    #expect(result.hits[0].score == 1)
+    #expect(result.hits[1].score == 0.55)
 }
 
 @Test func recallRanksExactPhraseAndExposesLexicalContributions() async throws {
@@ -167,20 +210,24 @@ private actor RecallRepository: ThoughtRepository {
     private var captureValues: [RawCapture] = []
     private var intentionValues: [Intention] = []
     private var correctionValues: [TranscriptionCorrection] = []
+    private var memoryValues: [MemoryRecord] = []
 
     func seed(
         captures: [RawCapture],
         intentions: [Intention],
-        corrections: [TranscriptionCorrection]
+        corrections: [TranscriptionCorrection],
+        memories: [MemoryRecord] = []
     ) {
         captureValues = captures
         intentionValues = intentions
         correctionValues = corrections
+        memoryValues = memories
     }
 
     func allCaptures() async throws -> [RawCapture] { captureValues }
     func allIntentions() async throws -> [Intention] { intentionValues }
     func transcriptionCorrections() async throws -> [TranscriptionCorrection] { correctionValues }
+    func memoryRecords() async throws -> [MemoryRecord] { memoryValues }
     func save(capture: RawCapture) async throws {}
     func save(proposal: ClarificationProposal) async throws {}
     func save(intention: Intention) async throws {}
@@ -188,4 +235,26 @@ private actor RecallRepository: ThoughtRepository {
     func intention(id: UUID) async throws -> Intention? { nil }
     func openIntentions() async throws -> [Intention] { [] }
     func proposal(captureID: UUID) async throws -> ClarificationProposal? { nil }
+}
+
+private func recallMemoryRecord(
+    id: UUID,
+    statement: String,
+    state: MemoryState,
+    updatedAt: Date
+) -> MemoryRecord {
+    MemoryRecord(
+        id: id,
+        kind: .preference,
+        statement: statement,
+        confidence: 1,
+        evidence: [MemoryEvidence(
+            evidenceID: RecallEvidenceID(kind: .capture, id: id),
+            excerpt: "prefer: \(statement)",
+            occurredAt: updatedAt
+        )],
+        state: state,
+        createdAt: updatedAt,
+        updatedAt: updatedAt
+    )
 }

@@ -155,6 +155,31 @@ import Testing
     #expect(expired?.evidence.first?.availability == .expired)
 }
 
+@Test func compilerIsIdempotentAndExplicitCorrectionKeepsSupersededHistory() async throws {
+    let old = memoryDocument(id: 70, text: "prefer: Weekly review")
+    let correction = memoryDocument(id: 71, text: "correction: Weekly review -> Daily review")
+    let source = FixedMemoryDocumentSource(documents: [old, correction])
+    let repository = WorkingMemoryRepository()
+    let compiler = WorkingMemoryCompiler(
+        source: source,
+        provider: DeterministicMemoryExtractionProvider(),
+        repository: repository,
+        now: { Date(timeIntervalSince1970: 100) }
+    )
+
+    let first = try await compiler.compile()
+    let second = try await compiler.compile()
+
+    #expect(first == second)
+    #expect(first.count == 2)
+    #expect(first.contains { $0.statement == "Daily review" && $0.state == .active })
+    #expect(first.contains {
+        guard $0.statement == "Weekly review" else { return false }
+        if case .superseded = $0.state { return true }
+        return false
+    })
+}
+
 private func memoryDocument(id: Int, text: String) -> RecallDocument {
     RecallDocument(
         evidenceID: RecallEvidenceID(
@@ -182,4 +207,28 @@ private func memoryCandidate(
         ),
         relation: relation
     )
+}
+
+private struct FixedMemoryDocumentSource: RecallDocumentProviding {
+    let documentsValue: [RecallDocument]
+
+    init(documents: [RecallDocument]) {
+        documentsValue = documents
+    }
+
+    func documents() async throws -> [RecallDocument] { documentsValue }
+}
+
+private actor WorkingMemoryRepository: ThoughtRepository {
+    private var storedMemory: [MemoryRecord] = []
+
+    func save(memoryRecords: [MemoryRecord]) async throws { storedMemory = memoryRecords }
+    func memoryRecords() async throws -> [MemoryRecord] { storedMemory }
+    func save(capture: RawCapture) async throws {}
+    func save(proposal: ClarificationProposal) async throws {}
+    func save(intention: Intention) async throws {}
+    func captures(disposition: Disposition) async throws -> [RawCapture] { [] }
+    func intention(id: UUID) async throws -> Intention? { nil }
+    func openIntentions() async throws -> [Intention] { [] }
+    func proposal(captureID: UUID) async throws -> ClarificationProposal? { nil }
 }

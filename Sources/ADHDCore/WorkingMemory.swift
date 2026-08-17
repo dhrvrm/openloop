@@ -248,6 +248,65 @@ public protocol MemoryExtractionProvider: Sendable {
     func candidates(from documents: [RecallDocument]) async throws -> [MemoryCandidate]
 }
 
+public protocol WorkingMemoryCompiling: Sendable {
+    func compile() async throws -> [MemoryRecord]
+}
+
+public struct WorkingMemoryCompiler: WorkingMemoryCompiling, Sendable {
+    private let source: any RecallDocumentProviding
+    private let provider: any MemoryExtractionProvider
+    private let repository: any ThoughtRepository
+    private let now: @Sendable () -> Date
+    private let makeID: @Sendable () -> UUID
+
+    public init(
+        source: any RecallDocumentProviding,
+        provider: any MemoryExtractionProvider,
+        repository: any ThoughtRepository,
+        now: @escaping @Sendable () -> Date = Date.init,
+        makeID: @escaping @Sendable () -> UUID = UUID.init
+    ) {
+        self.source = source
+        self.provider = provider
+        self.repository = repository
+        self.now = now
+        self.makeID = makeID
+    }
+
+    public func compile() async throws -> [MemoryRecord] {
+        async let sourceDocuments = source.documents()
+        async let storedRecords = repository.memoryRecords()
+        let (documents, existing) = try await (sourceDocuments, storedRecords)
+        let candidates = try await provider.candidates(from: documents)
+        var records = existing
+        var consumedEvidence = Set(existing.flatMap { $0.evidence.map(\.evidenceID) })
+        let validator = MemoryEvidenceValidator()
+        let ledger = TemporalMemoryLedger()
+
+        for candidate in candidates where !consumedEvidence.contains(candidate.evidence.evidenceID) {
+            try validator.validate(candidate, against: documents)
+            records = ledger.applying(
+                candidate,
+                to: records,
+                at: now(),
+                id: makeID()
+            )
+            consumedEvidence.insert(candidate.evidence.evidenceID)
+        }
+        records = ledger.revalidated(records, against: documents, at: now())
+        try await repository.save(memoryRecords: records)
+        return Self.sorted(records)
+    }
+
+    private static func sorted(_ records: [MemoryRecord]) -> [MemoryRecord] {
+        records.sorted {
+            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+            if $0.kind != $1.kind { return $0.kind.rawValue < $1.kind.rawValue }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+    }
+}
+
 /// A deliberately conservative extractor: only explicit user markers and recorded
 /// transcription corrections may become durable working memory.
 public struct DeterministicMemoryExtractionProvider: MemoryExtractionProvider, Sendable {

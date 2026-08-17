@@ -81,11 +81,11 @@ func memoryRecords() async throws -> [MemoryRecord]
 
 ### Task 4: Compile idempotently and connect current memory to Recall
 
-- [ ] Implement `WorkingMemoryCompiler.compile()` using `RecallDocumentSource`, extraction provider, validator, repository ledger, merge, revalidation, and one final atomic save. Skip evidence already attached to any record.
-- [ ] Add `.memory` to `RecallEvidenceKind`. `RecallDocumentSource` projects all records: active title by kind, superseded/history labels, stored statement/excerpts, and current state metadata.
-- [ ] Update Recall score so active memory is neutral, contradictory history is multiplied by `0.85`, superseded by `0.55`, and expired-evidence memory by `0.4`; results remain searchable and inspectable.
-- [ ] Test compiler idempotence, correction changes first current result, and superseded evidence remains queryable.
-- [ ] Run `Scripts/test.sh --filter 'WorkingMemoryTests|RecallTests'` and commit `feat: compile evidence-backed memory into recall`.
+- [x] Implement `WorkingMemoryCompiler.compile()` using `RecallDocumentSource`, extraction provider, validator, repository ledger, merge, revalidation, and one final atomic save. Skip evidence already attached to any record.
+- [x] Add `.memory` to `RecallEvidenceKind`. `RecallDocumentSource` projects all records: active title by kind, superseded/history labels, stored statement/excerpts, and current state metadata.
+- [x] Update Recall score so active memory is neutral, contradictory history is multiplied by `0.85`, superseded by `0.55`, and expired-evidence memory by `0.4`; results remain searchable and inspectable.
+- [x] Test compiler idempotence, correction changes first current result, and superseded evidence remains queryable.
+- [x] Run `Scripts/test.sh --filter 'WorkingMemoryTests|RecallTests'` and commit `feat: compile evidence-backed memory into recall`.
 
 ### Task 5: Render current and historical memory without a new screen
 
