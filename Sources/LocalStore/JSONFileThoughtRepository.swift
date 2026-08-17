@@ -4,6 +4,7 @@ import Foundation
 private struct Snapshot: Codable {
     var captures: [UUID: RawCapture] = [:]
     var proposals: [UUID: ClarificationProposal] = [:]
+    var clarificationCorrections: [UUID: ClarificationCorrection] = [:]
     var intentions: [UUID: Intention] = [:]
     var focusSessions: [UUID: FocusSession] = [:]
     var resurfacingRules: [UUID: ResurfacingRule] = [:]
@@ -16,6 +17,7 @@ private struct Snapshot: Codable {
     private enum CodingKeys: String, CodingKey {
         case captures
         case proposals
+        case clarificationCorrections
         case intentions
         case focusSessions
         case resurfacingRules
@@ -34,6 +36,10 @@ private struct Snapshot: Codable {
         proposals = try container.decodeIfPresent(
             [UUID: ClarificationProposal].self,
             forKey: .proposals
+        ) ?? [:]
+        clarificationCorrections = try container.decodeIfPresent(
+            [UUID: ClarificationCorrection].self,
+            forKey: .clarificationCorrections
         ) ?? [:]
         intentions = try container.decode([UUID: Intention].self, forKey: .intentions)
         focusSessions = try container.decodeIfPresent(
@@ -104,6 +110,10 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         try update { $0.captures[capture.id] = capture }
     }
 
+    public func capture(id: UUID) async throws -> RawCapture? {
+        snapshot.captures[id]
+    }
+
     public func save(proposal: ClarificationProposal) async throws {
         try update { $0.proposals[proposal.captureID] = proposal }
     }
@@ -113,6 +123,24 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
             $0.proposals[proposal.captureID] = proposal
             if let intention { $0.intentions[intention.id] = intention }
         }
+    }
+
+    public func apply(
+        clarificationCorrection: ClarificationCorrection,
+        intention: Intention?
+    ) async throws {
+        try update {
+            $0.proposals[clarificationCorrection.captureID] = clarificationCorrection.proposal
+            $0.clarificationCorrections[clarificationCorrection.id] = clarificationCorrection
+            if let intention { $0.intentions[intention.id] = intention }
+        }
+    }
+
+    public func clarificationCorrections(captureID: UUID?) async throws
+        -> [ClarificationCorrection] {
+        snapshot.clarificationCorrections.values
+            .filter { captureID == nil || $0.captureID == captureID }
+            .sorted(by: Self.clarificationCorrectionOrder)
     }
 
     public func save(intention: Intention) async throws {
@@ -268,6 +296,10 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         snapshot.proposals.values.sorted { $0.captureID.uuidString < $1.captureID.uuidString }
     }
 
+    func snapshotClarificationCorrections() -> [ClarificationCorrection] {
+        snapshot.clarificationCorrections.values.sorted(by: Self.clarificationCorrectionOrder)
+    }
+
     func snapshotIntentions() -> [Intention] {
         snapshot.intentions.values.sorted(by: Self.intentionOrder)
     }
@@ -306,6 +338,14 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         }) {
             throw ThoughtRepositoryFocusError.currentFocusExists(current.intentionID)
         }
+    }
+
+    private static func clarificationCorrectionOrder(
+        _ lhs: ClarificationCorrection,
+        _ rhs: ClarificationCorrection
+    ) -> Bool {
+        if lhs.reviewedAt == rhs.reviewedAt { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.reviewedAt < rhs.reviewedAt
     }
 
     private static func captureOrder(_ lhs: RawCapture, _ rhs: RawCapture) -> Bool {

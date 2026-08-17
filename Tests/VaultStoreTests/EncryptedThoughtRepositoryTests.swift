@@ -57,6 +57,55 @@ private func temporaryDirectory() -> URL {
     #expect(try await reader.proposal(captureID: capture.id) == proposal)
 }
 
+@Test func clarificationCorrectionSurvivesEncryptedRestart() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let capture = try RawCapture(createdAt: Date(timeIntervalSince1970: 10), text: "Riya prefers email")
+    let action = try ClarificationProposal(
+        captureID: capture.id,
+        disposition: .action,
+        desiredOutcome: "Reply to Riya",
+        nextAction: "Open Riya's message",
+        confidence: 0.7
+    )
+    let memory = try ClarificationProposal(
+        captureID: capture.id,
+        disposition: .memory,
+        desiredOutcome: nil,
+        nextAction: nil,
+        confidence: 1
+    )
+    var intention = Intention(
+        id: capture.id,
+        sourceCaptureID: capture.id,
+        desiredOutcome: "Reply to Riya",
+        nextAction: "Open Riya's message",
+        state: .open,
+        createdAt: capture.createdAt,
+        returnPacket: nil
+    )
+    try intention.transition(to: .released)
+    let correction = ClarificationCorrection(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000022")!,
+        captureID: capture.id,
+        reviewedAt: Date(timeIntervalSince1970: 20),
+        previousProposal: action,
+        proposal: memory
+    )
+    let writer = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    try await writer.save(capture: capture)
+    try await writer.save(proposal: action)
+
+    try await writer.apply(clarificationCorrection: correction, intention: intention)
+
+    let vaultData = try Data(contentsOf: directory.appendingPathComponent("openloop.vault"))
+    #expect(vaultData.range(of: Data("Open Riya's message".utf8)) == nil)
+    let reader = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    #expect(try await reader.proposal(captureID: capture.id) == memory)
+    #expect(try await reader.intention(id: capture.id) == intention)
+    #expect(try await reader.clarificationCorrections(captureID: capture.id) == [correction])
+}
+
 @Test func encryptedFocusPairSurvivesRestartWithoutPacketPlaintext() async throws {
     let directory = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }

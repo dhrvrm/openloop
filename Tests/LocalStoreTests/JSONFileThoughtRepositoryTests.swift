@@ -43,6 +43,54 @@ private struct LegacySnapshot: Codable {
     #expect(try await reader.openIntentions() == [intention])
 }
 
+@Test func clarificationCorrectionSurvivesDevelopmentRestart() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let capture = try RawCapture(createdAt: Date(timeIntervalSince1970: 10), text: "Riya prefers email")
+    let action = try ClarificationProposal(
+        captureID: capture.id,
+        disposition: .action,
+        desiredOutcome: "Reply to Riya",
+        nextAction: "Open Riya's message",
+        confidence: 0.7
+    )
+    let memory = try ClarificationProposal(
+        captureID: capture.id,
+        disposition: .memory,
+        desiredOutcome: nil,
+        nextAction: nil,
+        confidence: 1
+    )
+    var intention = Intention(
+        id: capture.id,
+        sourceCaptureID: capture.id,
+        desiredOutcome: "Reply to Riya",
+        nextAction: "Open Riya's message",
+        state: .open,
+        createdAt: capture.createdAt,
+        returnPacket: nil
+    )
+    try intention.transition(to: .released)
+    let correction = ClarificationCorrection(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000021")!,
+        captureID: capture.id,
+        reviewedAt: Date(timeIntervalSince1970: 20),
+        previousProposal: action,
+        proposal: memory
+    )
+    let writer = try JSONFileThoughtRepository(directory: directory)
+    try await writer.save(capture: capture)
+    try await writer.save(proposal: action)
+
+    try await writer.apply(clarificationCorrection: correction, intention: intention)
+
+    let reader = try JSONFileThoughtRepository(directory: directory)
+    #expect(try await reader.proposal(captureID: capture.id) == memory)
+    #expect(try await reader.intention(id: capture.id) == intention)
+    #expect(try await reader.clarificationCorrections(captureID: capture.id) == [correction])
+}
+
 @Test func focusSessionAndIntentionPairSurviveRepositoryRestart() async throws {
     let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -96,6 +144,7 @@ private struct LegacySnapshot: Codable {
     #expect(try await repository.memoryRecords().isEmpty)
     #expect(try await repository.contextTrailSettings() == ContextTrailSettings())
     #expect(try await repository.contextTrailEvents().isEmpty)
+    #expect(try await repository.clarificationCorrections(captureID: nil).isEmpty)
 }
 
 @Test func transcriptionCorrectionsSurviveDevelopmentRestartWithStableOrdering() async throws {

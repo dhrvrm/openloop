@@ -85,17 +85,17 @@ git commit -m "feat: add human clarification review"
 - Test: `Tests/LocalStoreTests/JSONFileThoughtRepositoryTests.swift`
 - Test: `Tests/VaultStoreTests/EncryptedThoughtRepositoryTests.swift`
 
-- [ ] **Step 1: Write focused persistence tests**
+- [x] **Step 1: Write focused persistence tests**
 
 For each concrete repository, save a capture and action proposal/intention, apply a memory correction, reopen the repository, and assert the corrected proposal, released intention, and append-only correction all survive. Retain decode compatibility for snapshots without the new collection.
 
-- [ ] **Step 2: Run the persistence filter and confirm RED**
+- [x] **Step 2: Run the persistence filter and confirm RED**
 
 Run: `Scripts/test.sh --filter clarificationCorrection`
 
 Expected: compilation fails because repository correction APIs and snapshot storage do not exist.
 
-- [ ] **Step 3: Add repository APIs and atomic adapters**
+- [x] **Step 3: Add repository APIs and atomic adapters**
 
 Override the compatible repository seam in the concrete JSON and encrypted stores so proposal, intention, and correction are written in one locked snapshot update; their custom decoders default a missing corrections field to an empty dictionary.
 
@@ -108,13 +108,13 @@ func clarificationCorrections(captureID: UUID?) async throws -> [ClarificationCo
 func capture(id: UUID) async throws -> RawCapture?
 ```
 
-- [ ] **Step 4: Run the persistence filter and confirm GREEN**
+- [x] **Step 4: Run the persistence filter and confirm GREEN**
 
 Run: `Scripts/test.sh --filter clarificationCorrection`
 
 Expected: the local and encrypted round-trip tests pass.
 
-- [ ] **Step 5: Commit durable review history**
+- [x] **Step 5: Commit durable review history**
 
 ```bash
 git add Sources/ADHDCore/Ports.swift Sources/LocalStore Sources/VaultStore Tests/LocalStoreTests Tests/VaultStoreTests

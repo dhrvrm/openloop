@@ -7,6 +7,7 @@ import LocalStore
 private struct VaultSnapshot: Codable {
     var captures: [UUID: RawCapture] = [:]
     var proposals: [UUID: ClarificationProposal] = [:]
+    var clarificationCorrections: [UUID: ClarificationCorrection] = [:]
     var intentions: [UUID: Intention] = [:]
     var focusSessions: [UUID: FocusSession] = [:]
     var resurfacingRules: [UUID: ResurfacingRule] = [:]
@@ -19,6 +20,7 @@ private struct VaultSnapshot: Codable {
     private enum CodingKeys: String, CodingKey {
         case captures
         case proposals
+        case clarificationCorrections
         case intentions
         case focusSessions
         case resurfacingRules
@@ -37,6 +39,10 @@ private struct VaultSnapshot: Codable {
         proposals = try container.decodeIfPresent(
             [UUID: ClarificationProposal].self,
             forKey: .proposals
+        ) ?? [:]
+        clarificationCorrections = try container.decodeIfPresent(
+            [UUID: ClarificationCorrection].self,
+            forKey: .clarificationCorrections
         ) ?? [:]
         intentions = try container.decode([UUID: Intention].self, forKey: .intentions)
         focusSessions = try container.decodeIfPresent(
@@ -115,6 +121,11 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         try update { $0.captures[capture.id] = capture }
     }
 
+    public func capture(id: UUID) async throws -> RawCapture? {
+        try synchronize()
+        return snapshot.captures[id]
+    }
+
     public func save(proposal: ClarificationProposal) async throws {
         try update { $0.proposals[proposal.captureID] = proposal }
     }
@@ -124,6 +135,25 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
             $0.proposals[proposal.captureID] = proposal
             if let intention { $0.intentions[intention.id] = intention }
         }
+    }
+
+    public func apply(
+        clarificationCorrection: ClarificationCorrection,
+        intention: Intention?
+    ) async throws {
+        try update {
+            $0.proposals[clarificationCorrection.captureID] = clarificationCorrection.proposal
+            $0.clarificationCorrections[clarificationCorrection.id] = clarificationCorrection
+            if let intention { $0.intentions[intention.id] = intention }
+        }
+    }
+
+    public func clarificationCorrections(captureID: UUID?) async throws
+        -> [ClarificationCorrection] {
+        try synchronize()
+        return snapshot.clarificationCorrections.values
+            .filter { captureID == nil || $0.captureID == captureID }
+            .sorted(by: Self.clarificationCorrectionOrder)
     }
 
     public func save(intention: Intention) async throws {
@@ -283,6 +313,7 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         try synchronize()
         return snapshot.captures.isEmpty
             && snapshot.proposals.isEmpty
+            && snapshot.clarificationCorrections.isEmpty
             && snapshot.intentions.isEmpty
             && snapshot.focusSessions.isEmpty
             && snapshot.resurfacingRules.isEmpty
@@ -305,16 +336,20 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         let captureIDs = Set(value.captures.map(\.id))
         guard captureIDs.count == value.captures.count,
               Set(value.proposals.map(\.captureID)).count == value.proposals.count,
+              Set(value.clarificationCorrections.map(\.id)).count
+                == value.clarificationCorrections.count,
               Set(value.intentions.map(\.id)).count == value.intentions.count else {
             throw VaultStoreError.duplicateMigrationID
         }
         guard value.proposals.allSatisfy({ captureIDs.contains($0.captureID) }),
+              value.clarificationCorrections.allSatisfy({ captureIDs.contains($0.captureID) }),
               value.intentions.allSatisfy({ captureIDs.contains($0.sourceCaptureID) }) else {
             throw VaultStoreError.invalidMigrationReference
         }
         try update { candidate in
             guard candidate.captures.isEmpty,
                   candidate.proposals.isEmpty,
+                  candidate.clarificationCorrections.isEmpty,
                   candidate.intentions.isEmpty,
                   candidate.focusSessions.isEmpty,
                   candidate.resurfacingRules.isEmpty,
@@ -327,6 +362,9 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
             }
             candidate.captures = Dictionary(uniqueKeysWithValues: value.captures.map { ($0.id, $0) })
             candidate.proposals = Dictionary(uniqueKeysWithValues: value.proposals.map { ($0.captureID, $0) })
+            candidate.clarificationCorrections = Dictionary(
+                uniqueKeysWithValues: value.clarificationCorrections.map { ($0.id, $0) }
+            )
             candidate.intentions = Dictionary(uniqueKeysWithValues: value.intentions.map { ($0.id, $0) })
         }
     }
@@ -393,6 +431,9 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
             proposals: value.proposals.values.sorted {
                 $0.captureID.uuidString < $1.captureID.uuidString
             },
+            clarificationCorrections: value.clarificationCorrections.values.sorted(
+                by: clarificationCorrectionOrder
+            ),
             intentions: value.intentions.values.sorted(by: intentionOrder)
         )
     }
@@ -419,6 +460,14 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
     private static func intentionOrder(_ lhs: Intention, _ rhs: Intention) -> Bool {
         if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
         return lhs.createdAt < rhs.createdAt
+    }
+
+    private static func clarificationCorrectionOrder(
+        _ lhs: ClarificationCorrection,
+        _ rhs: ClarificationCorrection
+    ) -> Bool {
+        if lhs.reviewedAt == rhs.reviewedAt { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.reviewedAt < rhs.reviewedAt
     }
 
     private static func focusSessionOrder(_ lhs: FocusSession, _ rhs: FocusSession) -> Bool {
