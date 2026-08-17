@@ -27,6 +27,40 @@ enum PermissionCallbackBridge {
     }
 }
 
+enum AudioTapCallbackBridge {
+    nonisolated static func makeLevelCallback(
+        _ deliver: @escaping @MainActor @Sendable (Double) -> Void
+    ) -> @Sendable (Double) -> Void {
+        { value in
+            Task { @MainActor in deliver(value) }
+        }
+    }
+
+    nonisolated static func makeAudioTapCallback(
+        request: SFSpeechAudioBufferRecognitionRequest,
+        onAudioLevel: @escaping @MainActor @Sendable (Double) -> Void
+    ) -> AVAudioNodeTapBlock {
+        let deliverLevel = makeLevelCallback(onAudioLevel)
+        return { buffer, _ in
+            let level: Double
+            if let channel = buffer.floatChannelData?.pointee, buffer.frameLength > 0 {
+                var sum = 0.0
+                for index in 0..<Int(buffer.frameLength) {
+                    let sample = Double(channel[index])
+                    sum += sample * sample
+                }
+                level = AudioLevelNormalizer.normalized(
+                    rms: sqrt(sum / Double(buffer.frameLength))
+                )
+            } else {
+                level = 0
+            }
+            deliverLevel(level)
+            request.append(buffer)
+        }
+    }
+}
+
 enum AudioLevelNormalizer {
     static func normalized(rms: Double) -> Double {
         guard rms.isFinite, rms > 0 else { return 0 }
@@ -336,23 +370,16 @@ final class OnDeviceSpeechTranscriber: VoiceTranscribing {
 
         let input = audioEngine.inputNode
         let format = input.outputFormat(forBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1_024, format: format) { [weak request] buffer, _ in
-            let level: Double
-            if let channel = buffer.floatChannelData?.pointee, buffer.frameLength > 0 {
-                var sum = 0.0
-                for index in 0..<Int(buffer.frameLength) {
-                    let sample = Double(channel[index])
-                    sum += sample * sample
-                }
-                level = AudioLevelNormalizer.normalized(
-                    rms: sqrt(sum / Double(buffer.frameLength))
-                )
-            } else {
-                level = 0
-            }
-            Task { @MainActor in onAudioLevel(level) }
-            request?.append(buffer)
-        }
+        let audioTapCallback = AudioTapCallbackBridge.makeAudioTapCallback(
+            request: request,
+            onAudioLevel: onAudioLevel
+        )
+        input.installTap(
+            onBus: 0,
+            bufferSize: 1_024,
+            format: format,
+            block: audioTapCallback
+        )
         tapInstalled = true
         audioEngine.prepare()
         do {

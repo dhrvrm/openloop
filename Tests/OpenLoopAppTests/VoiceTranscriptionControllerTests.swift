@@ -14,6 +14,20 @@ import Testing
 }
 
 @MainActor
+@Test func audioTapCallbackBridgeAcceptsAWorkerQueueCompletion() async {
+    let received = await withCheckedContinuation { continuation in
+        let callback = AudioTapCallbackBridge.makeLevelCallback { value in
+            continuation.resume(returning: value)
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            callback(0.42)
+        }
+    }
+
+    #expect(received == 0.42)
+}
+
+@MainActor
 private final class FakeVoiceTranscriber: VoiceTranscribing {
     var authorization: VoiceAuthorization = .authorized
     var startCount = 0
