@@ -11,6 +11,7 @@ private struct VaultSnapshot: Codable {
     var focusSessions: [UUID: FocusSession] = [:]
     var resurfacingRules: [UUID: ResurfacingRule] = [:]
     var suggestionEvents: [UUID: SuggestionEvent] = [:]
+    var transcriptionCorrections: [UUID: TranscriptionCorrection] = [:]
 
     private enum CodingKeys: String, CodingKey {
         case captures
@@ -19,6 +20,7 @@ private struct VaultSnapshot: Codable {
         case focusSessions
         case resurfacingRules
         case suggestionEvents
+        case transcriptionCorrections
     }
 
     init() {}
@@ -42,6 +44,10 @@ private struct VaultSnapshot: Codable {
         suggestionEvents = try container.decodeIfPresent(
             [UUID: SuggestionEvent].self,
             forKey: .suggestionEvents
+        ) ?? [:]
+        transcriptionCorrections = try container.decodeIfPresent(
+            [UUID: TranscriptionCorrection].self,
+            forKey: .transcriptionCorrections
         ) ?? [:]
     }
 }
@@ -195,6 +201,17 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         return snapshot.suggestionEvents.values.sorted(by: Self.suggestionEventOrder)
     }
 
+    public func save(transcriptionCorrection: TranscriptionCorrection) async throws {
+        try update { $0.transcriptionCorrections[transcriptionCorrection.id] = transcriptionCorrection }
+    }
+
+    public func transcriptionCorrections() async throws -> [TranscriptionCorrection] {
+        try synchronize()
+        return snapshot.transcriptionCorrections.values.sorted(
+            by: Self.transcriptionCorrectionOrder
+        )
+    }
+
     public func empty() throws -> Bool {
         try synchronize()
         return snapshot.captures.isEmpty
@@ -203,6 +220,7 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
             && snapshot.focusSessions.isEmpty
             && snapshot.resurfacingRules.isEmpty
             && snapshot.suggestionEvents.isEmpty
+            && snapshot.transcriptionCorrections.isEmpty
     }
 
     public var counts: VaultCounts {
@@ -230,7 +248,8 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
                   candidate.intentions.isEmpty,
                   candidate.focusSessions.isEmpty,
                   candidate.resurfacingRules.isEmpty,
-                  candidate.suggestionEvents.isEmpty else {
+                  candidate.suggestionEvents.isEmpty,
+                  candidate.transcriptionCorrections.isEmpty else {
                 throw VaultStoreError.vaultNotEmpty
             }
             candidate.captures = Dictionary(uniqueKeysWithValues: value.captures.map { ($0.id, $0) })
@@ -350,6 +369,14 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
     ) -> Bool {
         if lhs.occurredAt == rhs.occurredAt { return lhs.id.uuidString < rhs.id.uuidString }
         return lhs.occurredAt < rhs.occurredAt
+    }
+
+    private static func transcriptionCorrectionOrder(
+        _ lhs: TranscriptionCorrection,
+        _ rhs: TranscriptionCorrection
+    ) -> Bool {
+        if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.createdAt < rhs.createdAt
     }
 
     private static func validateCurrentFocus(

@@ -122,6 +122,31 @@ private func temporaryDirectory() -> URL {
     let repository = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
 
     #expect(try await repository.focusSessions().isEmpty)
+    #expect(try await repository.transcriptionCorrections().isEmpty)
+}
+
+@Test func transcriptionCorrectionSurvivesEncryptedRestartWithoutPlaintext() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let correction = try TranscriptionCorrection(
+        recognized: "distinct recognized voice marker",
+        corrected: "Distinct Corrected Voice Marker",
+        createdAt: Date(timeIntervalSince1970: 40)
+    )
+    let writer = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+
+    try await writer.save(transcriptionCorrection: correction)
+
+    let reader = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    #expect(try await reader.transcriptionCorrections() == [correction])
+    let files = try FileManager.default.contentsOfDirectory(
+        at: directory, includingPropertiesForKeys: nil
+    )
+    for file in files {
+        let data = try Data(contentsOf: file)
+        #expect(data.range(of: Data(correction.recognized.utf8)) == nil)
+        #expect(data.range(of: Data(correction.corrected.utf8)) == nil)
+    }
 }
 
 @Test func wrongKeyCannotOpenVault() async throws {

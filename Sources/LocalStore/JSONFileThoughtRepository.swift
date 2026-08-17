@@ -8,6 +8,7 @@ private struct Snapshot: Codable {
     var focusSessions: [UUID: FocusSession] = [:]
     var resurfacingRules: [UUID: ResurfacingRule] = [:]
     var suggestionEvents: [UUID: SuggestionEvent] = [:]
+    var transcriptionCorrections: [UUID: TranscriptionCorrection] = [:]
 
     private enum CodingKeys: String, CodingKey {
         case captures
@@ -16,6 +17,7 @@ private struct Snapshot: Codable {
         case focusSessions
         case resurfacingRules
         case suggestionEvents
+        case transcriptionCorrections
     }
 
     init() {}
@@ -39,6 +41,10 @@ private struct Snapshot: Codable {
         suggestionEvents = try container.decodeIfPresent(
             [UUID: SuggestionEvent].self,
             forKey: .suggestionEvents
+        ) ?? [:]
+        transcriptionCorrections = try container.decodeIfPresent(
+            [UUID: TranscriptionCorrection].self,
+            forKey: .transcriptionCorrections
         ) ?? [:]
     }
 }
@@ -184,6 +190,14 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         snapshot.suggestionEvents.values.sorted(by: Self.suggestionEventOrder)
     }
 
+    public func save(transcriptionCorrection: TranscriptionCorrection) async throws {
+        try update { $0.transcriptionCorrections[transcriptionCorrection.id] = transcriptionCorrection }
+    }
+
+    public func transcriptionCorrections() async throws -> [TranscriptionCorrection] {
+        snapshot.transcriptionCorrections.values.sorted(by: Self.transcriptionCorrectionOrder)
+    }
+
     func snapshotCaptures() -> [RawCapture] {
         snapshot.captures.values.sorted(by: Self.captureOrder)
     }
@@ -263,5 +277,13 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
     ) -> Bool {
         if lhs.occurredAt == rhs.occurredAt { return lhs.id.uuidString < rhs.id.uuidString }
         return lhs.occurredAt < rhs.occurredAt
+    }
+
+    private static func transcriptionCorrectionOrder(
+        _ lhs: TranscriptionCorrection,
+        _ rhs: TranscriptionCorrection
+    ) -> Bool {
+        if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.createdAt < rhs.createdAt
     }
 }

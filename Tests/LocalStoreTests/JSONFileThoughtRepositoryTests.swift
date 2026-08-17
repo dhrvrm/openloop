@@ -92,6 +92,29 @@ private struct LegacySnapshot: Codable {
 
     #expect(try await repository.proposal(captureID: capture.id) == nil)
     #expect(try await repository.captures(disposition: .unclear).isEmpty)
+    #expect(try await repository.transcriptionCorrections().isEmpty)
+}
+
+@Test func transcriptionCorrectionsSurviveDevelopmentRestartWithStableOrdering() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let timestamp = Date(timeIntervalSince1970: 10)
+    let later = try TranscriptionCorrection(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+        recognized: "open ex code", corrected: "Open Xcode", createdAt: timestamp
+    )
+    let earlier = try TranscriptionCorrection(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+        recognized: "call cool van", corrected: "Call Kuvam", createdAt: timestamp
+    )
+    let writer = try JSONFileThoughtRepository(directory: directory)
+
+    try await writer.save(transcriptionCorrection: later)
+    try await writer.save(transcriptionCorrection: earlier)
+
+    let reader = try JSONFileThoughtRepository(directory: directory)
+    #expect(try await reader.transcriptionCorrections() == [earlier, later])
 }
 
 @Test func dispositionReadsHaveStableOrderingForEqualTimestamps() async throws {
