@@ -26,6 +26,12 @@ import Testing
     #expect(controller.job.message == "Transcript ready in Recall")
     #expect(controller.transcripts.count == 1)
     #expect(controller.transcripts[0].text == "नमस्ते team")
+    #expect(controller.pipelineEvents.map(\.stage) == [
+        .waitingForModel,
+        .transcribing,
+        .saving,
+        .ready,
+    ])
     #expect(try FileManager.default.contentsOfDirectory(
         at: root.appendingPathComponent("staging"),
         includingPropertiesForKeys: nil

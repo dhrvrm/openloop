@@ -39,6 +39,9 @@ final class AppModel: ObservableObject {
     @Published var voiceCapture = VoiceCapturePresentation()
     @Published var meetingJob = MeetingJobPresentation()
     @Published var meetingTranscripts: [MeetingTranscript] = []
+    @Published var meetingEngineDiagnostics = MeetingEngineDiagnostics.checking
+    @Published var meetingPipelineEvents: [MeetingPipelineEvent] = []
+    @Published var isAdvancedModeEnabled: Bool
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -48,12 +51,16 @@ final class AppModel: ObservableObject {
     private let workingMemory: (any WorkingMemoryCompiling)?
     private let contextTrail: (any ContextTrailProviding)?
     private let privacyManager: (any PrivacyManaging)?
+    private let defaults: UserDefaults
+    private let advancedModeKey: String
     private var recallGeneration = 0
     private var voiceController: VoiceTranscriptionController?
     private var voiceObservation: AnyCancellable?
     private var meetingController: MeetingTranscriptionController?
     private var meetingJobObservation: AnyCancellable?
     private var meetingTranscriptObservation: AnyCancellable?
+    private var meetingDiagnosticsObservation: AnyCancellable?
+    private var meetingEventsObservation: AnyCancellable?
 
     init(
         loop: ThoughtLoop,
@@ -63,7 +70,9 @@ final class AppModel: ObservableObject {
         recallSearch: (any RecallSearching)? = nil,
         workingMemory: (any WorkingMemoryCompiling)? = nil,
         contextTrail: (any ContextTrailProviding)? = nil,
-        privacyManager: (any PrivacyManaging)? = nil
+        privacyManager: (any PrivacyManaging)? = nil,
+        defaults: UserDefaults = .standard,
+        advancedModeKey: String = "OpenLoopAdvancedMode"
     ) {
         self.loop = loop
         self.readModels = readModels
@@ -73,6 +82,9 @@ final class AppModel: ObservableObject {
         self.workingMemory = workingMemory
         self.contextTrail = contextTrail
         self.privacyManager = privacyManager
+        self.defaults = defaults
+        self.advancedModeKey = advancedModeKey
+        isAdvancedModeEnabled = defaults.bool(forKey: advancedModeKey)
     }
 
     func attachVoiceCapture(_ controller: VoiceTranscriptionController) {
@@ -118,7 +130,18 @@ final class AppModel: ObservableObject {
         meetingTranscriptObservation = controller.$transcripts.sink { [weak self] in
             self?.meetingTranscripts = $0
         }
+        meetingDiagnosticsObservation = controller.$engineDiagnostics.sink { [weak self] in
+            self?.meetingEngineDiagnostics = $0
+        }
+        meetingEventsObservation = controller.$pipelineEvents.sink { [weak self] in
+            self?.meetingPipelineEvents = $0
+        }
         Task { await controller.refresh() }
+    }
+
+    func setAdvancedModeEnabled(_ enabled: Bool) {
+        isAdvancedModeEnabled = enabled
+        defaults.set(enabled, forKey: advancedModeKey)
     }
 
     func importMeetingAudio(_ url: URL) {

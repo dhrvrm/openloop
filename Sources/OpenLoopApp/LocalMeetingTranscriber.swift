@@ -18,6 +18,14 @@ protocol MeetingTranscribing: Sendable {
         audioURL: URL,
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
     ) async throws -> LocalTranscriptionOutput
+
+    func diagnostics() async -> MeetingEngineDiagnostics
+}
+
+extension MeetingTranscribing {
+    func diagnostics() async -> MeetingEngineDiagnostics {
+        .checking
+    }
 }
 
 actor WhisperKitMeetingTranscriber: MeetingTranscribing {
@@ -32,6 +40,24 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
     ) {
         self.modelIdentifier = modelIdentifier
         self.modelStorageURL = modelStorageURL
+    }
+
+    func diagnostics() async -> MeetingEngineDiagnostics {
+        let markerURL = modelStorageURL.appendingPathComponent("resolved-model-path")
+        let isCached: Bool
+        if let storedPath = try? String(contentsOf: markerURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) {
+            isCached = FileManager.default.fileExists(atPath: storedPath)
+        } else {
+            isCached = false
+        }
+        return MeetingEngineDiagnostics(
+            transcriptionModel: modelIdentifier,
+            diarizationModel: "SpeakerKit Pyannote",
+            transcriptionModelState: isCached ? .cached : .downloadRequired,
+            modelCacheLocation: "OpenLoop data / Models / WhisperKit",
+            stagingLocation: "OpenLoop data / Meeting Staging"
+        )
     }
 
     func transcribe(

@@ -29,16 +29,35 @@ private struct MainView: View {
     @State private var privacyExpanded = false
     @State private var confirmingReset = false
     @FocusState private var recallFieldFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 0) {
-            workspaceSidebar
-            Divider()
-            selectedSurface
-                .padding(28)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        ZStack {
+            OpenLoopVisualSystem.canvas.ignoresSafeArea()
+            HStack(spacing: 0) {
+                workspaceSidebar
+                Divider().opacity(0.55)
+                selectedSurface
+                    .padding(.horizontal, 30)
+                    .padding(.vertical, 27)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                if model.isAdvancedModeEnabled {
+                    Divider().opacity(0.55)
+                    AdvancedInspector(
+                        model: model,
+                        selectedDestination: WorkspaceOrientation.destinations[selection]
+                    )
+                    .frame(width: 310)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
         }
-        .frame(minWidth: 780, minHeight: 560)
+        .frame(minWidth: model.isAdvancedModeEnabled ? 1120 : 820, minHeight: 600)
+        .tint(OpenLoopVisualSystem.accent)
+        .animation(
+            reduceMotion ? nil : .easeInOut(duration: 0.22),
+            value: model.isAdvancedModeEnabled
+        )
         .task { await model.refresh() }
         .onChange(of: selection) { _, tab in
             if tab == 3 {
@@ -73,13 +92,23 @@ private struct MainView: View {
     }
 
     private var workspaceSidebar: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("OPENLOOP")
-                    .font(.caption.monospaced().weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text("External working memory")
-                    .font(.callout.weight(.medium))
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(spacing: 11) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(OpenLoopVisualSystem.accent)
+                    Image(systemName: "circle.hexagongrid.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 38, height: 38)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("OpenLoop")
+                        .font(.headline.weight(.semibold))
+                    Text("Working memory")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             VStack(spacing: 5) {
@@ -91,17 +120,31 @@ private struct MainView: View {
 
             Spacer()
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle(
+                    isOn: Binding(
+                        get: { model.isAdvancedModeEnabled },
+                        set: { model.setAdvancedModeEnabled($0) }
+                    )
+                ) {
+                    Label("Advanced", systemImage: "slider.horizontal.3")
+                        .font(.callout.weight(.medium))
+                }
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .help("Show the local engine, pipeline, storage, and recent activity")
+
+                Divider()
                 Label(WorkspaceOrientation.quickCaptureShortcut, systemImage: "keyboard")
                 Label(WorkspaceOrientation.voiceCaptureShortcut, systemImage: "waveform")
             }
-            .font(.caption.monospaced())
+            .font(.caption)
             .foregroundStyle(.secondary)
         }
         .padding(20)
-        .frame(width: 205)
+        .frame(width: 218)
         .frame(maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(OpenLoopVisualSystem.sidebar)
     }
 
     private var interruptionPresented: Binding<Bool> {
@@ -200,8 +243,7 @@ private struct MainView: View {
             }
         }
         .padding(18)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.55))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .openLoopPanel()
     }
 
     private func currentIntention(_ item: NowItem) -> some View {
@@ -234,13 +276,12 @@ private struct MainView: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.72))
         .overlay(alignment: .leading) {
             Rectangle()
-                .fill(Color.accentColor.opacity(0.7))
+                .fill(OpenLoopVisualSystem.accent.opacity(0.78))
                 .frame(width: 3)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .openLoopPanel(emphasized: true)
     }
 
     private var contextTrailPanel: some View {
@@ -551,8 +592,7 @@ private struct MainView: View {
             }
         }
         .padding(14)
-        .background(Color.accentColor.opacity(0.055))
-        .clipShape(RoundedRectangle(cornerRadius: 9))
+        .openLoopPanel(emphasized: true)
     }
 
     private func presentMeetingImporter() {
@@ -621,8 +661,7 @@ private struct MainView: View {
         }
         .font(.callout.weight(.medium))
         .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.55))
-        .clipShape(RoundedRectangle(cornerRadius: 9))
+        .openLoopPanel()
     }
 
     private func saveEncryptedBackup() {
@@ -721,10 +760,11 @@ private struct ScreenHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(eyebrow)
-                .font(.caption.monospaced().weight(.semibold))
-                .foregroundStyle(.secondary)
+                .font(.caption2.monospaced().weight(.semibold))
+                .foregroundStyle(OpenLoopVisualSystem.accent)
             Text(title)
-                .font(.largeTitle.weight(.semibold))
+                .font(.system(size: 34, weight: .semibold, design: .rounded))
+                .tracking(-0.7)
             Text(detail)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -745,7 +785,9 @@ private struct WorkspaceSidebarButton: View {
             HStack(spacing: 10) {
                 Image(systemName: icon)
                     .frame(width: 17)
+                    .foregroundStyle(isSelected ? OpenLoopVisualSystem.accent : .secondary)
                 Text(title)
+                    .fontWeight(isSelected ? .semibold : .regular)
                 Spacer()
                 if let count {
                     Text("\(count)")
@@ -754,12 +796,20 @@ private struct WorkspaceSidebarButton: View {
                 }
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.vertical, 9)
             .contentShape(Rectangle())
             .background(
-                isSelected ? Color.accentColor.opacity(0.12) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 7)
+                isSelected ? OpenLoopVisualSystem.accentSoft : Color.clear,
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
             )
+            .overlay(alignment: .leading) {
+                if isSelected {
+                    Capsule()
+                        .fill(OpenLoopVisualSystem.accent)
+                        .frame(width: 3, height: 18)
+                        .offset(x: -1)
+                }
+            }
         }
         .buttonStyle(.plain)
     }
@@ -771,14 +821,27 @@ private struct QuickAddComposer: View {
     let submit: () async -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text("QUICK ADD")
-                .font(.caption.monospaced().weight(.semibold))
-                .foregroundStyle(.secondary)
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Capture anything", systemImage: "plus.circle.fill")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(OpenLoopVisualSystem.accent)
+                Spacer()
+                Text("TEXT · AUDIO · MEETING")
+                    .font(.caption2.monospaced().weight(.medium))
+                    .foregroundStyle(.tertiary)
+            }
+            HStack(alignment: .center, spacing: 10) {
                 TextField("What should OpenLoop hold for you?", text: $text)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.title3)
+                    .textFieldStyle(.plain)
+                    .font(.title3.weight(.medium))
+                    .padding(.horizontal, 13)
+                    .frame(height: 42)
+                    .background(.background.opacity(0.72), in: RoundedRectangle(cornerRadius: 10))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(OpenLoopVisualSystem.hairline, lineWidth: 1)
+                    }
                     .onSubmit { Task { await submit() } }
                 Button(isSaving ? "Saving…" : "Capture") {
                     Task { await submit() }
@@ -798,15 +861,21 @@ private struct QuickAddComposer: View {
                 .buttonStyle(.bordered)
                 .tint(model.meetingJob.stage == .recording ? .red : .accentColor)
                 .disabled(model.meetingJob.isActive && model.meetingJob.stage != .recording)
-                Button("Import audio…") { presentMeetingImporter() }
-                    .buttonStyle(.bordered)
-                    .disabled(model.meetingJob.isActive)
             }
-
+            HStack(spacing: 10) {
+                Button("Import meeting audio…", systemImage: "waveform.badge.plus") {
+                    presentMeetingImporter()
+                }
+                .buttonStyle(.borderless)
+                .disabled(model.meetingJob.isActive)
+                Spacer()
+                Text("Processed and encrypted on this Mac")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .padding(16)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.7))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(17)
+        .openLoopPanel(emphasized: model.meetingJob.isActive)
     }
 
     private var isSaving: Bool { model.isSaving }
@@ -876,12 +945,7 @@ private struct MeetingJobPanel: View {
             }
         }
         .padding(13)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.75))
-        .overlay(
-            RoundedRectangle(cornerRadius: 9)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 9))
+        .openLoopPanel(emphasized: model.meetingJob.isActive)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Local meeting transcription: \(model.meetingJob.message)")
     }
@@ -969,8 +1033,7 @@ private struct MeetingTranscriptRow: View {
             }
         }
         .padding(11)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .openLoopPanel()
     }
 
     private func timestamp(_ seconds: TimeInterval) -> String {
@@ -1093,7 +1156,7 @@ private struct StatusBanner: View {
             .foregroundStyle(.secondary)
             .padding(11)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+            .openLoopPanel(emphasized: true)
     }
 }
 
@@ -1703,8 +1766,12 @@ final class MainWindowController {
         hostingController = NSHostingController(rootView: MainView(model: model))
         window = NSWindow(contentViewController: hostingController)
         window.title = "OpenLoop ADHD"
-        window.setContentSize(NSSize(width: 940, height: 680))
+        window.setContentSize(NSSize(
+            width: model.isAdvancedModeEnabled ? 1240 : 980,
+            height: 720
+        ))
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.titlebarSeparatorStyle = .none
     }
 
     func show(tab: Int) {

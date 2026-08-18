@@ -194,6 +194,21 @@ actions. A transcript never becomes a task unless the user explicitly captures i
 The older Apple Speech controller remains temporarily as a compiled compatibility
 test seam, but the packaged app no longer constructs or authorizes it.
 
+### Advanced Mode
+
+Turn on **Advanced** at the bottom of the workspace sidebar to open a live system
+inspector beside the current surface. It shows the real local pipeline from audio
+and retry-safe staging through Whisper, speaker separation, encrypted vault, and
+Recall; the active stage and coarse progress milestones update while a meeting is
+processed. The inspector also reports the selected local models, whether the
+Whisper model is cached, microphone availability, encrypted transcript storage,
+and a bounded recent-activity history.
+
+Advanced Mode is optional, off by default, and remembered on this Mac. It does not
+add logging, upload telemetry, inspect transcript contents, expose a full home
+directory path, or fabricate throughput and accuracy figures. Turning it off
+returns to the calm four-destination workspace without disabling any capability.
+
 ## Personal Recall
 
 Press Command-Shift-F to open Recall. Exact phrases, shared words, and local

@@ -23,12 +23,15 @@ struct MeetingJobPresentation: Equatable, Sendable {
 final class MeetingTranscriptionController: ObservableObject {
     @Published private(set) var job = MeetingJobPresentation()
     @Published private(set) var transcripts: [MeetingTranscript] = []
+    @Published private(set) var engineDiagnostics = MeetingEngineDiagnostics.checking
+    @Published private(set) var pipelineEvents: [MeetingPipelineEvent] = []
 
     private let repository: any ThoughtRepository
     private let transcriber: any MeetingTranscribing
     private let stagingDirectory: URL
     private let recorder: (any MeetingAudioRecording)?
     private var work: Task<Void, Never>?
+    private var eventHistory = MeetingPipelineEventHistory()
 
     init(
         repository: any ThoughtRepository,
@@ -44,6 +47,7 @@ final class MeetingTranscriptionController: ObservableObject {
 
     func refresh() async {
         transcripts = (try? await repository.meetingTranscripts()) ?? []
+        engineDiagnostics = await transcriber.diagnostics()
     }
 
     func importAudio(_ sourceURL: URL) {
@@ -57,6 +61,7 @@ final class MeetingTranscriptionController: ObservableObject {
                 sourceName: sourceURL.lastPathComponent,
                 message: Self.message(for: error)
             )
+            recordEvent(stage: .failed, message: job.message, fraction: 0)
         }
     }
 
@@ -66,12 +71,14 @@ final class MeetingTranscriptionController: ObservableObject {
                 stage: .failed,
                 message: "Microphone recording is unavailable. Import an audio file instead."
             )
+            recordEvent(stage: .failed, message: job.message, fraction: 0)
             return
         }
         if job.stage == .recording {
             guard let url = recorder.stop() else {
                 job.stage = .failed
                 job.message = "The recording could not be finalized. Try again or import a file."
+                recordEvent(stage: .failed, message: job.message, fraction: job.fraction)
                 return
             }
             start(stagedURL: url, sourceName: "OpenLoop recording.m4a")
@@ -84,9 +91,11 @@ final class MeetingTranscriptionController: ObservableObject {
             startedAt: .now,
             modelIdentifier: transcriber.modelIdentifier
         )
+        recordEvent(stage: .requestingMicrophone, message: job.message, fraction: 0)
         guard await recorder.requestPermission() else {
             job.stage = .failed
             job.message = "Microphone access is off. Enable OpenLoop in System Settings, or import an audio file with no permission."
+            recordEvent(stage: .failed, message: job.message, fraction: 0)
             return
         }
         do {
@@ -106,10 +115,12 @@ final class MeetingTranscriptionController: ObservableObject {
                 modelIdentifier: transcriber.modelIdentifier,
                 stagedAudioURL: url
             )
+            recordEvent(stage: .recording, message: job.message, fraction: 0)
         } catch {
             recorder.cancel()
             job.stage = .failed
             job.message = "Recording could not start. Check the selected microphone or import an audio file."
+            recordEvent(stage: .failed, message: job.message, fraction: 0)
         }
     }
 
@@ -126,6 +137,7 @@ final class MeetingTranscriptionController: ObservableObject {
         work = nil
         job.stage = .cancelled
         job.message = "Cancelled. The local audio copy is available to retry."
+        recordEvent(stage: .cancelled, message: job.message, fraction: job.fraction)
     }
 
     func clearFinishedJob() {
@@ -143,11 +155,12 @@ final class MeetingTranscriptionController: ObservableObject {
                 stage: .failed,
                 message: "That encrypted transcript could not be removed."
             )
+            recordEvent(stage: .failed, message: job.message, fraction: 0)
         }
     }
 
     func waitUntilSettledForTesting() async {
-        while job.isActive {
+        while job.isActive || work != nil {
             await Task.yield()
         }
     }
@@ -162,21 +175,22 @@ final class MeetingTranscriptionController: ObservableObject {
             modelIdentifier: transcriber.modelIdentifier,
             stagedAudioURL: stagedURL
         )
+        recordEvent(stage: .waitingForModel, message: job.message, fraction: 0)
         work = Task { [weak self] in
             guard let self else { return }
+            engineDiagnostics = await transcriber.diagnostics()
             do {
                 let output = try await transcriber.transcribe(audioURL: stagedURL) { [weak self] value in
                     await MainActor.run {
                         guard let self, self.job.isActive else { return }
-                        self.job.stage = value.stage
-                        self.job.fraction = value.fraction
-                        self.job.message = value.message ?? Self.title(for: value.stage)
+                        self.apply(value)
                     }
                 }
                 try Task.checkCancellation()
                 job.stage = .saving
                 job.fraction = 1
                 job.message = "Encrypting the transcript"
+                recordEvent(stage: .saving, message: job.message, fraction: 1)
                 let transcript = try MeetingTranscript(
                     sourceName: sourceName,
                     duration: output.duration,
@@ -191,17 +205,37 @@ final class MeetingTranscriptionController: ObservableObject {
                 job.fraction = 1
                 job.message = "Transcript ready in Recall"
                 job.stagedAudioURL = nil
+                engineDiagnostics = await transcriber.diagnostics()
+                recordEvent(stage: .ready, message: job.message, fraction: 1)
                 work = nil
             } catch is CancellationError {
                 job.stage = .cancelled
                 job.message = "Cancelled. The local audio copy is available to retry."
+                recordEvent(stage: .cancelled, message: job.message, fraction: job.fraction)
                 work = nil
             } catch {
                 job.stage = .failed
                 job.message = Self.message(for: error)
+                recordEvent(stage: .failed, message: job.message, fraction: job.fraction)
                 work = nil
             }
         }
+    }
+
+    private func apply(_ progress: MeetingTranscriptionProgress) {
+        job.stage = progress.stage
+        job.fraction = progress.fraction
+        job.message = progress.message ?? Self.title(for: progress.stage)
+        recordEvent(stage: progress.stage, message: job.message, fraction: progress.fraction)
+    }
+
+    private func recordEvent(
+        stage: MeetingTranscriptionStage,
+        message: String,
+        fraction: Double
+    ) {
+        eventHistory.record(stage: stage, message: message, fraction: fraction)
+        pipelineEvents = eventHistory.values
     }
 
     private func stage(_ sourceURL: URL) throws -> URL {

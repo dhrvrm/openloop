@@ -151,3 +151,31 @@ private actor EnabledWindowContextTrail: ContextTrailProviding {
 
     #expect(requestedTabs == [0, 0])
 }
+
+@MainActor
+@Test func advancedModePreferencePersistsAcrossAppModels() {
+    let suiteName = "OpenLoopAppTests.AdvancedMode.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let repository = EmptyWindowRepository()
+    let loop = ThoughtLoop(repository: repository, clarifier: WindowUnusedClarifier())
+    let key = "advanced-mode"
+
+    let first = AppModel(
+        loop: loop,
+        readModels: ThoughtReadModels(repository: repository),
+        defaults: defaults,
+        advancedModeKey: key
+    )
+    #expect(first.isAdvancedModeEnabled == false)
+
+    first.setAdvancedModeEnabled(true)
+
+    let second = AppModel(
+        loop: loop,
+        readModels: ThoughtReadModels(repository: repository),
+        defaults: defaults,
+        advancedModeKey: key
+    )
+    #expect(second.isAdvancedModeEnabled)
+}
