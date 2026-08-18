@@ -4,6 +4,7 @@ public enum ThoughtLoopError: Error, Equatable {
     case intentionNotFound(UUID)
     case captureNotFound(UUID)
     case intentionCannotBeReviewed(UUID, IntentionState)
+    case invalidIntentionOrder
 }
 
 public struct CaptureResult: Sendable {
@@ -90,7 +91,8 @@ public struct ThoughtLoop: Sendable {
                     nextAction: action,
                     state: .open,
                     createdAt: currentIntention.createdAt,
-                    returnPacket: nil
+                    returnPacket: nil,
+                    manualOrder: currentIntention.manualOrder
                 )
             } else {
                 try currentIntention.transition(to: .released)
@@ -160,6 +162,28 @@ public struct ThoughtLoop: Sendable {
         try intention.transition(to: .closed)
         try await repository.save(intention: intention)
         return intention
+    }
+
+    public func release(_ id: UUID) async throws -> Intention {
+        var intention = try await loadIntention(id)
+        try intention.transition(to: .released)
+        try await repository.save(intention: intention)
+        return intention
+    }
+
+    public func reorderOpenIntentions(_ orderedIDs: [UUID]) async throws {
+        let intentions = try await repository.openIntentions()
+        let byID = Dictionary(uniqueKeysWithValues: intentions.map { ($0.id, $0) })
+        let knownIDs = Set(byID.keys)
+        guard orderedIDs.count == knownIDs.count, Set(orderedIDs) == knownIDs else {
+            throw ThoughtLoopError.invalidIntentionOrder
+        }
+        let reordered = orderedIDs.enumerated().map { index, id in
+            var intention = byID[id]!
+            intention.place(at: index)
+            return intention
+        }
+        try await repository.save(intentions: reordered)
     }
 
     private func loadIntention(_ id: UUID) async throws -> Intention {

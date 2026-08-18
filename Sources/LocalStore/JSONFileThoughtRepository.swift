@@ -13,6 +13,7 @@ private struct Snapshot: Codable {
     var memoryRecords: [UUID: MemoryRecord] = [:]
     var contextTrailSettings = ContextTrailSettings()
     var contextTrailEvents: [UUID: ContextTrailEvent] = [:]
+    var retentionPolicy = PrivacyRetentionPolicy.keepForever
 
     private enum CodingKeys: String, CodingKey {
         case captures
@@ -26,6 +27,7 @@ private struct Snapshot: Codable {
         case memoryRecords
         case contextTrailSettings
         case contextTrailEvents
+        case retentionPolicy
     }
 
     init() {}
@@ -70,6 +72,10 @@ private struct Snapshot: Codable {
             [UUID: ContextTrailEvent].self,
             forKey: .contextTrailEvents
         ) ?? [:]
+        retentionPolicy = try container.decodeIfPresent(
+            PrivacyRetentionPolicy.self,
+            forKey: .retentionPolicy
+        ) ?? .keepForever
     }
 }
 
@@ -145,6 +151,12 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
 
     public func save(intention: Intention) async throws {
         try update { $0.intentions[intention.id] = intention }
+    }
+
+    public func save(intentions: [Intention]) async throws {
+        try update { snapshot in
+            for intention in intentions { snapshot.intentions[intention.id] = intention }
+        }
     }
 
     public func save(focusSession: FocusSession) async throws {
@@ -288,6 +300,38 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         snapshot.intentions.values.sorted(by: Self.intentionOrder)
     }
 
+    public func privacySummary() async throws -> PrivacyDataSummary {
+        let open = snapshot.intentions.values.filter(Self.isOpen).count
+        return PrivacyDataSummary(
+            captureCount: snapshot.captures.count,
+            openIntentionCount: open,
+            completedIntentionCount: snapshot.intentions.count - open,
+            memoryCount: snapshot.memoryRecords.count,
+            contextEventCount: snapshot.contextTrailEvents.count,
+            encryptedBytes: Self.fileSize(fileURL)
+        )
+    }
+
+    public func retentionPolicy() async throws -> PrivacyRetentionPolicy {
+        snapshot.retentionPolicy
+    }
+
+    public func applyRetention(
+        _ policy: PrivacyRetentionPolicy,
+        at date: Date
+    ) async throws -> RetentionResult {
+        var result = RetentionResult(removedCaptures: 0, removedIntentions: 0)
+        try update { snapshot in
+            snapshot.retentionPolicy = policy
+            result = Self.apply(policy: policy, at: date, to: &snapshot)
+        }
+        return result
+    }
+
+    public func resetAllData() async throws {
+        try update { $0 = Snapshot() }
+    }
+
     func snapshotCaptures() -> [RawCapture] {
         snapshot.captures.values.sorted(by: Self.captureOrder)
     }
@@ -393,5 +437,94 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         if lhs.updatedAt != rhs.updatedAt { return lhs.updatedAt > rhs.updatedAt }
         if lhs.kind != rhs.kind { return lhs.kind.rawValue < rhs.kind.rawValue }
         return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    private static func apply(
+        policy: PrivacyRetentionPolicy,
+        at date: Date,
+        to snapshot: inout Snapshot
+    ) -> RetentionResult {
+        guard let age = policy.age else { return RetentionResult(removedCaptures: 0, removedIntentions: 0) }
+        let cutoff = date.addingTimeInterval(-age)
+        let removableCaptureIDs = Set(snapshot.captures.values.compactMap { capture -> UUID? in
+            guard capture.createdAt < cutoff else { return nil }
+            guard let intention = snapshot.intentions.values.first(where: { $0.sourceCaptureID == capture.id }) else {
+                return capture.id
+            }
+            return Self.isOpen(intention) ? nil : capture.id
+        })
+        let removableIntentionIDs = Set(snapshot.intentions.values.compactMap {
+            removableCaptureIDs.contains($0.sourceCaptureID) ? $0.id : nil
+        })
+        let removableSessionIDs = Set(snapshot.focusSessions.values.compactMap {
+            removableIntentionIDs.contains($0.intentionID) ? $0.id : nil
+        })
+        let removableCorrectionIDs = Set(snapshot.transcriptionCorrections.values.compactMap {
+            $0.createdAt < cutoff ? $0.id : nil
+        })
+
+        snapshot.captures = snapshot.captures.filter { !removableCaptureIDs.contains($0.key) }
+        snapshot.proposals = snapshot.proposals.filter { !removableCaptureIDs.contains($0.key) }
+        snapshot.clarificationCorrections = snapshot.clarificationCorrections.filter {
+            !removableCaptureIDs.contains($0.value.captureID)
+        }
+        snapshot.intentions = snapshot.intentions.filter { !removableIntentionIDs.contains($0.key) }
+        snapshot.focusSessions = snapshot.focusSessions.filter { !removableSessionIDs.contains($0.key) }
+        snapshot.resurfacingRules = snapshot.resurfacingRules.filter {
+            !removableIntentionIDs.contains($0.key)
+        }
+        snapshot.suggestionEvents = snapshot.suggestionEvents.filter {
+            !removableIntentionIDs.contains($0.value.intentionID)
+        }
+        snapshot.contextTrailEvents = snapshot.contextTrailEvents.filter {
+            !removableSessionIDs.contains($0.value.focusSessionID) && $0.value.observedAt >= cutoff
+        }
+        snapshot.transcriptionCorrections = snapshot.transcriptionCorrections.filter {
+            !removableCorrectionIDs.contains($0.key)
+        }
+        snapshot.memoryRecords = snapshot.memoryRecords.compactMapValues { record in
+            Self.removingEvidence(
+                in: record,
+                captureIDs: removableCaptureIDs,
+                intentionIDs: removableIntentionIDs,
+                correctionIDs: removableCorrectionIDs,
+                at: date
+            )
+        }
+        return RetentionResult(
+            removedCaptures: removableCaptureIDs.count,
+            removedIntentions: removableIntentionIDs.count
+        )
+    }
+
+    private static func removingEvidence(
+        in record: MemoryRecord,
+        captureIDs: Set<UUID>,
+        intentionIDs: Set<UUID>,
+        correctionIDs: Set<UUID>,
+        at date: Date
+    ) -> MemoryRecord? {
+        var updated = record
+        updated.evidence = record.evidence.filter { evidence in
+            let removed = switch evidence.evidenceID.kind {
+            case .capture: captureIDs.contains(evidence.evidenceID.id)
+            case .intention, .returnPacket: intentionIDs.contains(evidence.evidenceID.id)
+            case .correction: correctionIDs.contains(evidence.evidenceID.id)
+            case .memory: false
+            }
+            return !removed
+        }
+        guard !updated.evidence.isEmpty else { return nil }
+        if updated != record { updated.updatedAt = date }
+        return updated
+    }
+
+    private static func isOpen(_ intention: Intention) -> Bool {
+        intention.state == .open || intention.state == .active || intention.state == .interrupted
+    }
+
+    private static func fileSize(_ url: URL) -> Int64 {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return (attributes?[.size] as? NSNumber)?.int64Value ?? 0
     }
 }

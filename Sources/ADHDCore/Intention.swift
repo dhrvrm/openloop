@@ -48,6 +48,7 @@ public struct Intention: Codable, Equatable, Identifiable, Sendable {
     public private(set) var state: IntentionState
     public let createdAt: Date
     public private(set) var returnPacket: ReturnPacket?
+    public private(set) var manualOrder: Int?
 
     public init(
         id: UUID,
@@ -56,7 +57,8 @@ public struct Intention: Codable, Equatable, Identifiable, Sendable {
         nextAction: String,
         state: IntentionState,
         createdAt: Date,
-        returnPacket: ReturnPacket?
+        returnPacket: ReturnPacket?,
+        manualOrder: Int? = nil
     ) {
         self.id = id
         self.sourceCaptureID = sourceCaptureID
@@ -65,6 +67,7 @@ public struct Intention: Codable, Equatable, Identifiable, Sendable {
         self.state = state
         self.createdAt = createdAt
         self.returnPacket = returnPacket
+        self.manualOrder = manualOrder
     }
 
     public mutating func transition(to target: IntentionState) throws {
@@ -102,5 +105,9 @@ public struct Intention: Codable, Equatable, Identifiable, Sendable {
             nextAction = returnPacket.nextAction
         }
         state = .active
+    }
+
+    public mutating func place(at index: Int) {
+        manualOrder = max(0, index)
     }
 }

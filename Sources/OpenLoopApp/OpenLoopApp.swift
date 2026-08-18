@@ -88,6 +88,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private var contextProvider: FrontmostApplicationReferenceProvider?
     private var applicationContextObserver: ApplicationContextObserver?
     private var workspaceLifecycle: WorkspaceLifecycle?
+    private let launchRecovery = LaunchRecoveryTracker()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { await start() }
@@ -95,6 +96,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
 
     private func start() async {
         do {
+            let recoveredAfterUnexpectedExit = launchRecovery.beginLaunch()
             let directory = dataDirectory()
             let service = ProcessInfo.processInfo.environment["OPENLOOP_KEYCHAIN_SERVICE"]
                 ?? "dev.openloop.adhd.vault"
@@ -128,12 +130,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             )
             let resurfacingLoop = ResurfacingLoop(repository: repository)
             let recallSource = RecallDocumentSource(repository: repository)
+            let recallIndex = try EncryptedRecallIndexStore(
+                directory: directory,
+                rootKeyData: rootKeyData
+            )
             let recallLoop = RecallLoop(
                 source: recallSource,
-                indexStore: try EncryptedRecallIndexStore(
-                    directory: directory,
-                    rootKeyData: rootKeyData
-                ),
+                indexStore: recallIndex,
                 embeddingProvider: NaturalLanguageEmbeddingProvider()
             )
             let workingMemory = WorkingMemoryCompiler(
@@ -148,8 +151,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 resurfacingLoop: resurfacingLoop,
                 recallSearch: recallLoop,
                 workingMemory: workingMemory,
-                contextTrail: contextTrailLoop
+                contextTrail: contextTrailLoop,
+                privacyManager: LocalPrivacyManager(
+                    repository: repository,
+                    recallIndex: recallIndex
+                )
             )
+            model.recoveryNotice = recoveredAfterUnexpectedExit
+                ? "OpenLoop recovered your saved work after an unexpected exit."
+                : nil
+            model.capabilitySummary = .current()
             _ = try await DevelopmentStoreMigrator().migrateIfNeeded(
                 from: directory,
                 to: repository
@@ -206,7 +217,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 hotKey = try GlobalHotKey { [weak quickCapture] startedAt in
                     quickCapture?.show(startedAt: startedAt)
                 }
+                model.capabilitySummary.quickCapture = .ready
             } catch {
+                model.capabilitySummary.quickCapture = .unavailable
                 model.commandError = "Quick Capture shortcut is unavailable. Use Capture in the menu."
             }
             do {
@@ -695,6 +708,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
 
     func applicationWillTerminate(_ notification: Notification) {
         applicationContextObserver?.stop()
+        launchRecovery.markCleanExit()
     }
 
     private func presentWorkspace(tab: Int) {

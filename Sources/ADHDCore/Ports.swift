@@ -11,6 +11,7 @@ public protocol ThoughtRepository: Sendable {
     ) async throws
     func clarificationCorrections(captureID: UUID?) async throws -> [ClarificationCorrection]
     func save(intention: Intention) async throws
+    func save(intentions: [Intention]) async throws
     func unclarifiedCaptures() async throws -> [RawCapture]
     func capturesRequiringClarification() async throws -> [RawCapture]
     func proposal(captureID: UUID) async throws -> ClarificationProposal?
@@ -37,6 +38,11 @@ public protocol ThoughtRepository: Sendable {
     func replace(contextTrailEvents: [ContextTrailEvent]) async throws
     func allCaptures() async throws -> [RawCapture]
     func allIntentions() async throws -> [Intention]
+    func privacySummary() async throws -> PrivacyDataSummary
+    func retentionPolicy() async throws -> PrivacyRetentionPolicy
+    func applyRetention(_ policy: PrivacyRetentionPolicy, at date: Date) async throws
+        -> RetentionResult
+    func resetAllData() async throws
 }
 
 public enum ThoughtRepositoryCompatibilityError: Error, Equatable {
@@ -45,6 +51,7 @@ public enum ThoughtRepositoryCompatibilityError: Error, Equatable {
     case voiceLearningUnsupported
     case workingMemoryUnsupported
     case contextTrailUnsupported
+    case privacyUnsupported
 }
 
 public enum ThoughtRepositoryFocusError: Error, Equatable {
@@ -138,6 +145,25 @@ public extension ThoughtRepository {
     func allCaptures() async throws -> [RawCapture] { [] }
 
     func allIntentions() async throws -> [Intention] { [] }
+
+    func save(intentions: [Intention]) async throws {
+        for intention in intentions { try await save(intention: intention) }
+    }
+
+    func privacySummary() async throws -> PrivacyDataSummary { .empty }
+
+    func retentionPolicy() async throws -> PrivacyRetentionPolicy { .keepForever }
+
+    func applyRetention(
+        _ policy: PrivacyRetentionPolicy,
+        at date: Date
+    ) async throws -> RetentionResult {
+        RetentionResult(removedCaptures: 0, removedIntentions: 0)
+    }
+
+    func resetAllData() async throws {
+        throw ThoughtRepositoryCompatibilityError.privacyUnsupported
+    }
 }
 
 public protocol ClarificationProvider: Sendable {

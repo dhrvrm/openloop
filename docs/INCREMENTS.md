@@ -158,6 +158,40 @@ action, memory, later thought, release, or remain unclear in one inline flow;
 relaunch preserves the decision and its correction evidence. Active and
 interrupted focus cannot be silently rewritten.
 
+## Increment 9 — Orientation and Workspace UX
+
+Behavior: the main window explains itself immediately, offers inline capture,
+and lets the user deliberately choose a next move from a calm ready queue.
+
+Exit gate: the four workspace destinations and both capture shortcuts are
+visible without menu hunting, and every empty state names the next available
+action without manufacturing urgency.
+
+## Increment 10 — Complete Task Lifecycle
+
+Behavior: an open loop can be edited, started, finished, released, or reordered
+without leaving the workspace or losing its source evidence.
+
+Exit gate: ordering survives relaunch and finishing or releasing active work
+atomically ends its focus session.
+
+## Increment 11 — Privacy and Data Control
+
+Behavior: Recall exposes local storage totals, retention, same-Mac encrypted
+backup, and a confirmed full reset.
+
+Exit gate: pruning removes only eligible terminal evidence and linked records;
+open work remains, derived Recall data is discarded, and backups contain no
+plaintext or root key.
+
+## Increment 12 — Release Reliability
+
+Behavior: the app reports calm recovery after an unexpected exit, explains
+capture capability state, and has distinct local and stable-signed build paths.
+
+Exit gate: focused v1 tests pass, a closed 1.0.0 local bundle verifies without
+being opened, and the release script refuses ad-hoc signing.
+
 ## Sequence rule
 
 Experiments may happen early, but an increment cannot become a dependency until

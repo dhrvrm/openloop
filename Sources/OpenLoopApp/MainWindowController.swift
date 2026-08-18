@@ -2,22 +2,42 @@ import ADHDCore
 import AppKit
 import SwiftUI
 
+struct WorkspaceDestination: Equatable, Sendable {
+    let title: String
+    let icon: String
+}
+
+enum WorkspaceOrientation {
+    static let destinations = [
+        WorkspaceDestination(title: "Now", icon: "scope"),
+        WorkspaceDestination(title: "Return", icon: "arrow.uturn.backward"),
+        WorkspaceDestination(title: "Later", icon: "tray"),
+        WorkspaceDestination(title: "Recall", icon: "text.magnifyingglass"),
+    ]
+    static let quickCaptureShortcut = "⌘⇧Space  Quick Capture"
+    static let voiceCaptureShortcut = "⌘⇧R  Record & transcribe"
+    static let emptyCaptureGuidance = "Type above or press Command-Shift-Space from anywhere."
+}
+
 private struct MainView: View {
     @ObservedObject var model: AppModel
     @State var selection = 0
     @State private var interruptionItem: NowItem?
     @State private var memoryHistoryExpanded = false
+    @State private var quickAddText = ""
+    @State private var privacyExpanded = false
+    @State private var confirmingReset = false
     @FocusState private var recallFieldFocused: Bool
 
     var body: some View {
-        TabView(selection: $selection) {
-            nowView.tag(0).tabItem { Text("Now") }
-            returnView.tag(1).tabItem { Text("Return") }
-            laterView.tag(2).tabItem { Text("Later") }
-            recallView.tag(3).tabItem { Text("Recall") }
+        HStack(spacing: 0) {
+            workspaceSidebar
+            Divider()
+            selectedSurface
+                .padding(28)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .padding(24)
-        .frame(minWidth: 600, minHeight: 460)
+        .frame(minWidth: 780, minHeight: 560)
         .task { await model.refresh() }
         .onChange(of: selection) { _, tab in
             if tab == 3 {
@@ -32,6 +52,55 @@ private struct MainView: View {
                 }
             }
         }
+        .alert("Remove all OpenLoop data?", isPresented: $confirmingReset) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove everything", role: .destructive) {
+                Task { await model.resetAllData() }
+            }
+        } message: {
+            Text("This removes captures, tasks, memories, context, and the Recall index from this Mac. This cannot be undone.")
+        }
+    }
+
+    @ViewBuilder private var selectedSurface: some View {
+        switch selection {
+        case 1: returnView
+        case 2: laterView
+        case 3: recallView
+        default: nowView
+        }
+    }
+
+    private var workspaceSidebar: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("OPENLOOP")
+                    .font(.caption.monospaced().weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text("External working memory")
+                    .font(.callout.weight(.medium))
+            }
+
+            VStack(spacing: 5) {
+                WorkspaceSidebarButton(title: WorkspaceOrientation.destinations[0].title, icon: WorkspaceOrientation.destinations[0].icon, count: nil, isSelected: selection == 0) { selection = 0 }
+                WorkspaceSidebarButton(title: WorkspaceOrientation.destinations[1].title, icon: WorkspaceOrientation.destinations[1].icon, count: model.returns.isEmpty ? nil : model.returns.count, isSelected: selection == 1) { selection = 1 }
+                WorkspaceSidebarButton(title: WorkspaceOrientation.destinations[2].title, icon: WorkspaceOrientation.destinations[2].icon, count: model.reviewItems.isEmpty ? nil : model.reviewItems.count, isSelected: selection == 2) { selection = 2 }
+                WorkspaceSidebarButton(title: WorkspaceOrientation.destinations[3].title, icon: WorkspaceOrientation.destinations[3].icon, count: nil, isSelected: selection == 3) { selection = 3 }
+            }
+
+            Spacer()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label(WorkspaceOrientation.quickCaptureShortcut, systemImage: "keyboard")
+                Label(WorkspaceOrientation.voiceCaptureShortcut, systemImage: "waveform")
+            }
+            .font(.caption.monospaced())
+            .foregroundStyle(.secondary)
+        }
+        .padding(20)
+        .frame(width: 205)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var interruptionPresented: Binding<Bool> {
@@ -44,16 +113,26 @@ private struct MainView: View {
     private var nowView: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Now")
-                        .font(.largeTitle.weight(.semibold))
-                    Text("One intention, with enough context to return.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                ScreenHeader(
+                    eyebrow: "FOCUS",
+                    title: "Now",
+                    detail: "Choose one visible next move. Everything else can wait safely."
+                )
+
+                if let notice = model.recoveryNotice {
+                    StatusBanner(text: notice, icon: "checkmark.shield")
                 }
 
-                if let item = model.now {
+                QuickAddComposer(text: $quickAddText, isSaving: model.isSaving) {
+                    let captured = await model.submitCapture(quickAddText)
+                    if captured { quickAddText = "" }
+                }
+                CaptureCapabilityNote(summary: model.capabilitySummary)
+
+                if let item = model.now, item.focus != nil {
                     currentIntention(item)
+                } else if model.openLoops.contains(where: { $0.state == .open }) {
+                    readyQueue
                 } else if model.suggestions.isEmpty {
                     ContentUnavailableView(
                         model.returns.isEmpty ? "Nothing active" : "Your place is saved",
@@ -62,14 +141,14 @@ private struct MainView: View {
                             : "arrow.uturn.backward.circle",
                         description: Text(
                             model.returns.isEmpty
-                                ? "Capture an action when it arrives."
+                                ? WorkspaceOrientation.emptyCaptureGuidance
                                 : "Open Return when you are ready to continue."
                         )
                     )
                     .frame(maxWidth: .infinity, minHeight: 330)
                 }
 
-                contextTrailPanel
+                if model.now?.focus != nil { contextTrailPanel }
 
                 if model.suggestions.isEmpty == false {
                     VStack(alignment: .leading, spacing: 5) {
@@ -98,6 +177,27 @@ private struct MainView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var readyQueue: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Choose your next move")
+                    .font(.title2.weight(.semibold))
+                Text("Starting one moves it into focus. The order is yours.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, 12)
+
+            ForEach(model.openLoops.filter { $0.state == .open }) { item in
+                ReadyTaskRow(model: model, item: item)
+                Divider()
+            }
+        }
+        .padding(18)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private func currentIntention(_ item: NowItem) -> some View {
@@ -233,6 +333,11 @@ private struct MainView: View {
 
     private var returnView: some View {
         VStack(alignment: .leading, spacing: 10) {
+            ScreenHeader(
+                eyebrow: "RECOVERY",
+                title: "Return",
+                detail: "Exact restart points saved before an interruption."
+            )
             if let error = model.commandError {
                 Text(error).font(.callout).foregroundStyle(.secondary)
             }
@@ -258,14 +363,11 @@ private struct MainView: View {
         let heldSafely = model.reviewItems.filter { $0.needsDecision == false }
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 26) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Later")
-                        .font(.largeTitle.weight(.semibold))
-                    Text("A quiet place to decide what a capture means. Nothing here is overdue.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: 520, alignment: .leading)
-                }
+                ScreenHeader(
+                    eyebrow: "DECIDE",
+                    title: "Later",
+                    detail: "Clarify, edit, order, finish, or release. Nothing here is overdue."
+                )
 
                 if let error = model.reviewError {
                     Label(error, systemImage: "info.circle")
@@ -331,16 +433,14 @@ private struct MainView: View {
 
     private var recallView: some View {
         VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Recall")
-                    .font(.largeTitle.weight(.semibold))
-                Text("Find stored evidence. Nothing here is generated.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-
+            ScreenHeader(
+                eyebrow: "EVIDENCE",
+                title: "Recall",
+                detail: "Find what you captured and control what stays on this Mac."
+            )
 
             workingMemorySection
+            privacySection
 
             HStack(spacing: 10) {
                 TextField("Search captures, decisions, return points, and corrections", text: $model.recallQuery)
@@ -400,7 +500,77 @@ private struct MainView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onAppear { recallFieldFocused = true }
+        .onAppear {
+            recallFieldFocused = true
+            Task { await model.refreshPrivacy() }
+        }
+    }
+
+    private var privacySection: some View {
+        DisclosureGroup("Privacy & storage", isExpanded: $privacyExpanded) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 20) {
+                    PrivacyMetric(value: "\(model.privacySummary.captureCount)", label: "CAPTURES")
+                    PrivacyMetric(value: "\(model.privacySummary.openIntentionCount)", label: "OPEN")
+                    PrivacyMetric(value: "\(model.privacySummary.memoryCount)", label: "MEMORIES")
+                    PrivacyMetric(
+                        value: ByteCountFormatter.string(
+                            fromByteCount: model.privacySummary.encryptedBytes,
+                            countStyle: .file
+                        ),
+                        label: "ENCRYPTED"
+                    )
+                }
+
+                HStack {
+                    Text("Keep completed evidence")
+                        .font(.callout)
+                    Picker("Keep completed evidence", selection: Binding(
+                        get: { model.retentionPolicy },
+                        set: { policy in Task { await model.applyRetention(policy) } }
+                    )) {
+                        Text("Forever").tag(PrivacyRetentionPolicy.keepForever)
+                        Text("90 days").tag(PrivacyRetentionPolicy.ninetyDays)
+                        Text("30 days").tag(PrivacyRetentionPolicy.thirtyDays)
+                    }
+                    .labelsHidden()
+                    .frame(width: 120)
+                    Spacer()
+                }
+
+                Text("Backups contain only the encrypted vault, not its key, so they restore on this Mac with the same OpenLoop key.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 12) {
+                    Button("Save encrypted backup…") { saveEncryptedBackup() }
+                    Button("Remove all data…", role: .destructive) { confirmingReset = true }
+                    Spacer()
+                }
+                .disabled(model.isUpdatingPrivacy)
+
+                if let message = model.privacyError ?? model.privacyNotice {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.top, 12)
+        }
+        .font(.callout.weight(.medium))
+        .padding(14)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.55))
+        .clipShape(RoundedRectangle(cornerRadius: 9))
+    }
+
+    private func saveEncryptedBackup() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "OpenLoop Backup.openloopvault"
+        panel.canCreateDirectories = true
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { await model.createEncryptedBackup(at: url) }
+        }
     }
 
     @ViewBuilder private var workingMemorySection: some View {
@@ -477,6 +647,173 @@ private struct MainView: View {
         case .interrupted: "Return point saved"
         case .closed: "Finished"
         case .released: "Released"
+        }
+    }
+}
+
+private struct ScreenHeader: View {
+    let eyebrow: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(eyebrow)
+                .font(.caption.monospaced().weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.largeTitle.weight(.semibold))
+            Text(detail)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 560, alignment: .leading)
+        }
+    }
+}
+
+private struct WorkspaceSidebarButton: View {
+    let title: String
+    let icon: String
+    let count: Int?
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .frame(width: 17)
+                Text(title)
+                Spacer()
+                if let count {
+                    Text("\(count)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .background(
+                isSelected ? Color.accentColor.opacity(0.12) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 7)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct QuickAddComposer: View {
+    @Binding var text: String
+    let isSaving: Bool
+    let submit: () async -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("QUICK ADD")
+                .font(.caption.monospaced().weight(.semibold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                TextField("What should OpenLoop hold for you?", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.title3)
+                    .onSubmit { Task { await submit() } }
+                Button(isSaving ? "Saving…" : "Capture") {
+                    Task { await submit() }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isSaving || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(16)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.7))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+private struct CaptureCapabilityNote: View {
+    let summary: CapabilitySummary
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "lock.shield")
+            Text(note)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    private var note: String {
+        if summary.quickCapture == .unavailable {
+            return "Typed capture is ready here. The global shortcut is unavailable."
+        }
+        if summary.microphone == .unavailable || summary.speechRecognition == .unavailable {
+            return "Typed capture is ready. Voice is disabled in macOS privacy settings."
+        }
+        if summary.microphone == .askWhenUsed || summary.speechRecognition == .askWhenUsed {
+            return "Typed capture is ready. Voice asks permission only when first used."
+        }
+        return "Typed and voice capture stay on this Mac."
+    }
+}
+
+private struct StatusBanner: View {
+    let text: String
+    let icon: String
+
+    var body: some View {
+        Label(text, systemImage: icon)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .padding(11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+    }
+}
+
+private struct ReadyTaskRow: View {
+    @ObservedObject var model: AppModel
+    let item: OpenLoopItem
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.desiredOutcome)
+                    .font(.headline)
+                Text(item.nextAction)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 14)
+            Button("Start") { Task { await model.startFocus(item.id) } }
+                .buttonStyle(.borderedProminent)
+            Menu {
+                Button("Move up") { Task { await model.moveOpenLoop(item.id, by: -1) } }
+                Button("Move down") { Task { await model.moveOpenLoop(item.id, by: 1) } }
+                Divider()
+                Button("Finish") { Task { await model.finishOpenLoop(item.id) } }
+                Button("Release", role: .destructive) { Task { await model.releaseOpenLoop(item.id) } }
+            } label: {
+                Image(systemName: "ellipsis")
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 24)
+        }
+        .padding(.vertical, 13)
+    }
+}
+
+private struct PrivacyMetric: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.headline.monospacedDigit())
+            Text(label)
+                .font(.caption2.monospaced())
+                .foregroundStyle(.secondary)
         }
     }
 }
@@ -592,12 +929,36 @@ private struct ClarificationReviewRow: View {
 
     @ViewBuilder private var controls: some View {
         HStack(spacing: 12) {
-            if let openLoop, openLoop.state == .open {
-                Button("Start focus") {
-                    Task { await model.startFocus(openLoop.intentionID) }
+            if let openLoop {
+                if openLoop.state == .open {
+                    Button("Start focus") {
+                        Task { await model.startFocus(openLoop.intentionID) }
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
-                if let application = model.currentApplication {
+
+                Button("Finish") {
+                    Task { await model.finishOpenLoop(openLoop.intentionID) }
+                }
+
+                Menu {
+                    Button("Move up") {
+                        Task { await model.moveOpenLoop(openLoop.intentionID, by: -1) }
+                    }
+                    Button("Move down") {
+                        Task { await model.moveOpenLoop(openLoop.intentionID, by: 1) }
+                    }
+                    Divider()
+                    Button("Release", role: .destructive) {
+                        Task { await model.releaseOpenLoop(openLoop.intentionID) }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .frame(width: 24)
+
+                if openLoop.state == .open, let application = model.currentApplication {
                     Button(
                         model.isLinked(openLoop.intentionID, to: application)
                             ? "Stop suggesting here"
@@ -1016,7 +1377,7 @@ final class MainWindowController {
         hostingController = NSHostingController(rootView: MainView(model: model))
         window = NSWindow(contentViewController: hostingController)
         window.title = "OpenLoop ADHD"
-        window.setContentSize(NSSize(width: 760, height: 620))
+        window.setContentSize(NSSize(width: 940, height: 680))
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
     }
 

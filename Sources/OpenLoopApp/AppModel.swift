@@ -29,6 +29,13 @@ final class AppModel: ObservableObject {
     @Published var contextEpisodes: [ContextEpisode] = []
     @Published var isUpdatingContextTrail = false
     @Published var contextTrailError: String?
+    @Published var privacySummary = PrivacyDataSummary.empty
+    @Published var retentionPolicy = PrivacyRetentionPolicy.keepForever
+    @Published var isUpdatingPrivacy = false
+    @Published var privacyError: String?
+    @Published var privacyNotice: String?
+    @Published var recoveryNotice: String?
+    @Published var capabilitySummary = CapabilitySummary()
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -37,6 +44,7 @@ final class AppModel: ObservableObject {
     private let recallSearch: (any RecallSearching)?
     private let workingMemory: (any WorkingMemoryCompiling)?
     private let contextTrail: (any ContextTrailProviding)?
+    private let privacyManager: (any PrivacyManaging)?
     private var recallGeneration = 0
 
     init(
@@ -46,7 +54,8 @@ final class AppModel: ObservableObject {
         resurfacingLoop: ResurfacingLoop? = nil,
         recallSearch: (any RecallSearching)? = nil,
         workingMemory: (any WorkingMemoryCompiling)? = nil,
-        contextTrail: (any ContextTrailProviding)? = nil
+        contextTrail: (any ContextTrailProviding)? = nil,
+        privacyManager: (any PrivacyManaging)? = nil
     ) {
         self.loop = loop
         self.readModels = readModels
@@ -55,6 +64,7 @@ final class AppModel: ObservableObject {
         self.recallSearch = recallSearch
         self.workingMemory = workingMemory
         self.contextTrail = contextTrail
+        self.privacyManager = privacyManager
     }
 
     func refreshContextTrail(at date: Date = .now) async {
@@ -390,6 +400,140 @@ final class AppModel: ObservableObject {
     func finishFocus(_ intentionID: UUID) async -> Bool {
         await runFocusCommand {
             try await $0.finish(intentionID, at: .now)
+        }
+    }
+
+    @discardableResult
+    func finishOpenLoop(_ intentionID: UUID) async -> Bool {
+        guard let item = openLoops.first(where: { $0.id == intentionID }) else { return false }
+        if item.state == .open {
+            return await runThoughtCommand { try await self.loop.close(intentionID) }
+        }
+        return await finishFocus(intentionID)
+    }
+
+    @discardableResult
+    func releaseOpenLoop(_ intentionID: UUID) async -> Bool {
+        guard let item = openLoops.first(where: { $0.id == intentionID }) else { return false }
+        if item.state == .open {
+            return await runThoughtCommand { try await self.loop.release(intentionID) }
+        }
+        return await runFocusCommand { try await $0.release(intentionID, at: .now) }
+    }
+
+    @discardableResult
+    func moveOpenLoop(_ intentionID: UUID, by offset: Int) async -> Bool {
+        guard let index = openLoops.firstIndex(where: { $0.id == intentionID }) else { return false }
+        let destination = min(max(0, index + offset), openLoops.count - 1)
+        guard destination != index else { return true }
+        var ids = openLoops.map(\.id)
+        ids.swapAt(index, destination)
+        return await runThoughtCommand {
+            try await self.loop.reorderOpenIntentions(ids)
+        }
+    }
+
+    @discardableResult
+    func chooseNext(_ intentionID: UUID) async -> Bool {
+        guard let index = openLoops.firstIndex(where: { $0.id == intentionID }) else { return false }
+        var ids = openLoops.map(\.id)
+        let selected = ids.remove(at: index)
+        let insertionIndex = ids.firstIndex { id in
+            openLoops.first(where: { $0.id == id })?.state == .open
+        } ?? 0
+        ids.insert(selected, at: insertionIndex)
+        return await runThoughtCommand {
+            try await self.loop.reorderOpenIntentions(ids)
+        }
+    }
+
+    @discardableResult
+    private func runThoughtCommand<T>(_ operation: () async throws -> T) async -> Bool {
+        commandError = nil
+        do {
+            _ = try await operation()
+            return await refresh()
+        } catch {
+            commandError = "That task change could not be saved."
+            return false
+        }
+    }
+
+    func refreshPrivacy() async {
+        guard let privacyManager else { return }
+        do {
+            async let summary = privacyManager.summary()
+            async let policy = privacyManager.retentionPolicy()
+            privacySummary = try await summary
+            retentionPolicy = try await policy
+            privacyError = nil
+        } catch {
+            privacyError = "Private storage details are unavailable right now."
+        }
+    }
+
+    @discardableResult
+    func applyRetention(_ policy: PrivacyRetentionPolicy, at date: Date = .now) async -> Bool {
+        guard !isUpdatingPrivacy, let privacyManager else { return false }
+        isUpdatingPrivacy = true
+        privacyError = nil
+        defer { isUpdatingPrivacy = false }
+        do {
+            let result = try await privacyManager.applyRetention(policy, at: date)
+            retentionPolicy = policy
+            privacyNotice = result.removedCaptures == 0
+                ? "Retention preference saved. Nothing needed removal."
+                : "Removed \(result.removedCaptures) old captures and their linked task data."
+            recallQuery = ""
+            recallHits = []
+            await refreshPrivacy()
+            _ = await refresh()
+            await refreshMemory()
+            return true
+        } catch {
+            privacyError = "Retention could not be applied. Stored data is unchanged."
+            return false
+        }
+    }
+
+    @discardableResult
+    func createEncryptedBackup(at destination: URL) async -> Bool {
+        guard !isUpdatingPrivacy, let privacyManager else { return false }
+        isUpdatingPrivacy = true
+        privacyError = nil
+        defer { isUpdatingPrivacy = false }
+        do {
+            try await privacyManager.createEncryptedBackup(at: destination)
+            privacyNotice = "Encrypted same-Mac backup saved."
+            return true
+        } catch {
+            privacyError = "The encrypted backup could not be saved."
+            return false
+        }
+    }
+
+    @discardableResult
+    func resetAllData() async -> Bool {
+        guard !isUpdatingPrivacy, let privacyManager else { return false }
+        isUpdatingPrivacy = true
+        privacyError = nil
+        defer { isUpdatingPrivacy = false }
+        do {
+            try await privacyManager.resetAllData()
+            privacyNotice = "All OpenLoop data on this Mac was removed."
+            recallQuery = ""
+            recallHits = []
+            memoryRecords = []
+            contextTrailSettings = ContextTrailSettings()
+            contextEpisodes = []
+            suggestions = []
+            resurfacingRules = []
+            await refreshPrivacy()
+            _ = await refresh()
+            return true
+        } catch {
+            privacyError = "Data could not be reset. Stored data is unchanged."
+            return false
         }
     }
 

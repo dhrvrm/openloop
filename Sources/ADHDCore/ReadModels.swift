@@ -71,6 +71,7 @@ public struct OpenLoopItem: Equatable, Identifiable, Sendable {
     public let nextAction: String
     public let state: IntentionState
     public let createdAt: Date
+    public let manualOrder: Int?
 }
 
 public struct ThoughtReadModels: Sendable {
@@ -182,13 +183,17 @@ public struct ThoughtReadModels: Sendable {
                 desiredOutcome: $0.desiredOutcome,
                 nextAction: $0.nextAction,
                 state: $0.state,
-                createdAt: $0.createdAt
+                createdAt: $0.createdAt,
+                manualOrder: $0.manualOrder
             )
         }.sorted {
             let rank: [IntentionState: Int] = [.active: 0, .open: 1, .interrupted: 2]
             let left = rank[$0.state] ?? 3
             let right = rank[$1.state] ?? 3
             if left != right { return left < right }
+            let leftOrder = $0.manualOrder ?? Int.max
+            let rightOrder = $1.manualOrder ?? Int.max
+            if leftOrder != rightOrder { return leftOrder < rightOrder }
             if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
             return $0.intentionID.uuidString < $1.intentionID.uuidString
         }
@@ -199,6 +204,9 @@ public struct ThoughtReadModels: Sendable {
         let left = rank[lhs.state] ?? 3
         let right = rank[rhs.state] ?? 3
         if left != right { return left < right }
+        let leftOrder = lhs.manualOrder ?? Int.max
+        let rightOrder = rhs.manualOrder ?? Int.max
+        if leftOrder != rightOrder { return leftOrder < rightOrder }
         if lhs.createdAt != rhs.createdAt { return lhs.createdAt < rhs.createdAt }
         return lhs.id.uuidString < rhs.id.uuidString
     }

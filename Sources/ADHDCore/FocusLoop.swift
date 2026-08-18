@@ -83,6 +83,18 @@ public actor FocusLoop {
     }
 
     public func finish(_ intentionID: UUID, at date: Date) async throws -> FocusUpdate {
+        try await terminate(intentionID, as: .closed, at: date)
+    }
+
+    public func release(_ intentionID: UUID, at date: Date) async throws -> FocusUpdate {
+        try await terminate(intentionID, as: .released, at: date)
+    }
+
+    private func terminate(
+        _ intentionID: UUID,
+        as target: IntentionState,
+        at date: Date
+    ) async throws -> FocusUpdate {
         var intention = try await loadIntention(intentionID)
         var session: FocusSession
         if let existing = try await existingSession(intentionID) {
@@ -97,7 +109,7 @@ public actor FocusLoop {
                 state: intention.state == .interrupted ? .interrupted : .active
             )
         }
-        try intention.transition(to: .closed)
+        try intention.transition(to: target)
         try session.finish(at: date)
         return try await persist(intention, session)
     }
