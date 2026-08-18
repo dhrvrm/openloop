@@ -18,6 +18,7 @@ import Testing
         transcriber: transcriber,
         stagingDirectory: root.appendingPathComponent("staging")
     )
+    controller.setLanguagePreference(.hindiHinglish)
 
     controller.importAudio(audio)
     await controller.waitUntilSettledForTesting()
@@ -27,6 +28,8 @@ import Testing
     #expect(controller.transcripts.count == 1)
     #expect(controller.transcripts[0].text == "नमस्ते team")
     #expect(controller.job.previewText == "नमस्ते team")
+    #expect(controller.job.requestedLanguage == .hindiHinglish)
+    #expect(await transcriber.latestLanguageCode() == "hi")
     #expect(controller.pipelineEvents.map(\.stage) == [
         .waitingForModel,
         .transcribing,
@@ -64,11 +67,21 @@ import Testing
 
 private actor SuccessfulMeetingTranscriber: MeetingTranscribing {
     nonisolated let modelIdentifier = "local-test-model"
+    private var languageCodes: [String?] = []
 
     func transcribe(
         audioURL: URL,
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
     ) async throws -> LocalTranscriptionOutput {
+        try await transcribe(audioURL: audioURL, languageCode: nil, progress: progress)
+    }
+
+    func transcribe(
+        audioURL: URL,
+        languageCode: String?,
+        progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
+    ) async throws -> LocalTranscriptionOutput {
+        languageCodes.append(languageCode)
         await progress(.init(
             stage: .transcribing,
             fraction: 0.5,
@@ -81,6 +94,10 @@ private actor SuccessfulMeetingTranscriber: MeetingTranscribing {
             modelIdentifier: modelIdentifier,
             segments: [try TranscriptSegment(start: 0, end: 4, text: "नमस्ते team")]
         )
+    }
+
+    func latestLanguageCode() -> String? {
+        languageCodes.last ?? nil
     }
 }
 

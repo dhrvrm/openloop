@@ -19,10 +19,24 @@ protocol MeetingTranscribing: Sendable {
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
     ) async throws -> LocalTranscriptionOutput
 
+    func transcribe(
+        audioURL: URL,
+        languageCode: String?,
+        progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
+    ) async throws -> LocalTranscriptionOutput
+
     func diagnostics() async -> MeetingEngineDiagnostics
 }
 
 extension MeetingTranscribing {
+    func transcribe(
+        audioURL: URL,
+        languageCode: String?,
+        progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
+    ) async throws -> LocalTranscriptionOutput {
+        try await transcribe(audioURL: audioURL, progress: progress)
+    }
+
     func diagnostics() async -> MeetingEngineDiagnostics {
         .checking
     }
@@ -31,15 +45,18 @@ extension MeetingTranscribing {
 actor WhisperKitMeetingTranscriber: MeetingTranscribing {
     nonisolated let modelIdentifier: String
     private let modelStorageURL: URL
+    private let speakerDiarizationEnabled: Bool
     private var whisperKit: WhisperKit?
     private var speakerKit: SpeakerKit?
 
     init(
         modelIdentifier: String = "large-v3-v20240930_626MB",
-        modelStorageURL: URL
+        modelStorageURL: URL,
+        speakerDiarizationEnabled: Bool = true
     ) {
         self.modelIdentifier = modelIdentifier
         self.modelStorageURL = modelStorageURL
+        self.speakerDiarizationEnabled = speakerDiarizationEnabled
     }
 
     func diagnostics() async -> MeetingEngineDiagnostics {
@@ -62,6 +79,14 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
 
     func transcribe(
         audioURL: URL,
+        progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
+    ) async throws -> LocalTranscriptionOutput {
+        try await transcribe(audioURL: audioURL, languageCode: nil, progress: progress)
+    }
+
+    func transcribe(
+        audioURL: URL,
+        languageCode: String?,
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
     ) async throws -> LocalTranscriptionOutput {
         let duration = await Self.audioDuration(audioURL)
@@ -94,10 +119,10 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         let options = DecodingOptions(
             verbose: false,
             task: .transcribe,
-            language: nil,
+            language: languageCode,
             temperature: 0,
             usePrefillPrompt: true,
-            detectLanguage: true,
+            detectLanguage: languageCode == nil,
             skipSpecialTokens: true,
             withoutTimestamps: false,
             wordTimestamps: true,
@@ -116,19 +141,23 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         }
         let windows = try first.get()
         let mapped: (segments: [TranscriptSegment], language: String?)
-        do {
-            mapped = try await diarize(
-                audioURL: audioURL,
-                transcription: windows,
-                progress: progress
-            )
-        } catch {
+        if speakerDiarizationEnabled {
+            do {
+                mapped = try await diarize(
+                    audioURL: audioURL,
+                    transcription: windows,
+                    progress: progress
+                )
+            } catch {
+                mapped = try Self.map(windows)
+                await progress(.init(
+                    stage: .diarizing,
+                    fraction: 1,
+                    message: "Speaker separation was skipped; the full transcript is ready"
+                ))
+            }
+        } else {
             mapped = try Self.map(windows)
-            await progress(.init(
-                stage: .diarizing,
-                fraction: 1,
-                message: "Speaker separation was skipped; the full transcript is ready"
-            ))
         }
         await progress(.init(
             stage: .transcribing,

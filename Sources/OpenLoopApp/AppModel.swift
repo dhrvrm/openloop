@@ -42,6 +42,7 @@ final class AppModel: ObservableObject {
     @Published var meetingEngineDiagnostics = MeetingEngineDiagnostics.checking
     @Published var meetingPipelineEvents: [MeetingPipelineEvent] = []
     @Published var isAdvancedModeEnabled: Bool
+    @Published var meetingLanguagePreference: MeetingLanguagePreference
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -53,6 +54,7 @@ final class AppModel: ObservableObject {
     private let privacyManager: (any PrivacyManaging)?
     private let defaults: UserDefaults
     private let advancedModeKey: String
+    private let meetingLanguageKey: String
     private var recallGeneration = 0
     private var voiceController: VoiceTranscriptionController?
     private var voiceObservation: AnyCancellable?
@@ -72,7 +74,8 @@ final class AppModel: ObservableObject {
         contextTrail: (any ContextTrailProviding)? = nil,
         privacyManager: (any PrivacyManaging)? = nil,
         defaults: UserDefaults = .standard,
-        advancedModeKey: String = "OpenLoopAdvancedMode"
+        advancedModeKey: String = "OpenLoopAdvancedMode",
+        meetingLanguageKey: String = "OpenLoopMeetingLanguage"
     ) {
         self.loop = loop
         self.readModels = readModels
@@ -84,7 +87,11 @@ final class AppModel: ObservableObject {
         self.privacyManager = privacyManager
         self.defaults = defaults
         self.advancedModeKey = advancedModeKey
+        self.meetingLanguageKey = meetingLanguageKey
         isAdvancedModeEnabled = defaults.bool(forKey: advancedModeKey)
+        meetingLanguagePreference = MeetingLanguagePreference(
+            rawValue: defaults.string(forKey: meetingLanguageKey) ?? ""
+        ) ?? .automatic
     }
 
     func attachVoiceCapture(_ controller: VoiceTranscriptionController) {
@@ -126,6 +133,7 @@ final class AppModel: ObservableObject {
 
     func attachMeetingTranscription(_ controller: MeetingTranscriptionController) {
         meetingController = controller
+        controller.setLanguagePreference(meetingLanguagePreference)
         meetingJobObservation = controller.$job.sink { [weak self] in self?.meetingJob = $0 }
         meetingTranscriptObservation = controller.$transcripts.sink { [weak self] in
             self?.meetingTranscripts = $0
@@ -142,6 +150,13 @@ final class AppModel: ObservableObject {
     func setAdvancedModeEnabled(_ enabled: Bool) {
         isAdvancedModeEnabled = enabled
         defaults.set(enabled, forKey: advancedModeKey)
+    }
+
+    func setMeetingLanguagePreference(_ preference: MeetingLanguagePreference) {
+        guard !meetingJob.isActive else { return }
+        meetingLanguagePreference = preference
+        defaults.set(preference.rawValue, forKey: meetingLanguageKey)
+        meetingController?.setLanguagePreference(preference)
     }
 
     func importMeetingAudio(_ url: URL) {

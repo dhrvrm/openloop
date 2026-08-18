@@ -575,6 +575,14 @@ private struct MainView: View {
                     .buttonStyle(.borderedProminent)
             }
 
+            HStack {
+                Label("Transcription language", systemImage: "character.bubble")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                MeetingLanguagePicker(model: model, compact: true)
+            }
+
             if model.meetingJob.stage != nil {
                 MeetingJobPanel(model: model)
             }
@@ -874,6 +882,7 @@ private struct QuickAddComposer: View {
                 .buttonStyle(.borderless)
                 .disabled(model.meetingJob.isActive)
                 Spacer()
+                MeetingLanguagePicker(model: model, compact: false)
                 Text("Processed and encrypted on this Mac")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -899,6 +908,39 @@ private struct QuickAddComposer: View {
     }
 }
 
+private struct MeetingLanguagePicker: View {
+    @ObservedObject var model: AppModel
+    let compact: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if !compact {
+                Image(systemName: "character.bubble")
+                    .foregroundStyle(OpenLoopVisualSystem.accent)
+                Text("Language")
+                    .foregroundStyle(.secondary)
+            }
+            Picker(
+                "Meeting language",
+                selection: Binding(
+                    get: { model.meetingLanguagePreference },
+                    set: { model.setMeetingLanguagePreference($0) }
+                )
+            ) {
+                ForEach(MeetingLanguagePreference.allCases) { preference in
+                    Text(preference.title).tag(preference)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .frame(width: compact ? 145 : 150)
+        }
+        .font(.caption)
+        .disabled(model.meetingJob.isActive)
+        .help("Choose Hindi / Hinglish when a meeting mixes Hindi and English")
+    }
+}
+
 private struct MeetingJobPanel: View {
     @ObservedObject var model: AppModel
 
@@ -911,6 +953,9 @@ private struct MeetingJobPanel: View {
                 Text("LOCAL ONLY")
                     .font(.caption2.monospaced().weight(.semibold))
                     .foregroundStyle(.green)
+                Text(model.meetingJob.requestedLanguage.title.uppercased())
+                    .font(.caption2.monospaced().weight(.semibold))
+                    .foregroundStyle(OpenLoopVisualSystem.accent)
             }
             Text(model.meetingJob.message)
                 .font(.callout)

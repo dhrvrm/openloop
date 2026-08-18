@@ -179,3 +179,31 @@ private actor EnabledWindowContextTrail: ContextTrailProviding {
     )
     #expect(second.isAdvancedModeEnabled)
 }
+
+@MainActor
+@Test func hindiMeetingPreferencePersistsAcrossAppModels() {
+    let suiteName = "OpenLoopAppTests.MeetingLanguage.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let repository = EmptyWindowRepository()
+    let loop = ThoughtLoop(repository: repository, clarifier: WindowUnusedClarifier())
+    let key = "meeting-language"
+
+    let first = AppModel(
+        loop: loop,
+        readModels: ThoughtReadModels(repository: repository),
+        defaults: defaults,
+        meetingLanguageKey: key
+    )
+    #expect(first.meetingLanguagePreference == .automatic)
+
+    first.setMeetingLanguagePreference(.hindiHinglish)
+
+    let second = AppModel(
+        loop: loop,
+        readModels: ThoughtReadModels(repository: repository),
+        defaults: defaults,
+        meetingLanguageKey: key
+    )
+    #expect(second.meetingLanguagePreference == .hindiHinglish)
+}

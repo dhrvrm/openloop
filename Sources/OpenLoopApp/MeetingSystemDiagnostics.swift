@@ -1,6 +1,69 @@
 import ADHDCore
 import Foundation
 
+enum MeetingLanguagePreference: String, CaseIterable, Codable, Identifiable, Sendable {
+    case automatic
+    case hindiHinglish
+    case english
+    case bengali
+    case marathi
+    case tamil
+    case telugu
+    case gujarati
+    case kannada
+    case malayalam
+    case punjabi
+    case urdu
+    case assamese
+    case nepali
+    case sanskrit
+    case sindhi
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .automatic: "Auto detect"
+        case .hindiHinglish: "Hindi / Hinglish"
+        case .english: "English"
+        case .bengali: "Bengali"
+        case .marathi: "Marathi"
+        case .tamil: "Tamil"
+        case .telugu: "Telugu"
+        case .gujarati: "Gujarati"
+        case .kannada: "Kannada"
+        case .malayalam: "Malayalam"
+        case .punjabi: "Punjabi"
+        case .urdu: "Urdu"
+        case .assamese: "Assamese"
+        case .nepali: "Nepali"
+        case .sanskrit: "Sanskrit"
+        case .sindhi: "Sindhi"
+        }
+    }
+
+    var languageCode: String? {
+        switch self {
+        case .automatic: nil
+        case .hindiHinglish: "hi"
+        case .english: "en"
+        case .bengali: "bn"
+        case .marathi: "mr"
+        case .tamil: "ta"
+        case .telugu: "te"
+        case .gujarati: "gu"
+        case .kannada: "kn"
+        case .malayalam: "ml"
+        case .punjabi: "pa"
+        case .urdu: "ur"
+        case .assamese: "as"
+        case .nepali: "ne"
+        case .sanskrit: "sa"
+        case .sindhi: "sd"
+        }
+    }
+}
+
 enum MeetingPipelineNodeKind: String, CaseIterable, Codable, Sendable {
     case audio
     case staging

@@ -118,6 +118,11 @@ struct AdvancedInspector: View {
                 )
                 Divider()
                 InspectorFact(
+                    label: "Language",
+                    value: model.meetingLanguagePreference.title
+                )
+                Divider()
+                InspectorFact(
                     label: "Compute",
                     value: model.meetingEngineDiagnostics.processingLocation
                 )

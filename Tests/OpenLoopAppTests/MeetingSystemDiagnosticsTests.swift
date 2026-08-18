@@ -32,6 +32,17 @@ import Testing
     #expect(!value.stagingLocation.contains("/Users/"))
 }
 
+@Test func IndianMeetingLanguagesMapToWhisperLanguageTokens() {
+    #expect(MeetingLanguagePreference.automatic.languageCode == nil)
+    #expect(MeetingLanguagePreference.hindiHinglish.languageCode == "hi")
+    #expect(MeetingLanguagePreference.bengali.languageCode == "bn")
+    #expect(MeetingLanguagePreference.marathi.languageCode == "mr")
+    #expect(MeetingLanguagePreference.tamil.languageCode == "ta")
+    #expect(MeetingLanguagePreference.telugu.languageCode == "te")
+    #expect(MeetingLanguagePreference.urdu.languageCode == "ur")
+    #expect(Set(MeetingLanguagePreference.allCases.compactMap(\.languageCode)).count == 15)
+}
+
 @Test func eventHistoryDeduplicatesProgressBucketsAndStaysBounded() {
     var history = MeetingPipelineEventHistory(limit: 4)
     history.record(stage: .transcribing, message: "Starting", fraction: 0.01)

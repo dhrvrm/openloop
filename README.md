@@ -197,6 +197,30 @@ actions. A transcript never becomes a task unless the user explicitly captures i
 The older Apple Speech controller remains temporarily as a compiled compatibility
 test seam, but the packaged app no longer constructs or authorizes it.
 
+### Hindi, Hinglish, and Indian languages
+
+Choose the meeting language beside **Import audio** or **Record**. **Hindi /
+Hinglish** forces Whisper's `hi` language token for the complete job instead of
+making every meeting depend on automatic detection. The choice persists locally
+and is shown in the live job panel and Advanced inspector.
+
+The same control exposes the multilingual model's verified tokens for English,
+Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada, Malayalam, Punjabi, Urdu,
+Assamese, Nepali, Sanskrit, and Sindhi. Auto Detect remains available when the
+language is unknown. OpenLoop transcribes rather than translates, so Hindi stays
+Hindi instead of being silently converted into English.
+
+Run the real local Hindi/Hinglish acceptance fixture with:
+
+```bash
+Scripts/verify-hindi.sh
+```
+
+This synthesizes a code-switched Hindi meeting sample with macOS's Hindi voice,
+processes it through the same cached WhisperKit model and forced-Hindi decoding
+path as the app, and requires Hindi detection, substantial Devanagari output,
+and recognizable meeting vocabulary.
+
 ### Advanced Mode
 
 Turn on **Advanced** at the bottom of the workspace sidebar to open a live system

@@ -11,6 +11,7 @@ struct MeetingJobPresentation: Equatable, Sendable {
     var modelIdentifier: String?
     var stagedAudioURL: URL?
     var previewText: String?
+    var requestedLanguage = MeetingLanguagePreference.automatic
 
     var isActive: Bool {
         guard let stage else { return false }
@@ -26,6 +27,7 @@ final class MeetingTranscriptionController: ObservableObject {
     @Published private(set) var transcripts: [MeetingTranscript] = []
     @Published private(set) var engineDiagnostics = MeetingEngineDiagnostics.checking
     @Published private(set) var pipelineEvents: [MeetingPipelineEvent] = []
+    @Published private(set) var languagePreference = MeetingLanguagePreference.automatic
 
     private let repository: any ThoughtRepository
     private let transcriber: any MeetingTranscribing
@@ -64,6 +66,11 @@ final class MeetingTranscriptionController: ObservableObject {
             )
             recordEvent(stage: .failed, message: job.message, fraction: 0)
         }
+    }
+
+    func setLanguagePreference(_ preference: MeetingLanguagePreference) {
+        guard !job.isActive else { return }
+        languagePreference = preference
     }
 
     func toggleRecording() async {
@@ -174,14 +181,18 @@ final class MeetingTranscriptionController: ObservableObject {
             message: "Starting the local transcription engine",
             startedAt: .now,
             modelIdentifier: transcriber.modelIdentifier,
-            stagedAudioURL: stagedURL
+            stagedAudioURL: stagedURL,
+            requestedLanguage: languagePreference
         )
         recordEvent(stage: .waitingForModel, message: job.message, fraction: 0)
         work = Task { [weak self] in
             guard let self else { return }
             engineDiagnostics = await transcriber.diagnostics()
             do {
-                let output = try await transcriber.transcribe(audioURL: stagedURL) { [weak self] value in
+                let output = try await transcriber.transcribe(
+                    audioURL: stagedURL,
+                    languageCode: job.requestedLanguage.languageCode
+                ) { [weak self] value in
                     await MainActor.run {
                         guard let self, self.job.isActive else { return }
                         self.apply(value)
