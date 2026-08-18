@@ -205,6 +205,12 @@ The completed transcript shows the detected language. For an unusually difficult
 recording, Advanced mode offers a temporary manual language override that resets
 to automatic detection on the next app launch.
 
+For better proper-name and code-switch accuracy, OpenLoop gives Whisper a short
+on-device context containing the local Mac account name and English, Hindi, and
+Hinglish vocabulary guidance. The context never leaves the Mac. Hindi-dominant
+audio remains in Devanagari while short mostly-English switches may use readable
+romanized Hinglish.
+
 The Advanced override exposes the multilingual model's verified tokens for English,
 Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada, Malayalam, Punjabi, Urdu,
 Assamese, Nepali, Sanskrit, and Sindhi. Auto detect remains available when the

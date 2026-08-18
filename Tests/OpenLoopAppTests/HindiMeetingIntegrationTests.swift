@@ -11,11 +11,14 @@ import Testing
     let modelIdentifier = environment["OPENLOOP_MODEL_IDENTIFIER"]
         ?? "large-v3-v20240930_626MB"
     let languageCode = environment["OPENLOOP_LANGUAGE_CODE"]
+    let contextPrompt = environment["OPENLOOP_CONTEXT_PROMPT"]
+    let expectedName = environment["OPENLOOP_EXPECTED_NAME"]
 
     let transcriber = WhisperKitMeetingTranscriber(
         modelIdentifier: modelIdentifier,
         modelStorageURL: URL(fileURLWithPath: modelStoragePath, isDirectory: true),
-        speakerDiarizationEnabled: false
+        speakerDiarizationEnabled: false,
+        contextPrompt: contextPrompt
     )
     let output = try await transcriber.transcribe(
         audioURL: URL(fileURLWithPath: fixturePath),
@@ -31,7 +34,20 @@ import Testing
     print("hindi-devanagari-scalars=\(devanagariCount)")
     print("hindi-synthetic-output=\(text)")
     #expect(output.detectedLanguage == "hi")
+    if let expectedName {
+        let lowercaseText = text.lowercased()
+        #expect(text.localizedCaseInsensitiveContains(expectedName))
+        #expect(text.localizedCaseInsensitiveContains("English"))
+        #expect(text.contains("हिंदी") || lowercaseText.contains("hindi"))
+        #expect(text.contains("बात") || lowercaseText.contains("baat"))
+        #expect(text.contains("रहा") || lowercaseText.contains("raha"))
+        return
+    }
     #expect(devanagariCount >= 20)
-    #expect(text.contains("मीटिंग"))
-    #expect(text.contains("प्रोजेक्ट") || text.contains("प्रजेक्ट"))
+    #expect(text.contains("मीटिंग") || text.localizedCaseInsensitiveContains("meeting"))
+    #expect(
+        text.contains("प्रोजेक्ट")
+            || text.contains("प्रजेक्ट")
+            || text.localizedCaseInsensitiveContains("project")
+    )
 }

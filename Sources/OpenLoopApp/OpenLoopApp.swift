@@ -183,7 +183,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             let meetingController = MeetingTranscriptionController(
                 repository: repository,
                 transcriber: WhisperKitMeetingTranscriber(
-                    modelStorageURL: directory.appendingPathComponent("Models/WhisperKit", isDirectory: true)
+                    modelStorageURL: directory.appendingPathComponent("Models/WhisperKit", isDirectory: true),
+                    contextPrompt: TranscriptionContext.make(localUserName: NSFullUserName())
                 ),
                 stagingDirectory: directory.appendingPathComponent("Meeting Staging", isDirectory: true),
                 recorder: MeetingAudioRecorder()

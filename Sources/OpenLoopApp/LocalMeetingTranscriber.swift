@@ -46,17 +46,20 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
     nonisolated let modelIdentifier: String
     private let modelStorageURL: URL
     private let speakerDiarizationEnabled: Bool
+    private let contextPrompt: String?
     private var whisperKit: WhisperKit?
     private var speakerKit: SpeakerKit?
 
     init(
         modelIdentifier: String = "large-v3-v20240930_626MB",
         modelStorageURL: URL,
-        speakerDiarizationEnabled: Bool = true
+        speakerDiarizationEnabled: Bool = true,
+        contextPrompt: String? = nil
     ) {
         self.modelIdentifier = modelIdentifier
         self.modelStorageURL = modelStorageURL
         self.speakerDiarizationEnabled = speakerDiarizationEnabled
+        self.contextPrompt = contextPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func diagnostics() async -> MeetingEngineDiagnostics {
@@ -116,6 +119,14 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             return !Task.isCancelled
         }
 
+        let promptTokens: [Int]? = if let contextPrompt,
+                                      !contextPrompt.isEmpty,
+                                      let tokenizer = pipeline.tokenizer {
+            tokenizer.encode(text: " " + contextPrompt)
+                .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+        } else {
+            nil
+        }
         let options = DecodingOptions(
             verbose: false,
             task: .transcribe,
@@ -126,6 +137,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             skipSpecialTokens: true,
             withoutTimestamps: false,
             wordTimestamps: true,
+            promptTokens: promptTokens,
             concurrentWorkerCount: 4
         )
         let input = AudioInputOptions(audioLoadingMode: .incremental)
