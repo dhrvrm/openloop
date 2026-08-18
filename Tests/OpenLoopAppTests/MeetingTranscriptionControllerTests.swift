@@ -23,9 +23,10 @@ import Testing
     await controller.waitUntilSettledForTesting()
 
     #expect(controller.job.stage == .ready)
-    #expect(controller.job.message == "Transcript ready in Recall")
+    #expect(controller.job.message == "Transcript ready below and saved in Recall")
     #expect(controller.transcripts.count == 1)
     #expect(controller.transcripts[0].text == "नमस्ते team")
+    #expect(controller.job.previewText == "नमस्ते team")
     #expect(controller.pipelineEvents.map(\.stage) == [
         .waitingForModel,
         .transcribing,
@@ -68,7 +69,12 @@ private actor SuccessfulMeetingTranscriber: MeetingTranscribing {
         audioURL: URL,
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
     ) async throws -> LocalTranscriptionOutput {
-        await progress(.init(stage: .transcribing, fraction: 0.5, message: "Halfway"))
+        await progress(.init(
+            stage: .transcribing,
+            fraction: 0.5,
+            message: "Halfway",
+            previewText: "नमस्ते"
+        ))
         return LocalTranscriptionOutput(
             duration: 4,
             detectedLanguage: "hi",

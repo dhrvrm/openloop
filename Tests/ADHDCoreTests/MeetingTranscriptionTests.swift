@@ -11,6 +11,21 @@ import Testing
     #expect(!MeetingTranscriptionStage.transcribing.isTerminal)
 }
 
+@Test func meetingProgressCarriesOnlyVisiblePreviewText() {
+    let progress = MeetingTranscriptionProgress(
+        stage: .transcribing,
+        fraction: 0.5,
+        previewText: "  नमस्ते team  "
+    )
+
+    #expect(progress.previewText == "नमस्ते team")
+    #expect(MeetingTranscriptionProgress(
+        stage: .transcribing,
+        fraction: 0.5,
+        previewText: "  \n "
+    ).previewText == nil)
+}
+
 @Test func transcriptSegmentsAreOrderedAndTranscriptRejectsEmptyText() throws {
     let later = try TranscriptSegment(start: 5, end: 8, text: "  second thought  ")
     let earlier = try TranscriptSegment(start: 0, end: 4, text: "first thought")
@@ -39,4 +54,3 @@ import Testing
         _ = try TranscriptSegment(start: 3, end: 2, text: "bad")
     }
 }
-

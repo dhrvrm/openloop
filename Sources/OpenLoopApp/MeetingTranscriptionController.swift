@@ -10,6 +10,7 @@ struct MeetingJobPresentation: Equatable, Sendable {
     var startedAt: Date?
     var modelIdentifier: String?
     var stagedAudioURL: URL?
+    var previewText: String?
 
     var isActive: Bool {
         guard let stage else { return false }
@@ -198,12 +199,13 @@ final class MeetingTranscriptionController: ObservableObject {
                     modelIdentifier: output.modelIdentifier,
                     segments: output.segments
                 )
+                job.previewText = transcript.text
                 try await repository.save(meetingTranscript: transcript)
                 transcripts = try await repository.meetingTranscripts()
                 try? FileManager.default.removeItem(at: stagedURL)
                 job.stage = .ready
                 job.fraction = 1
-                job.message = "Transcript ready in Recall"
+                job.message = "Transcript ready below and saved in Recall"
                 job.stagedAudioURL = nil
                 engineDiagnostics = await transcriber.diagnostics()
                 recordEvent(stage: .ready, message: job.message, fraction: 1)
@@ -226,6 +228,9 @@ final class MeetingTranscriptionController: ObservableObject {
         job.stage = progress.stage
         job.fraction = progress.fraction
         job.message = progress.message ?? Self.title(for: progress.stage)
+        if let previewText = progress.previewText {
+            job.previewText = previewText
+        }
         recordEvent(stage: progress.stage, message: job.message, fraction: progress.fraction)
     }
 

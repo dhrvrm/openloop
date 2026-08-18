@@ -25,15 +25,19 @@ public struct MeetingTranscriptionProgress: Codable, Equatable, Sendable {
     public let stage: MeetingTranscriptionStage
     public let fraction: Double
     public let message: String?
+    public let previewText: String?
 
     public init(
         stage: MeetingTranscriptionStage,
         fraction: Double,
-        message: String? = nil
+        message: String? = nil,
+        previewText: String? = nil
     ) {
         self.stage = stage
         self.fraction = min(max(fraction.isFinite ? fraction : 0, 0), 1)
         self.message = message
+        let normalizedPreview = previewText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.previewText = normalizedPreview?.isEmpty == false ? normalizedPreview : nil
     }
 }
 

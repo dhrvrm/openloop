@@ -477,61 +477,61 @@ private struct MainView: View {
     }
 
     private var recallView: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            ScreenHeader(
-                eyebrow: "EVIDENCE",
-                title: "Recall",
-                detail: "Find what you captured and control what stays on this Mac."
-            )
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                ScreenHeader(
+                    eyebrow: "EVIDENCE",
+                    title: "Recall",
+                    detail: "Find what you captured and control what stays on this Mac."
+                )
 
-            workingMemorySection
-            meetingTranscriptSection
-            privacySection
+                meetingTranscriptSection
+                workingMemorySection
+                privacySection
 
-            HStack(spacing: 10) {
-                TextField("Search captures, decisions, return points, and corrections", text: $model.recallQuery)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.title3)
-                    .focused($recallFieldFocused)
-                    .onSubmit { Task { await model.searchRecall(model.recallQuery) } }
-                Button("Search") {
-                    Task { await model.searchRecall(model.recallQuery) }
+                HStack(spacing: 10) {
+                    TextField("Search captures, decisions, return points, and corrections", text: $model.recallQuery)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.title3)
+                        .focused($recallFieldFocused)
+                        .onSubmit { Task { await model.searchRecall(model.recallQuery) } }
+                    Button("Search") {
+                        Task { await model.searchRecall(model.recallQuery) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.recallQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(model.recallQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
 
-            HStack {
-                Text("⌘⇧F opens Recall")
-                Spacer()
-                Text("Exact + local semantic evidence")
-            }
-            .font(.caption.monospaced())
-            .foregroundStyle(.tertiary)
+                HStack {
+                    Text("⌘⇧F opens Recall")
+                    Spacer()
+                    Text("Exact + local semantic evidence")
+                }
+                .font(.caption.monospaced())
+                .foregroundStyle(.tertiary)
 
-            if model.isRecalling {
-                ProgressView("Searching on this Mac…")
-                    .frame(maxWidth: .infinity, minHeight: 240)
-            } else if let error = model.recallError {
-                ContentUnavailableView(
-                    "Recall paused",
-                    systemImage: "magnifyingglass",
-                    description: Text(error)
-                )
-            } else if model.recallQuery.isEmpty {
-                ContentUnavailableView(
-                    "Search your evidence",
-                    systemImage: "text.magnifyingglass",
-                    description: Text("Try a name, exact phrase, decision, or restart action.")
-                )
-            } else if model.recallHits.isEmpty {
-                ContentUnavailableView(
-                    "No matching evidence",
-                    systemImage: "magnifyingglass",
-                    description: Text("OpenLoop will not invent an answer.")
-                )
-            } else {
-                ScrollView {
+                if model.isRecalling {
+                    ProgressView("Searching on this Mac…")
+                        .frame(maxWidth: .infinity, minHeight: 240)
+                } else if let error = model.recallError {
+                    ContentUnavailableView(
+                        "Recall paused",
+                        systemImage: "magnifyingglass",
+                        description: Text(error)
+                    )
+                } else if model.recallQuery.isEmpty {
+                    ContentUnavailableView(
+                        "Search your evidence",
+                        systemImage: "text.magnifyingglass",
+                        description: Text("Try a name, exact phrase, decision, or restart action.")
+                    )
+                } else if model.recallHits.isEmpty {
+                    ContentUnavailableView(
+                        "No matching evidence",
+                        systemImage: "magnifyingglass",
+                        description: Text("OpenLoop will not invent an answer.")
+                    )
+                } else {
                     LazyVStack(spacing: 0) {
                         ForEach(model.recallHits) { hit in
                             RecallEvidenceRow(hit: hit)
@@ -540,10 +540,12 @@ private struct MainView: View {
                     }
                     .background(
                         Color(nsColor: .controlBackgroundColor),
-                        in: RoundedRectangle(cornerRadius: 10)
-                    )
+                            in: RoundedRectangle(cornerRadius: 10)
+                        )
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 16)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
@@ -559,7 +561,9 @@ private struct MainView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("MEETING TRANSCRIPTS")
+                    Text(model.meetingTranscripts.isEmpty
+                        ? "MEETING TRANSCRIPTS"
+                        : "MEETING TRANSCRIPTS · \(model.meetingTranscripts.count)")
                         .font(.caption.monospaced().weight(.semibold))
                         .foregroundStyle(.secondary)
                     Text("Multilingual Whisper · processed locally · encrypted here")
@@ -581,14 +585,15 @@ private struct MainView: View {
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 4)
             } else if !model.meetingTranscripts.isEmpty {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(model.meetingTranscripts) { transcript in
-                            MeetingTranscriptRow(model: model, transcript: transcript)
-                        }
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(model.meetingTranscripts.enumerated()), id: \.element.id) { index, transcript in
+                        MeetingTranscriptRow(
+                            model: model,
+                            transcript: transcript,
+                            initiallyExpanded: index == 0
+                        )
                     }
                 }
-                .frame(maxHeight: 250)
             }
         }
         .padding(14)
@@ -925,6 +930,34 @@ private struct MeetingJobPanel: View {
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.tertiary)
             }
+            if let transcriptText {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Label(
+                            model.meetingJob.stage == .ready ? "Transcript" : "Live transcript",
+                            systemImage: "text.quote"
+                        )
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(OpenLoopVisualSystem.accent)
+                        Spacer()
+                        Button("Copy") { copy(transcriptText) }
+                            .buttonStyle(.link)
+                    }
+                    ScrollView {
+                        Text(transcriptText)
+                            .font(.callout)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(minHeight: 54, maxHeight: model.meetingJob.stage == .ready ? 260 : 140)
+                }
+                .padding(11)
+                .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: 9))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9)
+                        .stroke(OpenLoopVisualSystem.hairline, lineWidth: 1)
+                }
+            }
             HStack(spacing: 10) {
                 if model.meetingJob.isActive {
                     Button("Cancel") { model.cancelMeetingTranscription() }
@@ -946,8 +979,19 @@ private struct MeetingJobPanel: View {
         }
         .padding(13)
         .openLoopPanel(emphasized: model.meetingJob.isActive)
-        .accessibilityElement(children: .combine)
         .accessibilityLabel("Local meeting transcription: \(model.meetingJob.message)")
+    }
+
+    private var transcriptText: String? {
+        if model.meetingJob.stage == .ready, let completed = model.meetingTranscripts.first?.text {
+            return completed
+        }
+        return model.meetingJob.previewText
+    }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     private var title: String {
@@ -985,7 +1029,17 @@ private struct MeetingJobPanel: View {
 private struct MeetingTranscriptRow: View {
     @ObservedObject var model: AppModel
     let transcript: MeetingTranscript
-    @State private var expanded = false
+    @State private var expanded: Bool
+
+    init(
+        model: AppModel,
+        transcript: MeetingTranscript,
+        initiallyExpanded: Bool = false
+    ) {
+        self.model = model
+        self.transcript = transcript
+        _expanded = State(initialValue: initiallyExpanded)
+    }
 
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
@@ -1009,6 +1063,10 @@ private struct MeetingTranscriptRow: View {
                     }
                 }
                 HStack {
+                    Button("Copy transcript") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(transcript.text, forType: .string)
+                    }
                     Button("Capture transcript") {
                         Task { await model.captureMeetingTranscript(transcript.id) }
                     }

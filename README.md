@@ -180,7 +180,10 @@ does not request macOS Speech Recognition access.
 The first job downloads WhisperKit's `large-v3-v20240930_626MB` Core ML model,
 selected for maximum multilingual accuracy. The UI distinguishes model download,
 audio preparation, transcription, speaker separation, encryption, completion,
-failure, cancellation, and retry. Long files use bounded-memory incremental
+failure, cancellation, and retry. Real partial text appears as a selectable live
+transcript while Whisper is working; after encryption, the completed transcript
+remains visible below the job and the newest Recall transcript opens automatically.
+Long files use bounded-memory incremental
 loading. Language detection, word and segment timestamps, and local SpeakerKit
 Pyannote diarization produce speaker-labelled evidence when the diarization model
 is available; transcription still completes if speaker separation cannot run.

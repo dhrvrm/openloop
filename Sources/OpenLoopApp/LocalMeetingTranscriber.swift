@@ -84,7 +84,8 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                     fraction: estimated,
                     message: update.text.nilIfBlank == nil
                         ? "Listening across the meeting"
-                        : "Transcribing locally"
+                        : "Transcribing locally",
+                    previewText: update.text
                 ))
             }
             return !Task.isCancelled
