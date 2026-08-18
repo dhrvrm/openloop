@@ -12,13 +12,18 @@ struct MeetingJobPresentation: Equatable, Sendable {
     var stagedAudioURL: URL?
     var previewText: String?
     var requestedLanguage = MeetingLanguagePreference.automatic
+    var recordingDuration: TimeInterval?
+    var recordingPeakDecibels: Float?
 
     var isActive: Bool {
         guard let stage else { return false }
         return !stage.isTerminal
     }
 
-    var canRetry: Bool { stage == .failed && stagedAudioURL != nil }
+    var canRetry: Bool {
+        guard stage == .failed, let stagedAudioURL else { return false }
+        return FileManager.default.fileExists(atPath: stagedAudioURL.path)
+    }
 }
 
 @MainActor
@@ -36,6 +41,8 @@ final class MeetingTranscriptionController: ObservableObject {
     private let recorder: (any MeetingAudioRecording)?
     private var work: Task<Void, Never>?
     private var eventHistory = MeetingPipelineEventHistory()
+    private var recordingStartedAt: Date?
+    private var peakRecordingDecibels: Float?
 
     init(
         repository: any ThoughtRepository,
@@ -49,6 +56,9 @@ final class MeetingTranscriptionController: ObservableObject {
         self.recorder = recorder
         recorder?.onDecibelUpdate = { [weak self] value in
             self?.recordingDecibels = value
+            if let value {
+                self?.peakRecordingDecibels = max(self?.peakRecordingDecibels ?? -60, value)
+            }
         }
     }
 
@@ -87,19 +97,33 @@ final class MeetingTranscriptionController: ObservableObject {
             return
         }
         if job.stage == .recording {
+            let recordedDuration = recordingStartedAt.map { max(0, Date().timeIntervalSince($0)) }
+            let recordedPeak = peakRecordingDecibels
             guard let url = recorder.stop() else {
                 recordingDecibels = nil
+                recordingStartedAt = nil
+                peakRecordingDecibels = nil
                 job.stage = .failed
+                job.recordingDuration = recordedDuration
+                job.recordingPeakDecibels = recordedPeak
                 job.message = "The recording could not be finalized. Try again or import a file."
                 recordEvent(stage: .failed, message: job.message, fraction: job.fraction)
                 return
             }
             recordingDecibels = nil
-            start(stagedURL: url, sourceName: "OpenLoop recording.m4a")
+            recordingStartedAt = nil
+            start(
+                stagedURL: url,
+                sourceName: "OpenLoop recording.m4a",
+                recordingDuration: recordedDuration,
+                recordingPeakDecibels: recordedPeak
+            )
             return
         }
         guard !job.isActive else { return }
         recordingDecibels = nil
+        recordingStartedAt = nil
+        peakRecordingDecibels = nil
         job = MeetingJobPresentation(
             stage: .requestingMicrophone,
             message: "Requesting microphone access",
@@ -122,11 +146,13 @@ final class MeetingTranscriptionController: ObservableObject {
                 .appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("m4a")
             try recorder.start(at: url)
+            let startedAt = Date.now
+            recordingStartedAt = startedAt
             job = MeetingJobPresentation(
                 stage: .recording,
                 sourceName: "Live recording",
                 message: "Recording locally. Press Stop to transcribe.",
-                startedAt: .now,
+                startedAt: startedAt,
                 modelIdentifier: transcriber.modelIdentifier,
                 stagedAudioURL: url
             )
@@ -141,8 +167,13 @@ final class MeetingTranscriptionController: ObservableObject {
     }
 
     func retry() {
-        guard let stagedURL = job.stagedAudioURL else { return }
-        start(stagedURL: stagedURL, sourceName: job.sourceName ?? stagedURL.lastPathComponent)
+        guard job.canRetry, let stagedURL = job.stagedAudioURL else { return }
+        start(
+            stagedURL: stagedURL,
+            sourceName: job.sourceName ?? stagedURL.lastPathComponent,
+            recordingDuration: job.recordingDuration,
+            recordingPeakDecibels: job.recordingPeakDecibels
+        )
     }
 
     func cancel() {
@@ -150,6 +181,8 @@ final class MeetingTranscriptionController: ObservableObject {
             recorder?.cancel()
         }
         recordingDecibels = nil
+        recordingStartedAt = nil
+        peakRecordingDecibels = nil
         work?.cancel()
         work = nil
         job.stage = .cancelled
@@ -182,7 +215,12 @@ final class MeetingTranscriptionController: ObservableObject {
         }
     }
 
-    private func start(stagedURL: URL, sourceName: String) {
+    private func start(
+        stagedURL: URL,
+        sourceName: String,
+        recordingDuration: TimeInterval? = nil,
+        recordingPeakDecibels: Float? = nil
+    ) {
         job = MeetingJobPresentation(
             stage: .waitingForModel,
             fraction: 0,
@@ -191,7 +229,9 @@ final class MeetingTranscriptionController: ObservableObject {
             startedAt: .now,
             modelIdentifier: transcriber.modelIdentifier,
             stagedAudioURL: stagedURL,
-            requestedLanguage: languagePreference
+            requestedLanguage: languagePreference,
+            recordingDuration: recordingDuration,
+            recordingPeakDecibels: recordingPeakDecibels
         )
         recordEvent(stage: .waitingForModel, message: job.message, fraction: 0)
         work = Task { [weak self] in
@@ -237,7 +277,14 @@ final class MeetingTranscriptionController: ObservableObject {
                 work = nil
             } catch {
                 job.stage = .failed
-                job.message = Self.message(for: error)
+                if case MeetingTranscriptionError.emptyTranscript = error {
+                    job.previewText = nil
+                }
+                job.message = Self.message(
+                    for: error,
+                    recordingDuration: job.recordingDuration,
+                    recordingPeakDecibels: job.recordingPeakDecibels
+                )
                 recordEvent(stage: .failed, message: job.message, fraction: job.fraction)
                 work = nil
             }
@@ -298,13 +345,36 @@ final class MeetingTranscriptionController: ObservableObject {
         }
     }
 
-    private static func message(for error: Error) -> String {
-        if case let MeetingTranscriptionError.unsupportedAudioFormat(value) = error {
+    private static func message(
+        for error: Error,
+        recordingDuration: TimeInterval? = nil,
+        recordingPeakDecibels: Float? = nil
+    ) -> String {
+        guard let meetingError = error as? MeetingTranscriptionError else {
+            return "Local transcription stopped. Check your connection for the first model download, then retry."
+        }
+        switch meetingError {
+        case let .unsupportedAudioFormat(value):
             return "The .\(value) format is not supported. Choose WAV, MP3, M4A, MP4, FLAC, AIFF, or CAF."
-        }
-        if error is MeetingTranscriptionError {
+        case .emptyTranscript:
+            if let recordingDuration {
+                let seconds = max(0, Int(recordingDuration.rounded()))
+                if let recordingPeakDecibels {
+                    let peak = Int(recordingPeakDecibels.rounded())
+                    if recordingPeakDecibels < -45 {
+                        return "Recorded \(seconds)s, peak \(peak) dB. The microphone input was too quiet for reliable speech; move closer and try again."
+                    }
+                    return "Recorded \(seconds)s, peak \(peak) dB. Speech reached the microphone, but decoding returned no words. Retry runs the complete recording locally."
+                }
+                return "Recorded \(seconds)s, but no microphone level was measured. Check the input device and try again."
+            }
             return "No usable speech was found. Keep the audio copy and retry, or choose another recording."
+        case .emptySegment, .invalidSegmentRange:
+            return "Speech was decoded, but its timestamps were invalid. Keep the audio copy and retry locally."
+        case .localModelUnavailable:
+            return "The local transcription model is unavailable. Check the model status in Advanced, then retry."
+        case .persistenceUnsupported:
+            return "The transcript could not be stored in the encrypted vault. Your audio copy is still available to retry."
         }
-        return "Local transcription stopped. Check your connection for the first model download, then retry."
     }
 }

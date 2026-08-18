@@ -143,13 +143,28 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                     for: Self.participantPrompt(from: contextPrompt),
                     pipeline: pipeline
                 )
-                windows = try await transcribeUtterances(
+                let utteranceBatches = try await transcribeUtterances(
                     audio: audio,
                     ranges: ranges,
                     pipeline: pipeline,
                     options: utteranceOptions,
                     progress: progress
                 )
+                if Self.allUtterancesHaveUsableTranscript(utteranceBatches) {
+                    windows = utteranceBatches.flatMap { $0 }
+                } else {
+                    await progress(.init(
+                        stage: .transcribing,
+                        fraction: 0.1,
+                        message: "Rechecking the complete recording locally"
+                    ))
+                    windows = try await transcribeFile(
+                        audioURL: audioURL,
+                        pipeline: pipeline,
+                        options: options,
+                        callback: callback
+                    )
+                }
             } else {
                 windows = try await transcribeFile(
                     audioURL: audioURL,
@@ -224,8 +239,8 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         pipeline: WhisperKit,
         options: DecodingOptions,
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
-    ) async throws -> [TranscriptionResult] {
-        var collected: [TranscriptionResult] = []
+    ) async throws -> [[TranscriptionResult]] {
+        var batches: [[TranscriptionResult]] = []
         for (index, range) in ranges.enumerated() {
             try Task.checkCancellation()
             let results = try await pipeline.transcribe(
@@ -243,8 +258,9 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                     )
                 }
             }
-            collected.append(contentsOf: results)
-            let preview = collected
+            batches.append(results)
+            let preview = batches
+                .flatMap { $0 }
                 .flatMap(\.segments)
                 .map(\.text)
                 .joined(separator: " ")
@@ -255,8 +271,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                 previewText: preview
             ))
         }
-        guard !collected.isEmpty else { throw MeetingTranscriptionError.emptyTranscript }
-        return collected
+        return batches
     }
 
     private func diarize(
@@ -407,6 +422,20 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             return value
         }
         return ordered.isEmpty ? nil : ordered.joined(separator: " + ")
+    }
+
+    static func hasUsableTranscript(_ results: [TranscriptionResult]) -> Bool {
+        results.contains { result in
+            result.segments.contains { segment in
+                segment.text.nilIfBlank != nil && segment.end >= segment.start
+            }
+        }
+    }
+
+    static func allUtterancesHaveUsableTranscript(
+        _ batches: [[TranscriptionResult]]
+    ) -> Bool {
+        !batches.isEmpty && batches.allSatisfy(hasUsableTranscript)
     }
 
     private static func participantPrompt(from context: String?) -> String? {

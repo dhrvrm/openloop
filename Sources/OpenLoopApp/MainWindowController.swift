@@ -998,6 +998,11 @@ private struct MeetingJobPanel: View {
             Text(model.meetingJob.message)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            if model.meetingJob.stage != .recording, let captureSummary {
+                Label(captureSummary, systemImage: "waveform.path.ecg")
+                    .font(.caption.monospacedDigit().weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
             if model.meetingJob.stage == .recording {
                 RecordingLevelMeter(decibels: model.recordingDecibels)
                 HStack {
@@ -1083,6 +1088,17 @@ private struct MeetingJobPanel: View {
             return completed
         }
         return model.meetingJob.previewText
+    }
+
+    private var captureSummary: String? {
+        guard let duration = model.meetingJob.recordingDuration else { return nil }
+        let durationText = duration < 10
+            ? String(format: "%.1fs", duration)
+            : "\(Int(duration.rounded()))s"
+        if let peak = model.meetingJob.recordingPeakDecibels {
+            return "RECORDED \(durationText) · PEAK \(Int(peak.rounded())) dB"
+        }
+        return "RECORDED \(durationText) · NO LEVEL DATA"
     }
 
     private func copy(_ text: String) {

@@ -190,8 +190,11 @@ Long files use bounded-memory incremental loading. Whisper detects the spoken
 language automatically for every import and recording; no language setup appears
 in the normal workflow. Short automatic recordings are split at meaningful silent
 boundaries so each utterance can detect its own language, and mixed results report
-an ordered summary such as `en + hi`. Word and segment timestamps and local SpeakerKit
-Pyannote diarization produce speaker-labelled evidence when the diarization model
+an ordered summary such as `en + hi`. If an utterance produces an empty model
+result, OpenLoop automatically retries the complete recording instead of failing.
+After recording stops, the job retains captured duration and peak dB so quiet input
+can be distinguished from a decoding failure. Word and segment timestamps and local
+SpeakerKit Pyannote diarization produce speaker-labelled evidence when the diarization model
 is available; transcription still completes if speaker separation cannot run.
 
 Audio stays on the Mac. Imported or recorded audio is copied to a local staging

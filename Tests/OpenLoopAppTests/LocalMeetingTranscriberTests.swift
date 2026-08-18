@@ -1,4 +1,5 @@
 import Testing
+import WhisperKit
 @testable import OpenLoopApp
 
 @Test func whisperProgressEstimateIsBoundedForLongMeetings() {
@@ -24,4 +25,30 @@ import Testing
     #expect(WhisperKitMeetingTranscriber.languageSummary(["en", "en", "hi", "hi"]) == "en + hi")
     #expect(WhisperKitMeetingTranscriber.languageSummary(["hi"]) == "hi")
     #expect(WhisperKitMeetingTranscriber.languageSummary(["", "  "]) == nil)
+}
+
+@Test func blankWhisperContainersRequireWholeRecordingFallback() {
+    let blank = TranscriptionResult(
+        text: "",
+        segments: [],
+        language: "en",
+        timings: TranscriptionTimings()
+    )
+    let spoken = TranscriptionResult(
+        text: "Hello",
+        segments: [TranscriptionSegment(start: 0, end: 1, text: "Hello")],
+        language: "en",
+        timings: TranscriptionTimings()
+    )
+
+    #expect(!WhisperKitMeetingTranscriber.hasUsableTranscript([blank]))
+    #expect(WhisperKitMeetingTranscriber.hasUsableTranscript([spoken]))
+    #expect(!WhisperKitMeetingTranscriber.allUtterancesHaveUsableTranscript([
+        [spoken],
+        [blank],
+    ]))
+    #expect(WhisperKitMeetingTranscriber.allUtterancesHaveUsableTranscript([
+        [spoken],
+        [spoken],
+    ]))
 }
