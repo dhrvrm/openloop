@@ -1,6 +1,5 @@
 import AVFoundation
 import Foundation
-import Speech
 
 enum CapabilityAvailability: Equatable, Sendable {
     case ready
@@ -18,7 +17,7 @@ struct CapabilitySummary: Equatable, Sendable {
         CapabilitySummary(
             quickCapture: .checking,
             microphone: microphoneAvailability(AVCaptureDevice.authorizationStatus(for: .audio)),
-            speechRecognition: speechAvailability(SFSpeechRecognizer.authorizationStatus())
+            speechRecognition: .ready
         )
     }
 
@@ -33,16 +32,6 @@ struct CapabilitySummary: Equatable, Sendable {
         }
     }
 
-    private static func speechAvailability(
-        _ status: SFSpeechRecognizerAuthorizationStatus
-    ) -> CapabilityAvailability {
-        switch status {
-        case .authorized: .ready
-        case .notDetermined: .askWhenUsed
-        case .denied, .restricted: .unavailable
-        @unknown default: .unavailable
-        }
-    }
 }
 
 struct LaunchRecoveryTracker {

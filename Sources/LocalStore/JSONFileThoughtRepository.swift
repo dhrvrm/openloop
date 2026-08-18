@@ -10,6 +10,7 @@ private struct Snapshot: Codable {
     var resurfacingRules: [UUID: ResurfacingRule] = [:]
     var suggestionEvents: [UUID: SuggestionEvent] = [:]
     var transcriptionCorrections: [UUID: TranscriptionCorrection] = [:]
+    var meetingTranscripts: [UUID: MeetingTranscript] = [:]
     var memoryRecords: [UUID: MemoryRecord] = [:]
     var contextTrailSettings = ContextTrailSettings()
     var contextTrailEvents: [UUID: ContextTrailEvent] = [:]
@@ -24,6 +25,7 @@ private struct Snapshot: Codable {
         case resurfacingRules
         case suggestionEvents
         case transcriptionCorrections
+        case meetingTranscripts
         case memoryRecords
         case contextTrailSettings
         case contextTrailEvents
@@ -59,6 +61,10 @@ private struct Snapshot: Codable {
         transcriptionCorrections = try container.decodeIfPresent(
             [UUID: TranscriptionCorrection].self,
             forKey: .transcriptionCorrections
+        ) ?? [:]
+        meetingTranscripts = try container.decodeIfPresent(
+            [UUID: MeetingTranscript].self,
+            forKey: .meetingTranscripts
         ) ?? [:]
         memoryRecords = try container.decodeIfPresent(
             [UUID: MemoryRecord].self,
@@ -256,6 +262,18 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
         snapshot.transcriptionCorrections.values.sorted(by: Self.transcriptionCorrectionOrder)
     }
 
+    public func save(meetingTranscript: MeetingTranscript) async throws {
+        try update { $0.meetingTranscripts[meetingTranscript.id] = meetingTranscript }
+    }
+
+    public func meetingTranscripts() async throws -> [MeetingTranscript] {
+        snapshot.meetingTranscripts.values.sorted(by: Self.meetingTranscriptOrder)
+    }
+
+    public func deleteMeetingTranscript(id: UUID) async throws {
+        try update { $0.meetingTranscripts[id] = nil }
+    }
+
     public func save(memoryRecords: [MemoryRecord]) async throws {
         try update { snapshot in
             snapshot.memoryRecords = Dictionary(
@@ -431,6 +449,14 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
     ) -> Bool {
         if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
         return lhs.createdAt < rhs.createdAt
+    }
+
+    private static func meetingTranscriptOrder(
+        _ lhs: MeetingTranscript,
+        _ rhs: MeetingTranscript
+    ) -> Bool {
+        if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.createdAt > rhs.createdAt
     }
 
     private static func memoryRecordOrder(_ lhs: MemoryRecord, _ rhs: MemoryRecord) -> Bool {

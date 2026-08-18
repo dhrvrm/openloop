@@ -67,6 +67,40 @@ private func temporaryDirectory() -> URL {
     #expect(try reopened.loadOrCreateKey() == fixedKey)
 }
 
+@Test func localFileKeyCreatesAndReopensWithoutAKeychainFallback() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let keyFileURL = directory.appendingPathComponent("root-key.local")
+    let provider = LocalFileVaultKeyProvider(fileURL: keyFileURL)
+
+    let first = try provider.loadOrCreateKey()
+    let second = try provider.loadOrCreateKey()
+
+    #expect(first.count == 32)
+    #expect(first == second)
+    let attributes = try FileManager.default.attributesOfItem(atPath: keyFileURL.path)
+    #expect(attributes[.posixPermissions] as? NSNumber == NSNumber(value: 0o600))
+}
+
+@Test func localFileKeyRejectsUnsafeOrInvalidFiles() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let shortURL = directory.appendingPathComponent("short-key.local")
+    try Data(repeating: 1, count: 3).write(to: shortURL)
+    #expect(throws: VaultKeyError.invalidKeyLength(3)) {
+        _ = try LocalFileVaultKeyProvider(fileURL: shortURL).loadOrCreateKey()
+    }
+
+    let targetURL = directory.appendingPathComponent("target")
+    try fixedKey.write(to: targetURL)
+    let linkURL = directory.appendingPathComponent("linked-key.local")
+    try FileManager.default.createSymbolicLink(at: linkURL, withDestinationURL: targetURL)
+    #expect(throws: VaultKeyError.unsafeLocalKeyFile) {
+        _ = try LocalFileVaultKeyProvider(fileURL: linkURL).loadOrCreateKey()
+    }
+}
+
 @Test func encryptedThoughtsSurviveRestartWithoutPlaintext() async throws {
     let directory = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -229,6 +263,34 @@ private func temporaryDirectory() -> URL {
         #expect(data.range(of: Data(correction.recognized.utf8)) == nil)
         #expect(data.range(of: Data(correction.corrected.utf8)) == nil)
     }
+}
+
+@Test func meetingTranscriptSurvivesEncryptedRestartWithoutPlaintext() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let transcript = try MeetingTranscript(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000063")!,
+        sourceName: "private-meeting.m4a",
+        createdAt: Date(timeIntervalSince1970: 30),
+        duration: 12,
+        detectedLanguage: "hi",
+        modelIdentifier: "whisper-large-v3",
+        segments: [
+            try TranscriptSegment(
+                start: 0,
+                end: 12,
+                text: "distinct multilingual meeting transcript marker"
+            ),
+        ]
+    )
+    let writer = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    try await writer.save(meetingTranscript: transcript)
+
+    let data = try Data(contentsOf: directory.appendingPathComponent("openloop.vault"))
+    #expect(data.range(of: Data(transcript.text.utf8)) == nil)
+    #expect(data.range(of: Data(transcript.sourceName.utf8)) == nil)
+    let reader = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    #expect(try await reader.meetingTranscripts() == [transcript])
 }
 
 @Test func workingMemoryLedgerSurvivesEncryptedRestartWithoutPlaintext() async throws {

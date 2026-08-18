@@ -17,7 +17,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>1.0.0</string>
     <key>CFBundleVersion</key>
-    <string>2</string>
+	<string>3</string>
     <key>LSArchitecturePriority</key>
     <array>
         <string>arm64</string>
@@ -27,8 +27,6 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>OpenLoop transcribes your voice on this Mac and does not retain audio.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>OpenLoop uses on-device speech recognition to turn your voice into a private capture.</string>
+	<string>OpenLoop records audio you start, transcribes it with a local multilingual model, then removes the temporary recording after the encrypted transcript is saved.</string>
 </dict>
 </plist>

@@ -240,3 +240,25 @@ proposal, and compatible intention state atomically. Reclassifying an unopened
 action releases its intention without deleting either capture or history.
 Active, interrupted, closed, and released intentions cannot be revised through
 this flow, preventing a background review from rewriting work already in motion.
+
+## D-021 — WhisperKit plus SpeakerKit replaces Apple Speech in production
+
+Status: accepted.
+
+Meeting transcription defaults to the local WhisperKit large-v3 Core ML model
+with automatic language detection, timestamps, incremental long-file loading,
+and no API credential. Local SpeakerKit Pyannote diarization aligns speakers to
+Whisper word timestamps; diarization is an enhancement, so its failure cannot
+discard an otherwise valid transcript. Apple Speech remains only as a legacy
+compiled test seam and is not instantiated in the packaged application.
+
+File import requests no TCC permission. Live recording requests microphone only
+after an explicit action and routes its local M4A through the same pipeline.
+Every job exposes model download, preparation, transcription, diarization,
+encryption, ready, cancelled, and retryable failure states. Audio staging is
+deleted after encrypted transcript persistence.
+
+Ad-hoc local builds use `root-key.local` directly and never fall back to Keychain
+automatically. This removes repeated ACL prompts caused by changing code hashes.
+Stable microphone authorization across replaced binaries still requires stable
+Developer ID signing; an ad-hoc binary identity cannot be made stable in code.

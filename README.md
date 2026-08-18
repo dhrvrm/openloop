@@ -27,7 +27,8 @@ The product is centered on ADHD experiences:
 - Local encrypted storage
 - No account
 - No organization features
-- No cloud, backend, website, telemetry, billing, or subscription
+- No cloud transcription, backend, account, telemetry, billing, or subscription
+- One network download for local speech models; transcription works offline afterward
 - Free distribution as a `.dmg`
 - Apple Silicon only
 
@@ -109,10 +110,11 @@ swift run thought-loop captures later
 
 The macOS app uses Command-Shift-Space for Quick Capture and provides quiet Now,
 Return, and Later surfaces. Raw text is accepted into an AES-GCM
-encrypted local vault before Quick Capture closes; its 256-bit root key is owned
-by macOS Keychain. The app launches as a regular Dock application and opens its
-workspace immediately; the menu-bar entry remains available. The app has no
-account, network dependency, or telemetry.
+encrypted local vault before Quick Capture closes. Release builds can keep the
+256-bit root key in macOS Keychain; ad-hoc local builds use a protected local key
+file so changing development signatures do not trigger recurring Keychain ACL
+prompts. The app launches as a regular Dock application and opens its workspace
+immediately; the menu-bar entry remains available.
 
 Run `Scripts/verify-increment-1.sh` to test the core, measure capture latency,
 inspect the encrypted vault, build and ad-hoc sign the app, and mount-check the
@@ -168,42 +170,29 @@ per-loop cooldown. `Later` silences a suggestion for one day and `Never suggest`
 silences it permanently; both are single actions. There are no overdue states,
 streaks, urgency scores, or notifications.
 
-## On-device voice capture
+## Local multilingual meeting transcription
 
-Press Command-Shift-R once to open a visible recording panel and begin live
-transcription. Press the same shortcut again to stop and save. The transcript
-uses the same encrypted capture path as typed text and remains editable if a
-save fails. Empty recordings are discarded, and sessions stop after one minute.
+Use **Import audio…** for WAV, MP3, M4A, MP4, FLAC, AIFF, or CAF, or press
+Command-Shift-R to start and stop a local M4A recording. Import needs no privacy
+permission. Recording requests only Microphone permission; the production path
+does not request macOS Speech Recognition access.
 
-OpenLoop requires Apple's on-device speech recognizer and never falls back to a
-network recognizer. Raw microphone audio is streamed only into the recognizer;
-OpenLoop does not write or retain it. The first explicit use asks for Microphone
-and Speech Recognition permission. If the current Dictation language has no
-on-device recognizer, OpenLoop reports that limitation instead of uploading
-audio.
+The first job downloads WhisperKit's `large-v3-v20240930_626MB` Core ML model,
+selected for maximum multilingual accuracy. The UI distinguishes model download,
+audio preparation, transcription, speaker separation, encryption, completion,
+failure, cancellation, and retry. Long files use bounded-memory incremental
+loading. Language detection, word and segment timestamps, and local SpeakerKit
+Pyannote diarization produce speaker-labelled evidence when the diarization model
+is available; transcription still completes if speaker separation cannot run.
 
-The panel shows a small live activity meter so silence, microphone selection,
-and detected speech are visible without storing audio samples. You can correct
-the transcript while recording; later recognition updates will not overwrite
-your edit. After the corrected text is successfully captured, OpenLoop stores
-only the recognized/final text pair inside the encrypted vault. Repeated edits
-produce a deterministic, 100-phrase personal vocabulary for names and technical
-terms that Apple Speech receives at the next session. No correction is learned
-from a failed save.
+Audio stays on the Mac. Imported or recorded audio is copied to a local staging
+directory only for the active or retryable job and removed after its transcript
+is saved into the AES-GCM vault. Recall shows source, duration, detected language,
+model, timestamps, speaker labels, selectable text, explicit capture, and delete
+actions. A transcript never becomes a task unless the user explicitly captures it.
 
-Recognition quality is measured independently of the active speech provider.
-The diagnostic consumes already-produced transcript fixtures and reports exact
-word error rate plus first-partial and final p95 latency for general, name, and
-technical phrases:
-
-```bash
-swift run OpenLoopADHD --voice-benchmark Tests/Fixtures/voice-benchmark.json
-```
-
-This command evaluates the supplied fixture; it is not a live microphone
-benchmark. The provider seam requires on-device recognition and can accept a
-future local adapter, while Apple Speech remains the selected implementation.
-Raw audio remains ephemeral and never enters the vocabulary or benchmark data.
+The older Apple Speech controller remains temporarily as a compiled compatibility
+test seam, but the packaged app no longer constructs or authorizes it.
 
 ## Personal Recall
 

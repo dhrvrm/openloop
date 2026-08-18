@@ -169,6 +169,36 @@ private struct LegacySnapshot: Codable {
     #expect(try await reader.transcriptionCorrections() == [earlier, later])
 }
 
+@Test func meetingTranscriptsSurviveDevelopmentRestartNewestFirst() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let first = try MeetingTranscript(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000061")!,
+        sourceName: "first.m4a",
+        createdAt: Date(timeIntervalSince1970: 10),
+        duration: 2,
+        modelIdentifier: "local-test",
+        segments: [try TranscriptSegment(start: 0, end: 2, text: "first meeting")]
+    )
+    let second = try MeetingTranscript(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000062")!,
+        sourceName: "second.m4a",
+        createdAt: Date(timeIntervalSince1970: 20),
+        duration: 2,
+        modelIdentifier: "local-test",
+        segments: [try TranscriptSegment(start: 0, end: 2, text: "second meeting")]
+    )
+    let writer = try JSONFileThoughtRepository(directory: directory)
+    try await writer.save(meetingTranscript: first)
+    try await writer.save(meetingTranscript: second)
+
+    let reader = try JSONFileThoughtRepository(directory: directory)
+    #expect(try await reader.meetingTranscripts() == [second, first])
+    try await reader.deleteMeetingTranscript(id: second.id)
+    #expect(try await reader.meetingTranscripts() == [first])
+}
+
 @Test func workingMemoryLedgerSurvivesDevelopmentRestartAndReplacesAtomically() async throws {
     let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)

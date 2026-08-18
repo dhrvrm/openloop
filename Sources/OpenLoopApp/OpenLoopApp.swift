@@ -81,7 +81,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private var hotKey: GlobalHotKey?
     private var voiceHotKey: GlobalHotKey?
     private var recallHotKey: GlobalHotKey?
-    private var voiceCapture: VoiceCaptureWindowController?
     private var model: AppModel?
     private var pauseMenuItem: NSMenuItem?
     private var privateModeMenuItem: NSMenuItem?
@@ -104,10 +103,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             let keyProvider: any VaultKeyProvider
             if Bundle.main.object(forInfoDictionaryKey: "OpenLoopLocalDevelopmentBuild") as? Bool
                 == true {
-                keyProvider = MigratingLocalVaultKeyProvider(
-                    fileURL: directory.appendingPathComponent("root-key.local"),
-                    fallback: keychainProvider
-                )
+                let localKeyURL = directory.appendingPathComponent("root-key.local")
+                let vaultURL = directory.appendingPathComponent("openloop.vault")
+                guard FileManager.default.fileExists(atPath: localKeyURL.path)
+                        || !FileManager.default.fileExists(atPath: vaultURL.path) else {
+                    throw VaultKeyError.legacyVaultRequiresExplicitMigration
+                }
+                keyProvider = LocalFileVaultKeyProvider(fileURL: localKeyURL)
             } else {
                 keyProvider = keychainProvider
             }
@@ -178,26 +180,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 return
             }
             let quickCapture = QuickCaptureController(model: model)
+            let meetingController = MeetingTranscriptionController(
+                repository: repository,
+                transcriber: WhisperKitMeetingTranscriber(
+                    modelStorageURL: directory.appendingPathComponent("Models/WhisperKit", isDirectory: true)
+                ),
+                stagingDirectory: directory.appendingPathComponent("Meeting Staging", isDirectory: true),
+                recorder: MeetingAudioRecorder()
+            )
+            model.attachMeetingTranscription(meetingController)
             let mainWindow = MainWindowController(model: model)
-            let voiceLearningLoop = VoiceLearningLoop(repository: repository)
-            let voiceController = VoiceTranscriptionController(
-                transcriber: OnDeviceSpeechTranscriber(),
-                vocabulary: {
-                    (try? await voiceLearningLoop.vocabulary(limit: 100)) ?? []
-                },
-                recordCorrection: { recognized, corrected, date in
-                    try? await voiceLearningLoop.record(
-                        recognized: recognized, corrected: corrected, at: date
-                    )
-                }
-            ) { [weak model] transcript in
-                await model?.submitCapture(transcript) ?? false
-            }
-            model.attachVoiceCapture(voiceController)
-            let voiceCapture = VoiceCaptureWindowController(controller: voiceController)
             self.quickCapture = quickCapture
             self.mainWindow = mainWindow
-            self.voiceCapture = voiceCapture
             self.model = model
             self.contextProvider = contextProvider
             let applicationContextObserver = ApplicationContextObserver { [weak model] application in
@@ -229,8 +223,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                     keyCode: binding.keyCode,
                     modifiers: binding.modifiers,
                     id: binding.id
-                ) { [weak voiceCapture] _ in
-                    voiceCapture?.toggle()
+                ) { [weak model] _ in
+                    model?.toggleVoiceCapture()
                 }
             } catch {
                 model.resurfacingError = "Voice shortcut is unavailable. Use Record & Transcribe in the menu."
@@ -686,7 +680,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     }
 
     @objc private func showCapture() { quickCapture?.show() }
-    @objc private func toggleVoiceCapture() { voiceCapture?.toggle() }
+    @objc private func toggleVoiceCapture() { model?.toggleVoiceCapture() }
     @objc private func showNow() { presentWorkspace(tab: 0) }
     @objc private func showReturn() { mainWindow?.show(tab: 1) }
     @objc private func showLater() { mainWindow?.show(tab: 2) }

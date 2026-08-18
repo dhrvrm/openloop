@@ -29,6 +29,9 @@ public protocol ThoughtRepository: Sendable {
     func suggestionEvents() async throws -> [SuggestionEvent]
     func save(transcriptionCorrection: TranscriptionCorrection) async throws
     func transcriptionCorrections() async throws -> [TranscriptionCorrection]
+    func save(meetingTranscript: MeetingTranscript) async throws
+    func meetingTranscripts() async throws -> [MeetingTranscript]
+    func deleteMeetingTranscript(id: UUID) async throws
     func save(memoryRecords: [MemoryRecord]) async throws
     func memoryRecords() async throws -> [MemoryRecord]
     func save(contextTrailSettings: ContextTrailSettings) async throws
@@ -49,6 +52,7 @@ public enum ThoughtRepositoryCompatibilityError: Error, Equatable {
     case focusSessionsUnsupported
     case resurfacingUnsupported
     case voiceLearningUnsupported
+    case meetingTranscriptionUnsupported
     case workingMemoryUnsupported
     case contextTrailUnsupported
     case privacyUnsupported
@@ -119,6 +123,16 @@ public extension ThoughtRepository {
     }
 
     func transcriptionCorrections() async throws -> [TranscriptionCorrection] { [] }
+
+    func save(meetingTranscript: MeetingTranscript) async throws {
+        throw ThoughtRepositoryCompatibilityError.meetingTranscriptionUnsupported
+    }
+
+    func meetingTranscripts() async throws -> [MeetingTranscript] { [] }
+
+    func deleteMeetingTranscript(id: UUID) async throws {
+        throw ThoughtRepositoryCompatibilityError.meetingTranscriptionUnsupported
+    }
 
     func save(memoryRecords: [MemoryRecord]) async throws {
         throw ThoughtRepositoryCompatibilityError.workingMemoryUnsupported

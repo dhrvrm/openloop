@@ -12,6 +12,12 @@ let package = Package(
         .executable(name: "thought-loop", targets: ["ThoughtLoopCLI"]),
         .executable(name: "OpenLoopADHD", targets: ["OpenLoopApp"]),
     ],
+    dependencies: [
+        .package(
+            url: "https://github.com/argmaxinc/argmax-oss-swift.git",
+            from: "1.1.0"
+        ),
+    ],
     targets: [
         .target(name: "ADHDCore"),
         .target(name: "LocalStore", dependencies: ["ADHDCore"]),
@@ -28,7 +34,14 @@ let package = Package(
         ),
         .executableTarget(
             name: "OpenLoopApp",
-            dependencies: ["ADHDCore", "LocalStore", "RuleClarifier", "VaultStore"],
+            dependencies: [
+                "ADHDCore",
+                "LocalStore",
+                "RuleClarifier",
+                "VaultStore",
+                .product(name: "WhisperKit", package: "argmax-oss-swift"),
+                .product(name: "SpeakerKit", package: "argmax-oss-swift"),
+            ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("AVFoundation"),

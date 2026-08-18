@@ -1,6 +1,7 @@
 import ADHDCore
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct WorkspaceDestination: Equatable, Sendable {
     let title: String
@@ -126,6 +127,9 @@ private struct MainView: View {
                 QuickAddComposer(model: model, text: $quickAddText) {
                     let captured = await model.submitCapture(quickAddText)
                     if captured { quickAddText = "" }
+                }
+                if model.meetingJob.stage != nil {
+                    MeetingJobPanel(model: model)
                 }
                 CaptureCapabilityNote(summary: model.capabilitySummary)
 
@@ -440,6 +444,7 @@ private struct MainView: View {
             )
 
             workingMemorySection
+            meetingTranscriptSection
             privacySection
 
             HStack(spacing: 10) {
@@ -502,7 +507,64 @@ private struct MainView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear {
             recallFieldFocused = true
-            Task { await model.refreshPrivacy() }
+            Task {
+                await model.refreshPrivacy()
+                _ = await model.refresh()
+            }
+        }
+    }
+
+    @ViewBuilder private var meetingTranscriptSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("MEETING TRANSCRIPTS")
+                        .font(.caption.monospaced().weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text("Multilingual Whisper · processed locally · encrypted here")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+                Button("Import audio…") { presentMeetingImporter() }
+                    .buttonStyle(.borderedProminent)
+            }
+
+            if model.meetingJob.stage != nil {
+                MeetingJobPanel(model: model)
+            }
+
+            if model.meetingTranscripts.isEmpty && model.meetingJob.stage == nil {
+                Text("Drop in a long meeting recording. The first run downloads a high-accuracy local model; your audio never leaves this Mac.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 4)
+            } else if !model.meetingTranscripts.isEmpty {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        ForEach(model.meetingTranscripts) { transcript in
+                            MeetingTranscriptRow(model: model, transcript: transcript)
+                        }
+                    }
+                }
+                .frame(maxHeight: 250)
+            }
+        }
+        .padding(14)
+        .background(Color.accentColor.opacity(0.055))
+        .clipShape(RoundedRectangle(cornerRadius: 9))
+    }
+
+    private func presentMeetingImporter() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose a meeting recording"
+        panel.prompt = "Transcribe locally"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.audio, .mpeg4Movie]
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            model.importMeetingAudio(url)
         }
     }
 
@@ -727,20 +789,20 @@ private struct QuickAddComposer: View {
                     model.toggleVoiceCapture()
                 } label: {
                     Label(
-                        VoiceRecordButtonPresentation.title(for: model.voiceCapture),
-                        systemImage: VoiceRecordButtonPresentation.systemImage(
-                            for: model.voiceCapture.state
-                        )
+                        model.meetingJob.stage == .recording ? "Stop & transcribe" : "Record",
+                        systemImage: model.meetingJob.stage == .recording
+                            ? "stop.circle.fill"
+                            : "record.circle"
                     )
                 }
                 .buttonStyle(.bordered)
-                .tint(model.voiceCapture.state == .recording ? .red : .accentColor)
-                .disabled(VoiceRecordButtonPresentation.isDisabled(model.voiceCapture.state))
+                .tint(model.meetingJob.stage == .recording ? .red : .accentColor)
+                .disabled(model.meetingJob.isActive && model.meetingJob.stage != .recording)
+                Button("Import audio…") { presentMeetingImporter() }
+                    .buttonStyle(.bordered)
+                    .disabled(model.meetingJob.isActive)
             }
 
-            if model.voiceCapture.state != .idle {
-                VoiceInlineStatus(model: model)
-            }
         }
         .padding(16)
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.7))
@@ -748,6 +810,179 @@ private struct QuickAddComposer: View {
     }
 
     private var isSaving: Bool { model.isSaving }
+
+    private func presentMeetingImporter() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose a meeting recording"
+        panel.prompt = "Transcribe locally"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.audio, .mpeg4Movie]
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            model.importMeetingAudio(url)
+        }
+    }
+}
+
+private struct MeetingJobPanel: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(title, systemImage: icon)
+                    .font(.callout.weight(.semibold))
+                Spacer()
+                Text("LOCAL ONLY")
+                    .font(.caption2.monospaced().weight(.semibold))
+                    .foregroundStyle(.green)
+            }
+            Text(model.meetingJob.message)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            if model.meetingJob.isActive {
+                ProgressView(value: model.meetingJob.fraction)
+                HStack {
+                    Text(model.meetingJob.sourceName ?? "Audio recording")
+                    Spacer()
+                    if let startedAt = model.meetingJob.startedAt {
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            Text(elapsed(startedAt, context.date))
+                        }
+                    }
+                    Text("\(Int(model.meetingJob.fraction * 100))%")
+                }
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.tertiary)
+            }
+            HStack(spacing: 10) {
+                if model.meetingJob.isActive {
+                    Button("Cancel") { model.cancelMeetingTranscription() }
+                } else if model.meetingJob.canRetry {
+                    Button("Retry locally") { model.retryMeetingTranscription() }
+                        .buttonStyle(.borderedProminent)
+                }
+                if !model.meetingJob.isActive {
+                    Button("Dismiss") { model.clearMeetingJob() }
+                        .buttonStyle(.link)
+                }
+                Spacer()
+                if let modelName = model.meetingJob.modelIdentifier {
+                    Text(modelName)
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .padding(13)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.75))
+        .overlay(
+            RoundedRectangle(cornerRadius: 9)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 9))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Local meeting transcription: \(model.meetingJob.message)")
+    }
+
+    private var title: String {
+        switch model.meetingJob.stage {
+        case .requestingMicrophone: "Requesting microphone"
+        case .recording: "Recording meeting"
+        case .waitingForModel: "Preparing model"
+        case .downloadingModel: "Downloading accuracy model"
+        case .preparingAudio: "Preparing audio"
+        case .transcribing: "Transcribing meeting"
+        case .diarizing: "Separating speakers"
+        case .saving: "Encrypting transcript"
+        case .ready: "Transcript ready"
+        case .failed: "Transcription needs attention"
+        case .cancelled: "Transcription cancelled"
+        case nil: "Meeting transcription"
+        }
+    }
+
+    private var icon: String {
+        switch model.meetingJob.stage {
+        case .ready: "checkmark.circle.fill"
+        case .failed: "exclamationmark.triangle"
+        case .cancelled: "xmark.circle"
+        default: "waveform.and.mic"
+        }
+    }
+
+    private func elapsed(_ start: Date, _ end: Date) -> String {
+        let seconds = max(0, Int(end.timeIntervalSince(start)))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+private struct MeetingTranscriptRow: View {
+    @ObservedObject var model: AppModel
+    let transcript: MeetingTranscript
+    @State private var expanded = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(transcript.segments) { segment in
+                    HStack(alignment: .top, spacing: 10) {
+                        Text(timestamp(segment.start))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 44, alignment: .trailing)
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let speaker = segment.speaker {
+                                Text(speaker.uppercased())
+                                    .font(.caption2.monospaced().weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Text(segment.text)
+                                .font(.callout)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+                HStack {
+                    Button("Capture transcript") {
+                        Task { await model.captureMeetingTranscript(transcript.id) }
+                    }
+                    Button("Delete", role: .destructive) {
+                        Task { await model.deleteMeetingTranscript(transcript.id) }
+                    }
+                    Spacer()
+                }
+            }
+            .padding(.top, 10)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "waveform")
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(transcript.sourceName)
+                        .font(.callout.weight(.medium))
+                    Text("\(duration(transcript.duration)) · \(transcript.detectedLanguage?.uppercased() ?? "AUTO") · \(transcript.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(11)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    private func timestamp(_ seconds: TimeInterval) -> String {
+        String(format: "%02d:%02d", Int(seconds) / 60, Int(seconds) % 60)
+    }
+
+    private func duration(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds))
+        return total >= 3_600
+            ? String(format: "%d:%02d:%02d", total / 3_600, total / 60 % 60, total % 60)
+            : String(format: "%d:%02d", total / 60, total % 60)
+    }
 }
 
 private struct VoiceInlineStatus: View {
@@ -838,13 +1073,13 @@ private struct CaptureCapabilityNote: View {
         if summary.quickCapture == .unavailable {
             return "Typed capture is ready here. The global shortcut is unavailable."
         }
-        if summary.microphone == .unavailable || summary.speechRecognition == .unavailable {
-            return "Typed capture is ready. Voice is disabled in macOS privacy settings."
+        if summary.microphone == .unavailable {
+            return "Audio import is ready. Live recording is disabled in macOS microphone settings."
         }
-        if summary.microphone == .askWhenUsed || summary.speechRecognition == .askWhenUsed {
-            return "Typed capture is ready. Voice asks permission only when first used."
+        if summary.microphone == .askWhenUsed {
+            return "Audio import is permission-free. Recording asks for microphone access only when first used."
         }
-        return "Typed and voice capture stay on this Mac."
+        return "Typed, imported, and recorded capture stay on this Mac."
     }
 }
 

@@ -37,6 +37,8 @@ final class AppModel: ObservableObject {
     @Published var recoveryNotice: String?
     @Published var capabilitySummary = CapabilitySummary()
     @Published var voiceCapture = VoiceCapturePresentation()
+    @Published var meetingJob = MeetingJobPresentation()
+    @Published var meetingTranscripts: [MeetingTranscript] = []
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -49,6 +51,9 @@ final class AppModel: ObservableObject {
     private var recallGeneration = 0
     private var voiceController: VoiceTranscriptionController?
     private var voiceObservation: AnyCancellable?
+    private var meetingController: MeetingTranscriptionController?
+    private var meetingJobObservation: AnyCancellable?
+    private var meetingTranscriptObservation: AnyCancellable?
 
     init(
         loop: ThoughtLoop,
@@ -88,6 +93,10 @@ final class AppModel: ObservableObject {
     }
 
     func toggleVoiceCapture() {
+        if let meetingController {
+            Task { await meetingController.toggleRecording() }
+            return
+        }
         guard let voiceController else {
             commandError = "Voice capture is unavailable."
             return
@@ -96,7 +105,44 @@ final class AppModel: ObservableObject {
     }
 
     func cancelVoiceCapture() {
-        voiceController?.cancel()
+        if meetingController != nil {
+            meetingController?.cancel()
+        } else {
+            voiceController?.cancel()
+        }
+    }
+
+    func attachMeetingTranscription(_ controller: MeetingTranscriptionController) {
+        meetingController = controller
+        meetingJobObservation = controller.$job.sink { [weak self] in self?.meetingJob = $0 }
+        meetingTranscriptObservation = controller.$transcripts.sink { [weak self] in
+            self?.meetingTranscripts = $0
+        }
+        Task { await controller.refresh() }
+    }
+
+    func importMeetingAudio(_ url: URL) {
+        guard let meetingController else {
+            commandError = "Local meeting transcription is unavailable."
+            return
+        }
+        meetingController.importAudio(url)
+    }
+
+    func retryMeetingTranscription() { meetingController?.retry() }
+    func cancelMeetingTranscription() { meetingController?.cancel() }
+    func clearMeetingJob() { meetingController?.clearFinishedJob() }
+
+    func deleteMeetingTranscript(_ id: UUID) async {
+        await meetingController?.deleteTranscript(id: id)
+    }
+
+    @discardableResult
+    func captureMeetingTranscript(_ id: UUID) async -> Bool {
+        guard let transcript = meetingTranscripts.first(where: { $0.id == id }) else {
+            return false
+        }
+        return await submitCapture(transcript.text)
     }
 
     func refreshContextTrail(at date: Date = .now) async {
@@ -368,6 +414,7 @@ final class AppModel: ObservableObject {
 
     @discardableResult
     func refresh() async -> Bool {
+        await meetingController?.refresh()
         do {
             async let nextNow = readModels.now()
             async let nextReturns = readModels.returns()
