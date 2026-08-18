@@ -119,14 +119,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             return !Task.isCancelled
         }
 
-        let promptTokens: [Int]? = if let contextPrompt,
-                                      !contextPrompt.isEmpty,
-                                      let tokenizer = pipeline.tokenizer {
-            tokenizer.encode(text: " " + contextPrompt)
-                .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
-        } else {
-            nil
-        }
+        let promptTokens = Self.promptTokens(for: contextPrompt, pipeline: pipeline)
         let options = DecodingOptions(
             verbose: false,
             task: .transcribe,
@@ -140,18 +133,40 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             promptTokens: promptTokens,
             concurrentWorkerCount: 4
         )
-        let input = AudioInputOptions(audioLoadingMode: .incremental)
-        let results = await pipeline.transcribeWithResults(
-            audioPaths: [audioURL.path],
-            audioInputOptions: input,
-            decodeOptions: options,
-            callback: callback
-        )
-        try Task.checkCancellation()
-        guard let first = results.first else {
-            throw MeetingTranscriptionError.emptyTranscript
+        let windows: [TranscriptionResult]
+        if languageCode == nil, duration > 0, duration <= 45 {
+            let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path)
+            let ranges = UtteranceAudioChunker.ranges(in: audio)
+            if ranges.count > 1 {
+                var utteranceOptions = options
+                utteranceOptions.promptTokens = Self.promptTokens(
+                    for: Self.participantPrompt(from: contextPrompt),
+                    pipeline: pipeline
+                )
+                windows = try await transcribeUtterances(
+                    audio: audio,
+                    ranges: ranges,
+                    pipeline: pipeline,
+                    options: utteranceOptions,
+                    progress: progress
+                )
+            } else {
+                windows = try await transcribeFile(
+                    audioURL: audioURL,
+                    pipeline: pipeline,
+                    options: options,
+                    callback: callback
+                )
+            }
+        } else {
+            windows = try await transcribeFile(
+                audioURL: audioURL,
+                pipeline: pipeline,
+                options: options,
+                callback: callback
+            )
         }
-        let windows = try first.get()
+        try Task.checkCancellation()
         let mapped: (segments: [TranscriptSegment], language: String?)
         if speakerDiarizationEnabled {
             do {
@@ -182,6 +197,66 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             modelIdentifier: modelIdentifier,
             segments: mapped.segments
         )
+    }
+
+    private func transcribeFile(
+        audioURL: URL,
+        pipeline: WhisperKit,
+        options: DecodingOptions,
+        callback: @escaping TranscriptionCallback
+    ) async throws -> [TranscriptionResult] {
+        let input = AudioInputOptions(audioLoadingMode: .incremental)
+        let results = await pipeline.transcribeWithResults(
+            audioPaths: [audioURL.path],
+            audioInputOptions: input,
+            decodeOptions: options,
+            callback: callback
+        )
+        guard let first = results.first else {
+            throw MeetingTranscriptionError.emptyTranscript
+        }
+        return try first.get()
+    }
+
+    private func transcribeUtterances(
+        audio: [Float],
+        ranges: [Range<Int>],
+        pipeline: WhisperKit,
+        options: DecodingOptions,
+        progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
+    ) async throws -> [TranscriptionResult] {
+        var collected: [TranscriptionResult] = []
+        for (index, range) in ranges.enumerated() {
+            try Task.checkCancellation()
+            let results = try await pipeline.transcribe(
+                audioArray: Array(audio[range]),
+                audioArrayOffset: range.lowerBound,
+                decodeOptions: options
+            )
+            let seekTime = Float(range.lowerBound) / Float(WhisperKit.sampleRate)
+            for result in results {
+                result.seekTime = seekTime
+                result.segments = result.segments.map {
+                    TranscriptionUtilities.updateSegmentTimings(
+                        segment: $0,
+                        seekOffsetIndex: range.lowerBound
+                    )
+                }
+            }
+            collected.append(contentsOf: results)
+            let preview = collected
+                .flatMap(\.segments)
+                .map(\.text)
+                .joined(separator: " ")
+            await progress(.init(
+                stage: .transcribing,
+                fraction: min(0.98, Double(index + 1) / Double(ranges.count)),
+                message: "Detecting each spoken language locally",
+                previewText: preview
+            ))
+        }
+        guard !collected.isEmpty else { throw MeetingTranscriptionError.emptyTranscript }
+        return collected
     }
 
     private func diarize(
@@ -233,7 +308,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             )
         }
         guard !segments.isEmpty else { throw MeetingTranscriptionError.emptyTranscript }
-        let language = transcription.lazy.map(\.language).first(where: { !$0.isEmpty })
+        let language = Self.languageSummary(transcription.map(\.language))
         return (segments, language)
     }
 
@@ -308,7 +383,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             )
         }
         guard !segments.isEmpty else { throw MeetingTranscriptionError.emptyTranscript }
-        let language = results.lazy.map(\.language).first(where: { !$0.isEmpty })
+        let language = languageSummary(results.map(\.language))
         return (segments, language)
     }
 
@@ -322,6 +397,33 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             return min(0.98, inputAudioSeconds / duration)
         }
         return min(0.9, Double(windowID + 1) * 30 / duration)
+    }
+
+    static func languageSummary(_ languages: [String]) -> String? {
+        var seen = Set<String>()
+        let ordered = languages.compactMap { language -> String? in
+            let value = language.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty, seen.insert(value).inserted else { return nil }
+            return value
+        }
+        return ordered.isEmpty ? nil : ordered.joined(separator: " + ")
+    }
+
+    private static func participantPrompt(from context: String?) -> String? {
+        guard let firstSentence = context?.split(separator: ".", maxSplits: 1).first else {
+            return nil
+        }
+        let value = firstSentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value + "."
+    }
+
+    private static func promptTokens(for prompt: String?, pipeline: WhisperKit) -> [Int]? {
+        guard let prompt,
+              !prompt.isEmpty,
+              let tokenizer = pipeline.tokenizer else { return nil }
+        let tokens = tokenizer.encode(text: " " + prompt)
+            .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+        return tokens.isEmpty ? nil : tokens
     }
 
     private static func audioDuration(_ url: URL) async -> TimeInterval {

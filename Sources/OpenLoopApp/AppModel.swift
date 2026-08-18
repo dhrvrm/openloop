@@ -41,6 +41,7 @@ final class AppModel: ObservableObject {
     @Published var meetingTranscripts: [MeetingTranscript] = []
     @Published var meetingEngineDiagnostics = MeetingEngineDiagnostics.checking
     @Published var meetingPipelineEvents: [MeetingPipelineEvent] = []
+    @Published var recordingDecibels: Float?
     @Published var isAdvancedModeEnabled: Bool
     @Published var meetingLanguagePreference: MeetingLanguagePreference
 
@@ -62,6 +63,7 @@ final class AppModel: ObservableObject {
     private var meetingTranscriptObservation: AnyCancellable?
     private var meetingDiagnosticsObservation: AnyCancellable?
     private var meetingEventsObservation: AnyCancellable?
+    private var meetingMeterObservation: AnyCancellable?
 
     init(
         loop: ThoughtLoop,
@@ -138,6 +140,9 @@ final class AppModel: ObservableObject {
         }
         meetingEventsObservation = controller.$pipelineEvents.sink { [weak self] in
             self?.meetingPipelineEvents = $0
+        }
+        meetingMeterObservation = controller.$recordingDecibels.sink { [weak self] in
+            self?.recordingDecibels = $0
         }
         Task { await controller.refresh() }
     }

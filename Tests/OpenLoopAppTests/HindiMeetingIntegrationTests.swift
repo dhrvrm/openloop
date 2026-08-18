@@ -13,6 +13,9 @@ import Testing
     let languageCode = environment["OPENLOOP_LANGUAGE_CODE"]
     let contextPrompt = environment["OPENLOOP_CONTEXT_PROMPT"]
     let expectedName = environment["OPENLOOP_EXPECTED_NAME"]
+    let expectedLanguages = environment["OPENLOOP_EXPECTED_LANGUAGES"]?
+        .split(separator: ",")
+        .map(String.init)
 
     let transcriber = WhisperKitMeetingTranscriber(
         modelIdentifier: modelIdentifier,
@@ -33,7 +36,12 @@ import Testing
     print("hindi-output-characters=\(text.count)")
     print("hindi-devanagari-scalars=\(devanagariCount)")
     print("hindi-synthetic-output=\(text)")
-    #expect(output.detectedLanguage == "hi")
+    if let expectedLanguages {
+        let detectedLanguages = Set(output.detectedLanguage?.components(separatedBy: " + ") ?? [])
+        #expect(expectedLanguages.allSatisfy(detectedLanguages.contains))
+    } else {
+        #expect(output.detectedLanguage == "hi")
+    }
     if let expectedName {
         let lowercaseText = text.lowercased()
         #expect(text.localizedCaseInsensitiveContains(expectedName))
@@ -41,6 +49,7 @@ import Testing
         #expect(text.contains("हिंदी") || lowercaseText.contains("hindi"))
         #expect(text.contains("बात") || lowercaseText.contains("baat"))
         #expect(text.contains("रहा") || lowercaseText.contains("raha"))
+        #expect(devanagariCount >= 10)
         return
     }
     #expect(devanagariCount >= 20)

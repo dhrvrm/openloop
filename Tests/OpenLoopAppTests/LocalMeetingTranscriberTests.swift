@@ -19,3 +19,9 @@ import Testing
     )
     #expect(abs(fallback - 0.15) < 0.000_001)
 }
+
+@Test func languageSummaryPreservesFirstSeenLanguages() {
+    #expect(WhisperKitMeetingTranscriber.languageSummary(["en", "en", "hi", "hi"]) == "en + hi")
+    #expect(WhisperKitMeetingTranscriber.languageSummary(["hi"]) == "hi")
+    #expect(WhisperKitMeetingTranscriber.languageSummary(["", "  "]) == nil)
+}

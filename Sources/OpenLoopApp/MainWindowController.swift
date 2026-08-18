@@ -863,9 +863,12 @@ private struct QuickAddComposer: View {
                             : "record.circle"
                     )
                 }
-                .buttonStyle(.bordered)
-                .tint(model.meetingJob.stage == .recording ? .red : .accentColor)
+                .buttonStyle(.borderedProminent)
+                .tint(model.meetingJob.stage == .recording ? .red : OpenLoopVisualSystem.accent)
                 .disabled(model.meetingJob.isActive && model.meetingJob.stage != .recording)
+            }
+            if model.meetingJob.stage == .recording {
+                RecordingLevelMeter(decibels: model.recordingDecibels)
             }
             HStack(spacing: 10) {
                 Button("Import meeting audio…", systemImage: "waveform.badge.plus") {
@@ -899,6 +902,80 @@ private struct QuickAddComposer: View {
     }
 }
 
+private struct RecordingLevelMeter: View {
+    let decibels: Float?
+
+    private let barCount = 22
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(.red)
+                    .frame(width: 7, height: 7)
+                Text("MIC INPUT")
+                    .font(.caption2.monospaced().weight(.semibold))
+                    .foregroundStyle(.red)
+                Text(signalStatus)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(decibelText)
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.primary)
+            }
+
+            HStack(alignment: .center, spacing: 3) {
+                ForEach(0..<barCount, id: \.self) { index in
+                    Capsule(style: .continuous)
+                        .fill(barColor(index: index))
+                        .frame(width: 4, height: barHeight(index: index))
+                }
+            }
+            .frame(height: 30)
+            .animation(.linear(duration: 0.06), value: decibels)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.red.opacity(0.065), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(.red.opacity(0.22), lineWidth: 1)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Microphone input")
+        .accessibilityValue("\(decibelText), \(signalStatus)")
+    }
+
+    private var normalizedLevel: CGFloat {
+        guard let decibels else { return 0 }
+        return CGFloat(min(1, max(0, (decibels + 60) / 60)))
+    }
+
+    private var decibelText: String {
+        guard let decibels else { return "— dB" }
+        return String(format: "%.0f dB", decibels)
+    }
+
+    private var signalStatus: String {
+        guard let decibels else { return "LISTENING" }
+        if decibels < -45 { return "SIGNAL LOW" }
+        if decibels < -28 { return "HEARING YOU" }
+        return "STRONG SIGNAL"
+    }
+
+    private func barHeight(index: Int) -> CGFloat {
+        let phase = Double(index) * 1.47
+        let profile = CGFloat(0.52 + 0.48 * abs(sin(phase)))
+        return max(4, (6 + 24 * normalizedLevel) * profile)
+    }
+
+    private func barColor(index: Int) -> Color {
+        let threshold = Int((normalizedLevel * CGFloat(barCount)).rounded())
+        return index < threshold ? .red : .secondary.opacity(0.16)
+    }
+}
+
 private struct MeetingJobPanel: View {
     @ObservedObject var model: AppModel
 
@@ -907,6 +984,7 @@ private struct MeetingJobPanel: View {
             HStack(alignment: .firstTextBaseline) {
                 Label(title, systemImage: icon)
                     .font(.callout.weight(.semibold))
+                    .foregroundStyle(model.meetingJob.stage == .recording ? .red : .primary)
                 Spacer()
                 Text("LOCAL ONLY")
                     .font(.caption2.monospaced().weight(.semibold))
@@ -920,7 +998,20 @@ private struct MeetingJobPanel: View {
             Text(model.meetingJob.message)
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            if model.meetingJob.isActive {
+            if model.meetingJob.stage == .recording {
+                RecordingLevelMeter(decibels: model.recordingDecibels)
+                HStack {
+                    Text(model.meetingJob.sourceName ?? "Live recording")
+                    Spacer()
+                    if let startedAt = model.meetingJob.startedAt {
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            Text(elapsed(startedAt, context.date))
+                        }
+                    }
+                }
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            } else if model.meetingJob.isActive {
                 ProgressView(value: model.meetingJob.fraction)
                 HStack {
                     Text(model.meetingJob.sourceName ?? "Audio recording")

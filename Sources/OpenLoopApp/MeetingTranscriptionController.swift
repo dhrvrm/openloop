@@ -28,6 +28,7 @@ final class MeetingTranscriptionController: ObservableObject {
     @Published private(set) var engineDiagnostics = MeetingEngineDiagnostics.checking
     @Published private(set) var pipelineEvents: [MeetingPipelineEvent] = []
     @Published private(set) var languagePreference = MeetingLanguagePreference.automatic
+    @Published private(set) var recordingDecibels: Float?
 
     private let repository: any ThoughtRepository
     private let transcriber: any MeetingTranscribing
@@ -46,6 +47,9 @@ final class MeetingTranscriptionController: ObservableObject {
         self.transcriber = transcriber
         self.stagingDirectory = stagingDirectory
         self.recorder = recorder
+        recorder?.onDecibelUpdate = { [weak self] value in
+            self?.recordingDecibels = value
+        }
     }
 
     func refresh() async {
@@ -84,15 +88,18 @@ final class MeetingTranscriptionController: ObservableObject {
         }
         if job.stage == .recording {
             guard let url = recorder.stop() else {
+                recordingDecibels = nil
                 job.stage = .failed
                 job.message = "The recording could not be finalized. Try again or import a file."
                 recordEvent(stage: .failed, message: job.message, fraction: job.fraction)
                 return
             }
+            recordingDecibels = nil
             start(stagedURL: url, sourceName: "OpenLoop recording.m4a")
             return
         }
         guard !job.isActive else { return }
+        recordingDecibels = nil
         job = MeetingJobPresentation(
             stage: .requestingMicrophone,
             message: "Requesting microphone access",
@@ -126,6 +133,7 @@ final class MeetingTranscriptionController: ObservableObject {
             recordEvent(stage: .recording, message: job.message, fraction: 0)
         } catch {
             recorder.cancel()
+            recordingDecibels = nil
             job.stage = .failed
             job.message = "Recording could not start. Check the selected microphone or import an audio file."
             recordEvent(stage: .failed, message: job.message, fraction: 0)
@@ -141,6 +149,7 @@ final class MeetingTranscriptionController: ObservableObject {
         if job.stage == .recording || job.stage == .requestingMicrophone {
             recorder?.cancel()
         }
+        recordingDecibels = nil
         work?.cancel()
         work = nil
         job.stage = .cancelled

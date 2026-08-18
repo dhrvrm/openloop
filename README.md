@@ -175,7 +175,10 @@ streaks, urgency scores, or notifications.
 Use **Import audio…** for WAV, MP3, M4A, MP4, FLAC, AIFF, or CAF, or press
 Command-Shift-R to start and stop a local M4A recording. Import needs no privacy
 permission. Recording requests only Microphone permission; the production path
-does not request macOS Speech Recognition access.
+does not request macOS Speech Recognition access. While recording, the primary
+control turns red and a live input meter shows the microphone's measured dB level,
+signal strength, and movement; it is driven by local audio power rather than a
+decorative animation.
 
 The first job downloads WhisperKit's `large-v3-v20240930_626MB` Core ML model,
 selected for maximum multilingual accuracy. The UI distinguishes model download,
@@ -185,7 +188,9 @@ transcript while Whisper is working; after encryption, the completed transcript
 remains visible below the job and the newest Recall transcript opens automatically.
 Long files use bounded-memory incremental loading. Whisper detects the spoken
 language automatically for every import and recording; no language setup appears
-in the normal workflow. Word and segment timestamps and local SpeakerKit
+in the normal workflow. Short automatic recordings are split at meaningful silent
+boundaries so each utterance can detect its own language, and mixed results report
+an ordered summary such as `en + hi`. Word and segment timestamps and local SpeakerKit
 Pyannote diarization produce speaker-labelled evidence when the diarization model
 is available; transcription still completes if speaker separation cannot run.
 
@@ -208,8 +213,8 @@ to automatic detection on the next app launch.
 For better proper-name and code-switch accuracy, OpenLoop gives Whisper a short
 on-device context containing the local Mac account name and English, Hindi, and
 Hinglish vocabulary guidance. The context never leaves the Mac. Hindi-dominant
-audio remains in Devanagari while short mostly-English switches may use readable
-romanized Hinglish.
+audio remains in Devanagari, and silence-separated Hindi utterances at the end of
+English speech are decoded independently so the language switch remains visible.
 
 The Advanced override exposes the multilingual model's verified tokens for English,
 Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada, Malayalam, Punjabi, Urdu,

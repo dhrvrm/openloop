@@ -88,6 +88,29 @@ import Testing
     #expect(await transcriber.latestLanguageCode() == nil)
 }
 
+@MainActor
+@Test func liveRecordingPublishesAndClearsDecibels() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let recorder = FakeMeetingRecorder()
+    let controller = MeetingTranscriptionController(
+        repository: MeetingRepository(),
+        transcriber: SuccessfulMeetingTranscriber(),
+        stagingDirectory: root,
+        recorder: recorder
+    )
+
+    await controller.toggleRecording()
+    recorder.emitDecibels(-23.5)
+
+    #expect(controller.recordingDecibels == -23.5)
+
+    await controller.toggleRecording()
+    #expect(controller.recordingDecibels == nil)
+    await controller.waitUntilSettledForTesting()
+}
+
 private actor SuccessfulMeetingTranscriber: MeetingTranscribing {
     nonisolated let modelIdentifier = "local-test-model"
     private var languageCodes: [String?] = []
@@ -143,6 +166,7 @@ private actor MeetingRepository: ThoughtRepository {
 private final class FakeMeetingRecorder: MeetingAudioRecording {
     private(set) var isRecording = false
     private var url: URL?
+    var onDecibelUpdate: ((Float?) -> Void)?
 
     func requestPermission() async -> Bool { true }
     func start(at url: URL) throws {
@@ -161,5 +185,9 @@ private final class FakeMeetingRecorder: MeetingAudioRecording {
     func cancel() {
         isRecording = false
         if let url { try? FileManager.default.removeItem(at: url) }
+    }
+
+    func emitDecibels(_ value: Float) {
+        onDecibelUpdate?(value)
     }
 }
