@@ -54,7 +54,6 @@ final class AppModel: ObservableObject {
     private let privacyManager: (any PrivacyManaging)?
     private let defaults: UserDefaults
     private let advancedModeKey: String
-    private let meetingLanguageKey: String
     private var recallGeneration = 0
     private var voiceController: VoiceTranscriptionController?
     private var voiceObservation: AnyCancellable?
@@ -74,8 +73,7 @@ final class AppModel: ObservableObject {
         contextTrail: (any ContextTrailProviding)? = nil,
         privacyManager: (any PrivacyManaging)? = nil,
         defaults: UserDefaults = .standard,
-        advancedModeKey: String = "OpenLoopAdvancedMode",
-        meetingLanguageKey: String = "OpenLoopMeetingLanguage"
+        advancedModeKey: String = "OpenLoopAdvancedMode"
     ) {
         self.loop = loop
         self.readModels = readModels
@@ -87,11 +85,8 @@ final class AppModel: ObservableObject {
         self.privacyManager = privacyManager
         self.defaults = defaults
         self.advancedModeKey = advancedModeKey
-        self.meetingLanguageKey = meetingLanguageKey
         isAdvancedModeEnabled = defaults.bool(forKey: advancedModeKey)
-        meetingLanguagePreference = MeetingLanguagePreference(
-            rawValue: defaults.string(forKey: meetingLanguageKey) ?? ""
-        ) ?? .automatic
+        meetingLanguagePreference = .automatic
     }
 
     func attachVoiceCapture(_ controller: VoiceTranscriptionController) {
@@ -155,7 +150,6 @@ final class AppModel: ObservableObject {
     func setMeetingLanguagePreference(_ preference: MeetingLanguagePreference) {
         guard !meetingJob.isActive else { return }
         meetingLanguagePreference = preference
-        defaults.set(preference.rawValue, forKey: meetingLanguageKey)
         meetingController?.setLanguagePreference(preference)
     }
 

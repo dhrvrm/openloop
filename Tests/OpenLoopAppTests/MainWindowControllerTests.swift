@@ -181,29 +181,28 @@ private actor EnabledWindowContextTrail: ContextTrailProviding {
 }
 
 @MainActor
-@Test func hindiMeetingPreferencePersistsAcrossAppModels() {
+@Test func meetingLanguageAlwaysStartsWithAutomaticDetection() {
     let suiteName = "OpenLoopAppTests.MeetingLanguage.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!
     defer { defaults.removePersistentDomain(forName: suiteName) }
     let repository = EmptyWindowRepository()
     let loop = ThoughtLoop(repository: repository, clarifier: WindowUnusedClarifier())
-    let key = "meeting-language"
+    defaults.set(MeetingLanguagePreference.hindiHinglish.rawValue, forKey: "OpenLoopMeetingLanguage")
 
     let first = AppModel(
         loop: loop,
         readModels: ThoughtReadModels(repository: repository),
-        defaults: defaults,
-        meetingLanguageKey: key
+        defaults: defaults
     )
     #expect(first.meetingLanguagePreference == .automatic)
 
     first.setMeetingLanguagePreference(.hindiHinglish)
+    #expect(first.meetingLanguagePreference == .hindiHinglish)
 
     let second = AppModel(
         loop: loop,
         readModels: ThoughtReadModels(repository: repository),
-        defaults: defaults,
-        meetingLanguageKey: key
+        defaults: defaults
     )
-    #expect(second.meetingLanguagePreference == .hindiHinglish)
+    #expect(second.meetingLanguagePreference == .automatic)
 }

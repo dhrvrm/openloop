@@ -24,7 +24,7 @@ afconvert -f WAVE -d LEI16@16000 \
     "$TASK_FIXTURE_DIR/hinglish-source.aiff" \
     "$TASK_FIXTURE_DIR/hinglish.wav"
 
+env -u OPENLOOP_LANGUAGE_CODE \
 OPENLOOP_HINDI_FIXTURE="$TASK_FIXTURE_DIR/hinglish.wav" \
 OPENLOOP_MODEL_STORAGE="$TASK_MODEL_STORAGE" \
-OPENLOOP_LANGUAGE_CODE=hi \
     "$TASK_ROOT/Scripts/test.sh" --filter localWhisperRecognizesHindiFixture

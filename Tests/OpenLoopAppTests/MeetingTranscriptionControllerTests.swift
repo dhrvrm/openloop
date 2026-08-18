@@ -65,6 +65,29 @@ import Testing
     #expect(controller.transcripts.first?.text == "नमस्ते team")
 }
 
+@MainActor
+@Test func automaticLanguageDetectionPassesNoLanguageCodeToWhisper() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let audio = root.appendingPathComponent("multilingual.m4a")
+    try Data("audio fixture".utf8).write(to: audio)
+    let transcriber = SuccessfulMeetingTranscriber()
+    let controller = MeetingTranscriptionController(
+        repository: MeetingRepository(),
+        transcriber: transcriber,
+        stagingDirectory: root.appendingPathComponent("staging")
+    )
+
+    controller.importAudio(audio)
+    await controller.waitUntilSettledForTesting()
+
+    #expect(controller.job.stage == .ready)
+    #expect(controller.job.requestedLanguage == .automatic)
+    #expect(await transcriber.latestLanguageCode() == nil)
+}
+
 private actor SuccessfulMeetingTranscriber: MeetingTranscribing {
     nonisolated let modelIdentifier = "local-test-model"
     private var languageCodes: [String?] = []

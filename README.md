@@ -183,8 +183,9 @@ audio preparation, transcription, speaker separation, encryption, completion,
 failure, cancellation, and retry. Real partial text appears as a selectable live
 transcript while Whisper is working; after encryption, the completed transcript
 remains visible below the job and the newest Recall transcript opens automatically.
-Long files use bounded-memory incremental
-loading. Language detection, word and segment timestamps, and local SpeakerKit
+Long files use bounded-memory incremental loading. Whisper detects the spoken
+language automatically for every import and recording; no language setup appears
+in the normal workflow. Word and segment timestamps and local SpeakerKit
 Pyannote diarization produce speaker-labelled evidence when the diarization model
 is available; transcription still completes if speaker separation cannot run.
 
@@ -199,14 +200,14 @@ test seam, but the packaged app no longer constructs or authorizes it.
 
 ### Hindi, Hinglish, and Indian languages
 
-Choose the meeting language beside **Import audio** or **Record**. **Hindi /
-Hinglish** forces Whisper's `hi` language token for the complete job instead of
-making every meeting depend on automatic detection. The choice persists locally
-and is shown in the live job panel and Advanced inspector.
+Hindi, Hinglish, and other supported languages use automatic detection by default.
+The completed transcript shows the detected language. For an unusually difficult
+recording, Advanced mode offers a temporary manual language override that resets
+to automatic detection on the next app launch.
 
-The same control exposes the multilingual model's verified tokens for English,
+The Advanced override exposes the multilingual model's verified tokens for English,
 Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada, Malayalam, Punjabi, Urdu,
-Assamese, Nepali, Sanskrit, and Sindhi. Auto Detect remains available when the
+Assamese, Nepali, Sanskrit, and Sindhi. Auto detect remains available when the
 language is unknown. OpenLoop transcribes rather than translates, so Hindi stays
 Hindi instead of being silently converted into English.
 

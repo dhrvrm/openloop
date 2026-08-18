@@ -117,10 +117,7 @@ struct AdvancedInspector: View {
                     value: model.meetingEngineDiagnostics.diarizationModel
                 )
                 Divider()
-                InspectorFact(
-                    label: "Language",
-                    value: model.meetingLanguagePreference.title
-                )
+                InspectorLanguageControl(model: model)
                 Divider()
                 InspectorFact(
                     label: "Compute",
@@ -290,5 +287,41 @@ private struct InspectorFact: View {
         }
         .font(.caption)
         .padding(.vertical, 9)
+    }
+}
+
+private struct InspectorLanguageControl: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Text("Language detection")
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Picker(
+                    "Language detection",
+                    selection: Binding(
+                        get: { model.meetingLanguagePreference },
+                        set: { model.setMeetingLanguagePreference($0) }
+                    )
+                ) {
+                    ForEach(MeetingLanguagePreference.allCases) { preference in
+                        Text(preference.title).tag(preference)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 142)
+                .disabled(model.meetingJob.isActive)
+            }
+            Text(model.meetingLanguagePreference == .automatic
+                ? "Whisper detects the spoken language from each recording."
+                : "Temporary override for this app session.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .font(.caption)
+        .padding(.vertical, 8)
     }
 }
