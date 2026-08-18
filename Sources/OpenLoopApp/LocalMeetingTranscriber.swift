@@ -100,26 +100,12 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             message: "Preparing audio locally"
         ))
 
-        let callback: TranscriptionCallback = { update in
-            let estimated = Self.estimatedFraction(
-                windowID: update.windowId,
-                inputAudioSeconds: update.timings.inputAudioSeconds,
-                duration: duration
-            )
-            Task {
-                await progress(.init(
-                    stage: .transcribing,
-                    fraction: estimated,
-                    message: update.text.nilIfBlank == nil
-                        ? "Listening across the meeting"
-                        : "Transcribing locally",
-                    previewText: update.text
-                ))
-            }
-            return !Task.isCancelled
-        }
+        let callbackGate = TranscriptionAttemptGate()
 
-        let promptTokens = Self.promptTokens(for: contextPrompt, pipeline: pipeline)
+        let promptTokens = Self.promptTokens(
+            for: Self.participantPrompt(from: contextPrompt),
+            pipeline: pipeline
+        )
         let options = DecodingOptions(
             verbose: false,
             task: .transcribe,
@@ -162,7 +148,10 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                         audioURL: audioURL,
                         pipeline: pipeline,
                         options: options,
-                        callback: callback
+                        duration: duration,
+                        progress: progress,
+                        callbackGate: callbackGate,
+                        retryWithoutPrompt: true
                     )
                 }
             } else {
@@ -170,7 +159,10 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                     audioURL: audioURL,
                     pipeline: pipeline,
                     options: options,
-                    callback: callback
+                    duration: duration,
+                    progress: progress,
+                    callbackGate: callbackGate,
+                    retryWithoutPrompt: true
                 )
             }
         } else {
@@ -178,9 +170,13 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                 audioURL: audioURL,
                 pipeline: pipeline,
                 options: options,
-                callback: callback
+                duration: duration,
+                progress: progress,
+                callbackGate: callbackGate,
+                retryWithoutPrompt: duration > 0 && duration <= 45
             )
         }
+        await callbackGate.invalidateAndDrain()
         try Task.checkCancellation()
         let mapped: (segments: [TranscriptSegment], language: String?)
         if speakerDiarizationEnabled {
@@ -218,8 +214,32 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         audioURL: URL,
         pipeline: WhisperKit,
         options: DecodingOptions,
-        callback: @escaping TranscriptionCallback
+        duration: TimeInterval,
+        progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void,
+        callbackGate: TranscriptionAttemptGate,
+        retryWithoutPrompt: Bool = false
     ) async throws -> [TranscriptionResult] {
+        let attempt = callbackGate.beginAttempt()
+        let callback: TranscriptionCallback = { update in
+            guard callbackGate.isCurrent(attempt) else { return false }
+            let estimated = Self.estimatedFraction(
+                windowID: update.windowId,
+                inputAudioSeconds: update.timings.inputAudioSeconds,
+                duration: duration
+            )
+            let presentation = MeetingTranscriptionProgress(
+                stage: .transcribing,
+                fraction: estimated,
+                message: update.text.nilIfBlank == nil
+                    ? "Listening across the meeting"
+                    : "Transcribing locally",
+                previewText: update.text
+            )
+            let scheduled = callbackGate.schedule(attempt: attempt) {
+                await progress(presentation)
+            }
+            return scheduled && !Task.isCancelled
+        }
         let input = AudioInputOptions(audioLoadingMode: .incremental)
         let results = await pipeline.transcribeWithResults(
             audioPaths: [audioURL.path],
@@ -230,7 +250,22 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         guard let first = results.first else {
             throw MeetingTranscriptionError.emptyTranscript
         }
-        return try first.get()
+        let windows = try first.get()
+        guard retryWithoutPrompt,
+              Self.shouldRetryWithoutPrompt(windows, promptTokens: options.promptTokens)
+        else { return windows }
+        var promptlessOptions = options
+        promptlessOptions.promptTokens = nil
+        await callbackGate.invalidateAndDrain()
+        return try await transcribeFile(
+            audioURL: audioURL,
+            pipeline: pipeline,
+            options: promptlessOptions,
+            duration: duration,
+            progress: progress,
+            callbackGate: callbackGate,
+            retryWithoutPrompt: false
+        )
     }
 
     private func transcribeUtterances(
@@ -438,12 +473,20 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         !batches.isEmpty && batches.allSatisfy(hasUsableTranscript)
     }
 
-    private static func participantPrompt(from context: String?) -> String? {
+    static func shouldRetryWithoutPrompt(
+        _ results: [TranscriptionResult],
+        promptTokens: [Int]?
+    ) -> Bool {
+        promptTokens?.isEmpty == false && !hasUsableTranscript(results)
+    }
+
+    static func participantPrompt(from context: String?) -> String? {
         guard let firstSentence = context?.split(separator: ".", maxSplits: 1).first else {
             return nil
         }
         let value = firstSentence.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value + "."
+        guard value.hasPrefix("Participants:") else { return nil }
+        return value + "."
     }
 
     private static func promptTokens(for prompt: String?, pipeline: WhisperKit) -> [Int]? {
@@ -460,6 +503,63 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         guard let duration = try? await asset.load(.duration) else { return 0 }
         let seconds = duration.seconds
         return seconds.isFinite ? max(0, seconds) : 0
+    }
+}
+
+final class TranscriptionAttemptGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var generation = 0
+    private var deliveries: [Task<Void, Never>] = []
+
+    func beginAttempt() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        generation += 1
+        return generation
+    }
+
+    func schedule(
+        attempt: Int,
+        operation: @escaping @Sendable () async -> Void
+    ) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard attempt == generation else { return false }
+        let delivery = Task {
+            guard self.isCurrent(attempt) else { return }
+            await operation()
+        }
+        deliveries.append(delivery)
+        return true
+    }
+
+    func invalidateAndDrain() async {
+        let pending = invalidateAndTakeDeliveries()
+        for delivery in pending {
+            await delivery.value
+        }
+    }
+
+    private func invalidateAndTakeDeliveries() -> [Task<Void, Never>] {
+        lock.lock()
+        defer { lock.unlock() }
+        generation += 1
+        let pending = deliveries
+        deliveries.removeAll(keepingCapacity: true)
+        return pending
+    }
+
+    func invalidateForTesting() {
+        let pending = invalidateAndTakeDeliveries()
+        for delivery in pending {
+            delivery.cancel()
+        }
+    }
+
+    func isCurrent(_ attempt: Int) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return attempt == generation
     }
 }
 

@@ -13,6 +13,7 @@ import Testing
     let languageCode = environment["OPENLOOP_LANGUAGE_CODE"]
     let contextPrompt = environment["OPENLOOP_CONTEXT_PROMPT"]
     let expectedName = environment["OPENLOOP_EXPECTED_NAME"]
+    let expectsNonemptyOnly = environment["OPENLOOP_EXPECT_NONEMPTY_ONLY"] == "1"
     let expectedLanguages = environment["OPENLOOP_EXPECTED_LANGUAGES"]?
         .split(separator: ",")
         .map(String.init)
@@ -36,6 +37,10 @@ import Testing
     print("hindi-output-characters=\(text.count)")
     print("hindi-devanagari-scalars=\(devanagariCount)")
     print("hindi-synthetic-output=\(text)")
+    if expectsNonemptyOnly {
+        #expect(!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        return
+    }
     if let expectedLanguages {
         let detectedLanguages = Set(output.detectedLanguage?.components(separatedBy: " + ") ?? [])
         #expect(expectedLanguages.allSatisfy(detectedLanguages.contains))

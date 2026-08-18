@@ -191,7 +191,9 @@ language automatically for every import and recording; no language setup appears
 in the normal workflow. Short automatic recordings are split at meaningful silent
 boundaries so each utterance can detect its own language, and mixed results report
 an ordered summary such as `en + hi`. If an utterance produces an empty model
-result, OpenLoop automatically retries the complete recording instead of failing.
+result, OpenLoop automatically retries the complete recording without prompt
+conditioning instead of failing. Only the participant name is supplied as initial
+context; language and script instructions are not injected into Whisper decoding.
 After recording stops, the job retains captured duration and peak dB so quiet input
 can be distinguished from a decoding failure. Word and segment timestamps and local
 SpeakerKit Pyannote diarization produce speaker-labelled evidence when the diarization model
