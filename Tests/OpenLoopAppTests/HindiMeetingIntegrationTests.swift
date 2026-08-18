@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import WhisperKit
 @testable import OpenLoopApp
 
 @Test func localWhisperRecognizesHindiFixture() async throws {
@@ -18,16 +19,27 @@ import Testing
         .split(separator: ",")
         .map(String.init)
 
+    if expectedLanguages?.count ?? 0 > 1 {
+        let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: fixturePath)
+        #expect(
+            UtteranceAudioChunker.ranges(in: audio).count == 1,
+            "The acceptance fixture must require language-change planning, not a silence split."
+        )
+    }
+
     let transcriber = WhisperKitMeetingTranscriber(
         modelIdentifier: modelIdentifier,
         modelStorageURL: URL(fileURLWithPath: modelStoragePath, isDirectory: true),
         speakerDiarizationEnabled: false,
         contextPrompt: contextPrompt
     )
+    let progressRecorder = MeetingProgressRecorder()
     let output = try await transcriber.transcribe(
         audioURL: URL(fileURLWithPath: fixturePath),
         languageCode: languageCode
-    ) { _ in }
+    ) { progress in
+        await progressRecorder.record(progress.message)
+    }
     let text = output.segments.map(\.text).joined(separator: " ")
     let devanagariCount = text.unicodeScalars.filter {
         (0x0900...0x097F).contains(Int($0.value))
@@ -37,6 +49,7 @@ import Testing
     print("hindi-output-characters=\(text.count)")
     print("hindi-devanagari-scalars=\(devanagariCount)")
     print("hindi-synthetic-output=\(text)")
+    print("hindi-progress=\(await progressRecorder.messages)")
     if expectsNonemptyOnly {
         #expect(!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         return
@@ -44,6 +57,7 @@ import Testing
     if let expectedLanguages {
         let detectedLanguages = Set(output.detectedLanguage?.components(separatedBy: " + ") ?? [])
         #expect(expectedLanguages.allSatisfy(detectedLanguages.contains))
+        #expect(await progressRecorder.messages.contains("Detecting each spoken language locally"))
     } else {
         #expect(output.detectedLanguage == "hi")
     }
@@ -64,4 +78,12 @@ import Testing
             || text.contains("प्रजेक्ट")
             || text.localizedCaseInsensitiveContains("project")
     )
+}
+
+private actor MeetingProgressRecorder {
+    private(set) var messages: [String] = []
+
+    func record(_ message: String?) {
+        if let message { messages.append(message) }
+    }
 }

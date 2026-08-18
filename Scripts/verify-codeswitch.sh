@@ -19,12 +19,12 @@ if ! say -v '?' | rg -q '^Lekha[[:space:]]+hi_IN' \
     exit 1
 fi
 
-say -v Rishi -r 165 \
+say -v Rishi -r 145 \
     -o "$TASK_FIXTURE_DIR/english-source.aiff" \
-    'Hello. Hello. Hello. I am Dhruv. I am talking in English.'
-say -v Lekha -r 165 \
+    'Hello this is Dhruv and I am talking in English about our project meeting and the release plan for Friday because the team needs a clear update'
+say -v Lekha -r 145 \
     -o "$TASK_FIXTURE_DIR/hindi-source.aiff" \
-    'अब मैं हिंदी में बात कर रहा हूँ।'
+    'अब मैं हिंदी में बात कर रहा हूँ और हमारी प्रोजेक्ट मीटिंग तथा शुक्रवार की रिलीज योजना को पूरी टीम के लिए विस्तार से समझा रहा हूँ'
 afconvert -f WAVE -d LEI16@16000 \
     "$TASK_FIXTURE_DIR/english-source.aiff" \
     "$TASK_FIXTURE_DIR/english.wav"
@@ -34,6 +34,7 @@ afconvert -f WAVE -d LEI16@16000 \
 
 TASK_FIXTURE_DIR="$TASK_FIXTURE_DIR" python3 <<'PY'
 import os
+import array
 import wave
 
 root = os.environ["TASK_FIXTURE_DIR"]
@@ -46,7 +47,27 @@ with wave.open(paths[1], "rb") as second:
     assert second.getsampwidth() == parameters.sampwidth
     assert second.getframerate() == parameters.framerate
     hindi = second.readframes(second.getnframes())
-silence_frames = int(parameters.framerate * 0.8)
+
+def trim_silence(payload):
+    samples = array.array("h")
+    samples.frombytes(payload)
+    if os.sys.byteorder != "little":
+        samples.byteswap()
+    threshold = 180
+    active = [index for index, value in enumerate(samples) if abs(value) >= threshold]
+    if not active:
+        return payload
+    pad = int(parameters.framerate * 0.04) * parameters.nchannels
+    lower = max(0, active[0] - pad)
+    upper = min(len(samples), active[-1] + pad + 1)
+    trimmed = array.array("h", samples[lower:upper])
+    if os.sys.byteorder != "little":
+        trimmed.byteswap()
+    return trimmed.tobytes()
+
+english = trim_silence(english)
+hindi = trim_silence(hindi)
+silence_frames = int(parameters.framerate * 0.12)
 silence = bytes(silence_frames * parameters.nchannels * parameters.sampwidth)
 with wave.open(os.path.join(root, "codeswitch.wav"), "wb") as output:
     output.setparams(parameters)

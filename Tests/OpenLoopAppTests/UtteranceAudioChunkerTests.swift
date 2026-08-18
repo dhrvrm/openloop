@@ -34,6 +34,16 @@ import Testing
         #expect(UtteranceAudioChunker.ranges(in: audio, sampleRate: sampleRate).count == 1)
     }
 
+    @Test func continuousSpeechNeedsLanguagePlanningRatherThanSilenceSplitting() {
+        let audio = samples([
+            (8.0, 0.24),
+            (0.2, 0.02),
+            (8.0, 0.24),
+        ])
+
+        #expect(UtteranceAudioChunker.ranges(in: audio, sampleRate: sampleRate).count == 1)
+    }
+
     @Test func silenceProducesNoUtterances() {
         let audio = [Float](repeating: 0, count: sampleRate * 2)
 

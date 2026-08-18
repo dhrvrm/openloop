@@ -477,15 +477,20 @@ private struct MainView: View {
     }
 
     private var recallView: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
                 ScreenHeader(
                     eyebrow: "EVIDENCE",
                     title: "Recall",
                     detail: "Find what you captured and control what stays on this Mac."
                 )
 
-                meetingTranscriptSection
+                meetingTranscriptSection { evidenceID in
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(evidenceID, anchor: .center)
+                    }
+                }
                 workingMemorySection
                 privacySection
 
@@ -543,21 +548,24 @@ private struct MainView: View {
                             in: RoundedRectangle(cornerRadius: 10)
                         )
                 }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 16)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 16)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onAppear {
-            recallFieldFocused = true
-            Task {
-                await model.refreshPrivacy()
-                _ = await model.refresh()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .onAppear {
+                recallFieldFocused = true
+                Task {
+                    await model.refreshPrivacy()
+                    _ = await model.refresh()
+                }
             }
         }
     }
 
-    @ViewBuilder private var meetingTranscriptSection: some View {
+    @ViewBuilder private func meetingTranscriptSection(
+        onEvidence: @escaping (UUID) -> Void
+    ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -590,7 +598,8 @@ private struct MainView: View {
                         MeetingTranscriptRow(
                             model: model,
                             transcript: transcript,
-                            initiallyExpanded: index == 0
+                            initiallyExpanded: index == 0,
+                            onEvidence: onEvidence
                         )
                     }
                 }
@@ -1141,54 +1150,83 @@ private struct MeetingJobPanel: View {
 private struct MeetingTranscriptRow: View {
     @ObservedObject var model: AppModel
     let transcript: MeetingTranscript
+    let onEvidence: (UUID) -> Void
     @State private var expanded: Bool
+    @State private var selectedEvidenceID: UUID?
 
     init(
         model: AppModel,
         transcript: MeetingTranscript,
-        initiallyExpanded: Bool = false
+        initiallyExpanded: Bool = false,
+        onEvidence: @escaping (UUID) -> Void = { _ in }
     ) {
         self.model = model
         self.transcript = transcript
+        self.onEvidence = onEvidence
         _expanded = State(initialValue: initiallyExpanded)
     }
 
     var body: some View {
         DisclosureGroup(isExpanded: $expanded) {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(transcript.segments) { segment in
-                    HStack(alignment: .top, spacing: 10) {
-                        Text(timestamp(segment.start))
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.tertiary)
-                            .frame(width: 44, alignment: .trailing)
-                        VStack(alignment: .leading, spacing: 2) {
-                            if let speaker = segment.speaker {
-                                Text(speaker.uppercased())
-                                    .font(.caption2.monospaced().weight(.semibold))
-                                    .foregroundStyle(.secondary)
+            if expanded {
+                VStack(alignment: .leading, spacing: 16) {
+                    meetingBrief { insight in
+                        selectedEvidenceID = insight.evidence.segmentID
+                        onEvidence(insight.evidence.segmentID)
+                    }
+
+                    VStack(alignment: .leading, spacing: 11) {
+                        HStack {
+                            Text("Transcript")
+                                .font(.headline)
+                            Spacer()
+                            Text("EVIDENCE")
+                                .font(.caption2.monospaced().weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        ForEach(transcript.segments) { segment in
+                            HStack(alignment: .top, spacing: 10) {
+                                Text(timestamp(segment.start))
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.tertiary)
+                                    .frame(width: 44, alignment: .trailing)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    if let speaker = segment.speaker {
+                                        Text(speaker.uppercased())
+                                            .font(.caption2.monospaced().weight(.semibold))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Text(segment.text)
+                                        .font(.callout)
+                                        .textSelection(.enabled)
+                                }
                             }
-                            Text(segment.text)
-                                .font(.callout)
-                                .textSelection(.enabled)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 7)
+                            .background(
+                                selectedEvidenceID == segment.id
+                                    ? OpenLoopVisualSystem.accentSoft
+                                    : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            )
+                            .id(segment.id)
                         }
                     }
+
+                    HStack {
+                        Button("Copy transcript") { copy(transcript.text) }
+                        Button("Send transcript to Review") {
+                            Task { await model.captureMeetingTranscript(transcript.id) }
+                        }
+                        Button("Delete", role: .destructive) {
+                            Task { await model.deleteMeetingTranscript(transcript.id) }
+                        }
+                        Spacer()
+                    }
                 }
-                HStack {
-                    Button("Copy transcript") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(transcript.text, forType: .string)
-                    }
-                    Button("Capture transcript") {
-                        Task { await model.captureMeetingTranscript(transcript.id) }
-                    }
-                    Button("Delete", role: .destructive) {
-                        Task { await model.deleteMeetingTranscript(transcript.id) }
-                    }
-                    Spacer()
-                }
+                .padding(.top, 12)
             }
-            .padding(.top, 10)
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "waveform")
@@ -1199,11 +1237,129 @@ private struct MeetingTranscriptRow: View {
                     Text("\(duration(transcript.duration)) · \(transcript.detectedLanguage?.uppercased() ?? "AUTO") · \(transcript.createdAt.formatted(date: .abbreviated, time: .shortened))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Text(expanded
+                        ? MeetingIntelligencePresentation.countLabel(for: intelligence)
+                        : "Open for local meeting brief")
+                        .font(.caption2)
+                        .foregroundStyle(OpenLoopVisualSystem.accent)
                 }
             }
         }
         .padding(11)
         .openLoopPanel()
+    }
+
+    private var intelligence: MeetingIntelligence {
+        MeetingIntelligenceCompiler().compile(transcript)
+    }
+
+    @ViewBuilder
+    private func meetingBrief(onEvidence: @escaping (MeetingInsight) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Label("Meeting brief", systemImage: "sparkles")
+                        .font(.headline)
+                        .foregroundStyle(OpenLoopVisualSystem.accent)
+                    Text("Evidence-ranked and verbatim — no cloud processing, no invented tasks.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("LOCAL · EXTRACTIVE")
+                    .font(.caption2.monospaced().weight(.semibold))
+                    .foregroundStyle(OpenLoopVisualSystem.accent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(OpenLoopVisualSystem.accentSoft, in: Capsule())
+            }
+
+            briefSection(
+                title: "Summary",
+                icon: "text.quote",
+                insights: intelligence.summary,
+                emptyText: "Not enough speech to form a useful summary.",
+                onEvidence: onEvidence
+            )
+
+            HStack(alignment: .top, spacing: 12) {
+                briefSection(
+                    title: "Decisions",
+                    icon: "checkmark.seal",
+                    insights: intelligence.decisions,
+                    emptyText: MeetingIntelligencePresentation.emptyDecisionText,
+                    onEvidence: onEvidence
+                )
+                briefSection(
+                    title: "Action candidates",
+                    icon: "arrow.up.right.circle",
+                    insights: intelligence.actionCandidates,
+                    emptyText: MeetingIntelligencePresentation.emptyActionText,
+                    onEvidence: onEvidence
+                )
+            }
+
+            Label(
+                "Action candidates stay here until you review them; OpenLoop does not add them to Now automatically.",
+                systemImage: "hand.raised"
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .background(OpenLoopVisualSystem.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(OpenLoopVisualSystem.accent.opacity(0.16), lineWidth: 1)
+        }
+    }
+
+    private func briefSection(
+        title: String,
+        icon: String,
+        insights: [MeetingInsight],
+        emptyText: String,
+        onEvidence: @escaping (MeetingInsight) -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(title, systemImage: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            if insights.isEmpty {
+                Text(emptyText)
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+            } else {
+                ForEach(insights) { insight in
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(insight.text)
+                            .font(.callout)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(spacing: 8) {
+                            Button(MeetingIntelligencePresentation.evidenceLabel(for: insight)) {
+                                onEvidence(insight)
+                            }
+                            .buttonStyle(.link)
+                            .font(.caption.monospacedDigit())
+                            Button("Copy") { copy(insight.text) }
+                                .buttonStyle(.link)
+                                .font(.caption)
+                        }
+                    }
+                    .padding(9)
+                    .background(.background.opacity(0.58), in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(OpenLoopVisualSystem.raised, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     private func timestamp(_ seconds: TimeInterval) -> String {

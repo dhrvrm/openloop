@@ -123,26 +123,50 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         if languageCode == nil, duration > 0, duration <= 45 {
             let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path)
             let ranges = UtteranceAudioChunker.ranges(in: audio)
-            if ranges.count > 1 {
+            let chunks = try await plannedAutomaticChunks(
+                audio: audio,
+                speechRanges: ranges,
+                pipeline: pipeline,
+                progress: progress
+            )
+            if chunks.count > 1 {
                 var utteranceOptions = options
                 utteranceOptions.promptTokens = Self.promptTokens(
                     for: Self.participantPrompt(from: contextPrompt),
                     pipeline: pipeline
                 )
-                let utteranceBatches = try await transcribeUtterances(
-                    audio: audio,
-                    ranges: ranges,
-                    pipeline: pipeline,
-                    options: utteranceOptions,
-                    progress: progress
-                )
-                if Self.allUtterancesHaveUsableTranscript(utteranceBatches) {
-                    windows = utteranceBatches.flatMap { $0 }
-                } else {
+                do {
+                    let utteranceBatches = try await transcribeUtterances(
+                        audio: audio,
+                        chunks: chunks,
+                        pipeline: pipeline,
+                        options: utteranceOptions,
+                        progress: progress
+                    )
+                    if Self.allUtterancesHaveUsableTranscript(utteranceBatches) {
+                        windows = utteranceBatches.flatMap { $0 }
+                    } else {
+                        await progress(.init(
+                            stage: .transcribing,
+                            fraction: 0.1,
+                            message: "Rechecking the complete recording locally"
+                        ))
+                        windows = try await transcribeFile(
+                            audioURL: audioURL,
+                            pipeline: pipeline,
+                            options: options,
+                            duration: duration,
+                            progress: progress,
+                            callbackGate: callbackGate,
+                            retryWithoutPrompt: true
+                        )
+                    }
+                } catch {
+                    if Task.isCancelled { throw CancellationError() }
                     await progress(.init(
                         stage: .transcribing,
                         fraction: 0.1,
-                        message: "Rechecking the complete recording locally"
+                        message: "A language chunk failed; rechecking the complete recording locally"
                     ))
                     windows = try await transcribeFile(
                         audioURL: audioURL,
@@ -204,10 +228,63 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         ))
         return LocalTranscriptionOutput(
             duration: max(duration, mapped.segments.last?.end ?? 0),
-            detectedLanguage: mapped.language,
+            detectedLanguage: Self.spokenLanguageSummary(
+                modelLanguage: mapped.language,
+                segments: mapped.segments
+            ),
             modelIdentifier: modelIdentifier,
             segments: mapped.segments
         )
+    }
+
+    private func plannedAutomaticChunks(
+        audio: [Float],
+        speechRanges: [Range<Int>],
+        pipeline: WhisperKit,
+        progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
+    ) async throws -> [PlannedAudioChunk] {
+        guard !speechRanges.isEmpty else { return [] }
+        let probeRanges = CodeSwitchChunkPlanner.probeRanges(
+            speechRanges: speechRanges,
+            audioCount: audio.count,
+            sampleRate: WhisperKit.sampleRate
+        )
+        var probes: [LanguageProbe] = []
+        if !probeRanges.isEmpty {
+            await progress(.init(
+                stage: .preparingAudio,
+                fraction: 1,
+                message: "Checking for language changes locally"
+            ))
+        }
+        for range in probeRanges {
+            try Task.checkCancellation()
+            guard let detection = try? await pipeline.detectLangauge(audioArray: Array(audio[range])) else {
+                continue
+            }
+            probes.append(LanguageProbe(
+                center: range.lowerBound + range.count / 2,
+                language: detection.language,
+                confidenceMargin: Self.languageConfidenceMargin(detection.langProbs)
+            ))
+        }
+        let chunks = CodeSwitchChunkPlanner.plan(
+            audio: audio,
+            speechRanges: speechRanges,
+            probes: probes,
+            sampleRate: WhisperKit.sampleRate
+        )
+        if chunks.count > 1 {
+            let boundaries = chunks.dropLast().map {
+                String(format: "%.1fs", Double($0.coreRange.upperBound) / Double(WhisperKit.sampleRate))
+            }.joined(separator: ", ")
+            await progress(.init(
+                stage: .preparingAudio,
+                fraction: 1,
+                message: "Language change found near \(boundaries)"
+            ))
+        }
+        return chunks
     }
 
     private func transcribeFile(
@@ -270,28 +347,43 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
 
     private func transcribeUtterances(
         audio: [Float],
-        ranges: [Range<Int>],
+        chunks: [PlannedAudioChunk],
         pipeline: WhisperKit,
         options: DecodingOptions,
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
     ) async throws -> [[TranscriptionResult]] {
         var batches: [[TranscriptionResult]] = []
-        for (index, range) in ranges.enumerated() {
+        for (index, chunk) in chunks.enumerated() {
             try Task.checkCancellation()
-            let results = try await pipeline.transcribe(
-                audioArray: Array(audio[range]),
-                audioArrayOffset: range.lowerBound,
+            var results = try await pipeline.transcribe(
+                audioArray: Array(audio[chunk.decodeRange]),
+                audioArrayOffset: chunk.decodeRange.lowerBound,
                 decodeOptions: options
             )
-            let seekTime = Float(range.lowerBound) / Float(WhisperKit.sampleRate)
+            if !Self.hasUsableTranscript(results), options.promptTokens != nil {
+                var promptless = options
+                promptless.promptTokens = nil
+                results = try await pipeline.transcribe(
+                    audioArray: Array(audio[chunk.decodeRange]),
+                    audioArrayOffset: chunk.decodeRange.lowerBound,
+                    decodeOptions: promptless
+                )
+            }
+            let seekTime = Float(chunk.decodeRange.lowerBound) / Float(WhisperKit.sampleRate)
             for result in results {
                 result.seekTime = seekTime
-                result.segments = result.segments.map {
+                let absolute = result.segments.map {
                     TranscriptionUtilities.updateSegmentTimings(
                         segment: $0,
-                        seekOffsetIndex: range.lowerBound
+                        seekOffsetIndex: chunk.decodeRange.lowerBound
                     )
                 }
+                result.segments = Self.trim(
+                    absolute,
+                    to: chunk.coreRange,
+                    leadingContextLanguage: result.language
+                )
+                result.text = result.segments.map(\.text).joined(separator: " ")
             }
             batches.append(results)
             let preview = batches
@@ -301,12 +393,12 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                 .joined(separator: " ")
             await progress(.init(
                 stage: .transcribing,
-                fraction: min(0.98, Double(index + 1) / Double(ranges.count)),
+                fraction: min(0.98, Double(index + 1) / Double(chunks.count)),
                 message: "Detecting each spoken language locally",
                 previewText: preview
             ))
         }
-        return batches
+        return Self.deduplicateBoundaryWords(batches, chunks: chunks)
     }
 
     private func diarize(
@@ -459,6 +551,34 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         return ordered.isEmpty ? nil : ordered.joined(separator: " + ")
     }
 
+    static func spokenLanguageSummary(
+        modelLanguage: String?,
+        segments: [TranscriptSegment]
+    ) -> String? {
+        var scriptOrder: [String] = []
+        var seen = Set<String>()
+        for scalar in segments.flatMap({ Array($0.text.unicodeScalars) }) {
+            let language: String?
+            switch scalar.value {
+            case 0x0041...0x005A, 0x0061...0x007A: language = "en"
+            case 0x0900...0x097F: language = "hi"
+            default: language = nil
+            }
+            if let language, seen.insert(language).inserted { scriptOrder.append(language) }
+        }
+
+        let containsHindi = scriptOrder.contains("hi")
+        let modelLanguages = modelLanguage?
+            .components(separatedBy: " + ")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            ?? []
+        if containsHindi {
+            return languageSummary(scriptOrder + modelLanguages)
+        }
+        return languageSummary(modelLanguages)
+    }
+
     static func hasUsableTranscript(_ results: [TranscriptionResult]) -> Bool {
         results.contains { result in
             result.segments.contains { segment in
@@ -478,6 +598,101 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         promptTokens: [Int]?
     ) -> Bool {
         promptTokens?.isEmpty == false && !hasUsableTranscript(results)
+    }
+
+    static func languageConfidenceMargin(_ probabilities: [String: Float]) -> Float {
+        let values = probabilities.values.sorted(by: >)
+        guard let first = values.first else { return 0 }
+        guard values.count > 1 else { return 1 }
+        return max(0, first - values[1])
+    }
+
+    static func trim(
+        _ segments: [TranscriptionSegment],
+        to coreRange: Range<Int>,
+        leadingContextLanguage: String? = nil
+    ) -> [TranscriptionSegment] {
+        return segments.compactMap { source -> TranscriptionSegment? in
+            var segment = source
+            if let words = segment.words, !words.isEmpty {
+                let retained = words.filter { word in
+                    let midpoint = (word.start + word.end) / 2
+                    let sample = Int(midpoint * Float(WhisperKit.sampleRate))
+                    if coreRange.contains(sample) { return true }
+                    guard sample < coreRange.lowerBound else { return false }
+                    return wordMatchesScript(word.word, language: leadingContextLanguage)
+                }
+                guard let first = retained.first, let last = retained.last else { return nil }
+                segment.words = retained
+                segment.start = first.start
+                segment.end = last.end
+                segment.text = retained.map(\.word).joined()
+                return segment.text.nilIfBlank == nil ? nil : segment
+            }
+            let midpoint = (segment.start + segment.end) / 2
+            return coreRange.contains(Int(midpoint * Float(WhisperKit.sampleRate)))
+                ? segment
+                : nil
+        }
+    }
+
+    static func deduplicateBoundaryWords(
+        _ batches: [[TranscriptionResult]],
+        chunks: [PlannedAudioChunk]
+    ) -> [[TranscriptionResult]] {
+        var priorWords: [(text: String, start: Float, end: Float)] = []
+        for (batchIndex, batch) in batches.enumerated() {
+            let coreLowerBound = chunks.indices.contains(batchIndex)
+                ? chunks[batchIndex].coreRange.lowerBound
+                : 0
+            var acceptedInBatch: [(text: String, start: Float, end: Float)] = []
+            for result in batch {
+                result.segments = result.segments.compactMap { source in
+                    guard let words = source.words, !words.isEmpty else { return source }
+                    let retained = words.filter { word in
+                        let text = normalizedBoundaryWord(word.word)
+                        let midpoint = (word.start + word.end) / 2
+                        let isLeadingContext = Int(midpoint * Float(WhisperKit.sampleRate))
+                            < coreLowerBound
+                        let duplicate = isLeadingContext && !text.isEmpty && priorWords.contains {
+                            $0.text == text
+                                && max($0.start, word.start) <= min($0.end, word.end) + 0.2
+                        }
+                        if !duplicate { acceptedInBatch.append((text, word.start, word.end)) }
+                        return !duplicate
+                    }
+                    guard let first = retained.first, let last = retained.last else { return nil }
+                    var segment = source
+                    segment.words = retained
+                    segment.start = first.start
+                    segment.end = last.end
+                    segment.text = retained.map(\.word).joined()
+                    return segment.text.nilIfBlank == nil ? nil : segment
+                }
+                result.text = result.segments.map(\.text).joined(separator: " ")
+            }
+            priorWords.append(contentsOf: acceptedInBatch)
+        }
+        return batches
+    }
+
+    private static func wordMatchesScript(_ word: String, language: String?) -> Bool {
+        switch language?.lowercased() {
+        case "hi":
+            return word.unicodeScalars.contains { (0x0900...0x097F).contains($0.value) }
+        case "en":
+            return word.unicodeScalars.contains {
+                (0x0041...0x005A).contains($0.value) || (0x0061...0x007A).contains($0.value)
+            }
+        default:
+            return false
+        }
+    }
+
+    private static func normalizedBoundaryWord(_ word: String) -> String {
+        String(word.lowercased().unicodeScalars.filter {
+            CharacterSet.letters.contains($0) || CharacterSet.decimalDigits.contains($0)
+        })
     }
 
     static func participantPrompt(from context: String?) -> String? {
