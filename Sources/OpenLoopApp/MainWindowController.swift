@@ -123,7 +123,7 @@ private struct MainView: View {
                     StatusBanner(text: notice, icon: "checkmark.shield")
                 }
 
-                QuickAddComposer(text: $quickAddText, isSaving: model.isSaving) {
+                QuickAddComposer(model: model, text: $quickAddText) {
                     let captured = await model.submitCapture(quickAddText)
                     if captured { quickAddText = "" }
                 }
@@ -704,8 +704,8 @@ private struct WorkspaceSidebarButton: View {
 }
 
 private struct QuickAddComposer: View {
+    @ObservedObject var model: AppModel
     @Binding var text: String
-    let isSaving: Bool
     let submit: () async -> Void
 
     var body: some View {
@@ -723,11 +723,102 @@ private struct QuickAddComposer: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(isSaving || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button {
+                    model.toggleVoiceCapture()
+                } label: {
+                    Label(
+                        VoiceRecordButtonPresentation.title(for: model.voiceCapture),
+                        systemImage: VoiceRecordButtonPresentation.systemImage(
+                            for: model.voiceCapture.state
+                        )
+                    )
+                }
+                .buttonStyle(.bordered)
+                .tint(model.voiceCapture.state == .recording ? .red : .accentColor)
+                .disabled(VoiceRecordButtonPresentation.isDisabled(model.voiceCapture.state))
+            }
+
+            if model.voiceCapture.state != .idle {
+                VoiceInlineStatus(model: model)
             }
         }
         .padding(16)
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.7))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var isSaving: Bool { model.isSaving }
+}
+
+private struct VoiceInlineStatus: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 9) {
+            indicator
+                .padding(.top, 3)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Text(statusTitle)
+                        .font(.callout.weight(.medium))
+                    if model.voiceCapture.state == .recording,
+                       let startedAt = model.voiceCapture.startedAt {
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            Text(elapsed(from: startedAt, to: context.date))
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if !model.voiceCapture.statusMessage.isEmpty {
+                    Text(model.voiceCapture.statusMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if !model.voiceCapture.transcript.isEmpty {
+                    Text(model.voiceCapture.transcript)
+                        .font(.callout)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                }
+            }
+            Spacer(minLength: 8)
+            if model.voiceCapture.state == .recording || model.voiceCapture.state == .failed {
+                Button("Cancel") { model.cancelVoiceCapture() }
+                    .buttonStyle(.link)
+            }
+        }
+        .padding(.top, 2)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private var indicator: some View {
+        switch model.voiceCapture.state {
+        case .recording:
+            Circle().fill(Color.red).frame(width: 9, height: 9)
+        case .requestingPermission, .saving:
+            ProgressView().controlSize(.small)
+        case .failed:
+            Image(systemName: "exclamationmark.circle")
+                .foregroundStyle(.secondary)
+        case .idle:
+            EmptyView()
+        }
+    }
+
+    private var statusTitle: String {
+        switch model.voiceCapture.state {
+        case .idle: "Voice capture"
+        case .requestingPermission: "Preparing voice capture"
+        case .recording: "Recording"
+        case .saving: "Saving transcript"
+        case .failed: "Voice capture needs attention"
+        }
+    }
+
+    private func elapsed(from start: Date, to end: Date) -> String {
+        let seconds = max(0, Int(end.timeIntervalSince(start)))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }
 

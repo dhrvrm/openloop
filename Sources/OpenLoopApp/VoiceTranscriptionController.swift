@@ -102,6 +102,37 @@ enum VoiceCaptureState: Equatable {
     case failed
 }
 
+struct VoiceCapturePresentation: Equatable {
+    var state: VoiceCaptureState = .idle
+    var statusMessage = ""
+    var startedAt: Date?
+    var transcript = ""
+}
+
+enum VoiceRecordButtonPresentation {
+    static func title(for presentation: VoiceCapturePresentation) -> String {
+        switch presentation.state {
+        case .idle: "Record"
+        case .requestingPermission: "Checking…"
+        case .recording: "Stop & save"
+        case .saving: "Saving…"
+        case .failed: presentation.transcript.isEmpty ? "Try voice again" : "Retry save"
+        }
+    }
+
+    static func systemImage(for state: VoiceCaptureState) -> String {
+        switch state {
+        case .recording: "stop.fill"
+        case .saving, .requestingPermission: "ellipsis"
+        case .idle, .failed: "waveform"
+        }
+    }
+
+    static func isDisabled(_ state: VoiceCaptureState) -> Bool {
+        state == .requestingPermission || state == .saving
+    }
+}
+
 @MainActor
 final class VoiceTranscriptionController: ObservableObject {
     @Published private(set) var state: VoiceCaptureState = .idle

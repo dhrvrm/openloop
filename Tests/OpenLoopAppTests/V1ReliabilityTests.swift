@@ -37,4 +37,19 @@ struct V1ReliabilityTests {
         #expect(WorkspaceOrientation.voiceCaptureShortcut.contains("Record"))
         #expect(WorkspaceOrientation.emptyCaptureGuidance.contains("Command-Shift-Space"))
     }
+
+    @Test func visibleRecordControlNamesEveryVoiceState() {
+        #expect(VoiceRecordButtonPresentation.title(for: VoiceCapturePresentation()) == "Record")
+        #expect(VoiceRecordButtonPresentation.title(for: VoiceCapturePresentation(
+            state: .recording
+        )) == "Stop & save")
+        #expect(VoiceRecordButtonPresentation.title(for: VoiceCapturePresentation(
+            state: .failed,
+            transcript: "retained words"
+        )) == "Retry save")
+        #expect(VoiceRecordButtonPresentation.systemImage(for: .recording) == "stop.fill")
+        #expect(VoiceRecordButtonPresentation.isDisabled(.requestingPermission))
+        #expect(VoiceRecordButtonPresentation.isDisabled(.saving))
+        #expect(VoiceRecordButtonPresentation.isDisabled(.idle) == false)
+    }
 }

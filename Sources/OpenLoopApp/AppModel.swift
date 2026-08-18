@@ -36,6 +36,7 @@ final class AppModel: ObservableObject {
     @Published var privacyNotice: String?
     @Published var recoveryNotice: String?
     @Published var capabilitySummary = CapabilitySummary()
+    @Published var voiceCapture = VoiceCapturePresentation()
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -46,6 +47,8 @@ final class AppModel: ObservableObject {
     private let contextTrail: (any ContextTrailProviding)?
     private let privacyManager: (any PrivacyManaging)?
     private var recallGeneration = 0
+    private var voiceController: VoiceTranscriptionController?
+    private var voiceObservation: AnyCancellable?
 
     init(
         loop: ThoughtLoop,
@@ -65,6 +68,35 @@ final class AppModel: ObservableObject {
         self.workingMemory = workingMemory
         self.contextTrail = contextTrail
         self.privacyManager = privacyManager
+    }
+
+    func attachVoiceCapture(_ controller: VoiceTranscriptionController) {
+        voiceController = controller
+        voiceObservation = Publishers.CombineLatest4(
+            controller.$state,
+            controller.$statusMessage,
+            controller.$startedAt,
+            controller.$transcript
+        ).sink { [weak self] state, message, startedAt, transcript in
+            self?.voiceCapture = VoiceCapturePresentation(
+                state: state,
+                statusMessage: message,
+                startedAt: startedAt,
+                transcript: transcript
+            )
+        }
+    }
+
+    func toggleVoiceCapture() {
+        guard let voiceController else {
+            commandError = "Voice capture is unavailable."
+            return
+        }
+        Task { await voiceController.toggle() }
+    }
+
+    func cancelVoiceCapture() {
+        voiceController?.cancel()
     }
 
     func refreshContextTrail(at date: Date = .now) async {

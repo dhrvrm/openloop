@@ -193,6 +193,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             ) { [weak model] transcript in
                 await model?.submitCapture(transcript) ?? false
             }
+            model.attachVoiceCapture(voiceController)
             let voiceCapture = VoiceCaptureWindowController(controller: voiceController)
             self.quickCapture = quickCapture
             self.mainWindow = mainWindow
