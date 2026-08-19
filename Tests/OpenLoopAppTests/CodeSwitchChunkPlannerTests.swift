@@ -57,6 +57,57 @@ import Testing
         ).count == 1)
     }
 
+    @Test func exceptionallyConfidentBriefLanguageIslandSplitsContinuousSpeech() throws {
+        let audio = [Float](repeating: 0.2, count: 1_800)
+        let probes = [
+            LanguageProbe(center: 200, language: "en", confidenceMargin: 0.8),
+            LanguageProbe(center: 500, language: "en", confidenceMargin: 0.8),
+            LanguageProbe(center: 900, language: "hi", confidenceMargin: 0.95),
+            LanguageProbe(center: 1_200, language: "en", confidenceMargin: 0.8),
+            LanguageProbe(center: 1_500, language: "en", confidenceMargin: 0.8),
+        ]
+
+        let chunks = CodeSwitchChunkPlanner.plan(
+            audio: audio,
+            speechRanges: [0..<1_800],
+            probes: probes,
+            sampleRate: sampleRate
+        )
+
+        try #require(chunks.count == 3)
+        #expect(chunks[0].coreRange.lowerBound == 0)
+        #expect(chunks[0].coreRange.upperBound == chunks[1].coreRange.lowerBound)
+        #expect(chunks[1].coreRange.upperBound == chunks[2].coreRange.lowerBound)
+        #expect(chunks[2].coreRange.upperBound == 1_800)
+    }
+
+    @Test func exceptionalSingletonAtSpeechEdgeDoesNotSplit() {
+        let audio = [Float](repeating: 0.2, count: 1_400)
+        let leadingSingleton = [
+            LanguageProbe(center: 200, language: "hi", confidenceMargin: 0.95),
+            LanguageProbe(center: 500, language: "en", confidenceMargin: 0.8),
+            LanguageProbe(center: 900, language: "en", confidenceMargin: 0.8),
+        ]
+        let trailingSingleton = [
+            LanguageProbe(center: 200, language: "en", confidenceMargin: 0.8),
+            LanguageProbe(center: 500, language: "en", confidenceMargin: 0.8),
+            LanguageProbe(center: 900, language: "hi", confidenceMargin: 0.95),
+        ]
+
+        #expect(CodeSwitchChunkPlanner.plan(
+            audio: audio,
+            speechRanges: [0..<1_400],
+            probes: leadingSingleton,
+            sampleRate: sampleRate
+        ).count == 1)
+        #expect(CodeSwitchChunkPlanner.plan(
+            audio: audio,
+            speechRanges: [0..<1_400],
+            probes: trailingSingleton,
+            sampleRate: sampleRate
+        ).count == 1)
+    }
+
     @Test func probesAndChunksStayBounded() {
         let ranges = CodeSwitchChunkPlanner.probeRanges(
             speechRanges: [0..<10_000],

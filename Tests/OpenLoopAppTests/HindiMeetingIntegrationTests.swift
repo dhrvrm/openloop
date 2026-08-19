@@ -12,12 +12,13 @@ import WhisperKit
     let modelIdentifier = environment["OPENLOOP_MODEL_IDENTIFIER"]
         ?? "large-v3-v20240930_626MB"
     let languageCode = environment["OPENLOOP_LANGUAGE_CODE"]
-    let contextPrompt = environment["OPENLOOP_CONTEXT_PROMPT"]
     let expectedName = environment["OPENLOOP_EXPECTED_NAME"]
     let expectsNonemptyOnly = environment["OPENLOOP_EXPECT_NONEMPTY_ONLY"] == "1"
     let expectedLanguages = environment["OPENLOOP_EXPECTED_LANGUAGES"]?
         .split(separator: ",")
         .map(String.init)
+    let expectedChunkEvents = environment["OPENLOOP_EXPECTED_CHUNK_EVENTS"]
+        .flatMap(Int.init)
 
     if expectedLanguages?.count ?? 0 > 1 {
         let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: fixturePath)
@@ -30,8 +31,7 @@ import WhisperKit
     let transcriber = WhisperKitMeetingTranscriber(
         modelIdentifier: modelIdentifier,
         modelStorageURL: URL(fileURLWithPath: modelStoragePath, isDirectory: true),
-        speakerDiarizationEnabled: false,
-        contextPrompt: contextPrompt
+        speakerDiarizationEnabled: false
     )
     let progressRecorder = MeetingProgressRecorder()
     let output = try await transcriber.transcribe(
@@ -57,7 +57,16 @@ import WhisperKit
     if let expectedLanguages {
         let detectedLanguages = Set(output.detectedLanguage?.components(separatedBy: " + ") ?? [])
         #expect(expectedLanguages.allSatisfy(detectedLanguages.contains))
-        #expect(await progressRecorder.messages.contains("Detecting each spoken language locally"))
+        let messages = await progressRecorder.messages
+        #expect(messages.contains { $0.hasPrefix("Language scan: ") })
+        #expect(messages.contains { $0.hasPrefix("Language change found near ") })
+        #expect(messages.contains("Detecting each spoken language locally"))
+        if let expectedChunkEvents {
+            #expect(
+                messages.filter { $0 == "Detecting each spoken language locally" }.count
+                    == expectedChunkEvents
+            )
+        }
     } else {
         #expect(output.detectedLanguage == "hi")
     }

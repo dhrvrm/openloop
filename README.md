@@ -188,23 +188,27 @@ transcript while Whisper is working; after encryption, the completed transcript
 remains visible below the job and the newest Recall transcript opens automatically.
 Long files use bounded-memory incremental loading. Whisper detects the spoken
 language automatically for every import and recording; no language setup appears
-in the normal workflow. Short automatic recordings use both silence boundaries and
-a capped set of local language probes. A stable continuous English-to-Hindi change
-can therefore become separate decode windows even when the pause is too short for
-voice activity detection. Boundary context overlaps, while word timestamps give
-each word one exclusive owner so the transcript does not duplicate phrases. Mixed
-results report an ordered summary such as `en + hi`. If a short chunk produces an
-empty model result, OpenLoop retries that chunk without prompt conditioning before
-falling back to the complete recording. Only the participant name is supplied as
-initial context; language and script instructions are not injected into decoding.
+in the normal workflow. Automatic and manual-language jobs are prompt-free: no
+account name, participant name, language hint, or script instruction is injected
+into decoding. Short automatic recordings use both silence boundaries and capped
+overlapping two-second language probes. A stable continuous English-to-Hindi
+change—or one exceptionally confident brief language island—can therefore become
+separate decode windows even when the pause is too short for voice activity
+detection. An isolated window is decoded only from its owned audio with the locally
+detected language, preventing adjacent English from overriding a brief Hindi span.
+Word timestamps give each word one exclusive owner so the transcript does not
+duplicate phrases. Mixed results report an ordered summary such as `en + hi`.
 After recording stops, the job retains captured duration and peak dB so quiet input
 can be distinguished from a decoding failure. Word and segment timestamps and local
 SpeakerKit Pyannote diarization produce speaker-labelled evidence when the diarization model
 is available; transcription still completes if speaker separation cannot run.
 
 Audio stays on the Mac. Imported or recorded audio is copied to a local staging
-directory only for the active or retryable job and removed after its transcript
-is saved into the AES-GCM vault. Recall shows source, duration, detected language,
+directory for the active job and retained after its transcript is saved into the
+AES-GCM vault. The completed panel exposes **Retranscribe source**, which replaces
+the same transcript ID instead of creating a duplicate. The source survives an app
+relaunch and is removed only by **Dismiss & discard audio** or transcript deletion.
+Recall shows source, duration, detected language,
 model, timestamps, speaker labels, selectable text, explicit capture, and delete
 actions. Expanding a transcript now opens a local Meeting brief above the evidence:
 up to three extractive summary highlights plus explicit decisions and action
@@ -222,11 +226,10 @@ The completed transcript shows the detected language. For an unusually difficult
 recording, Advanced mode offers a temporary manual language override that resets
 to automatic detection on the next app launch.
 
-For better proper-name accuracy, OpenLoop gives Whisper only a short on-device
-participant-name hint. Rich language prompts are intentionally excluded because
-they can bias short recordings into an empty decode. Hindi-dominant audio remains
-in Devanagari, and stable language changes can be decoded independently even when
-English and Hindi are spoken continuously.
+OpenLoop does not require or construct a text prompt for mixed-language audio.
+Hindi-dominant audio remains in Devanagari, and stable or brief high-confidence
+language changes are decoded independently even when English and Hindi are spoken
+continuously.
 
 The Advanced override exposes the multilingual model's verified tokens for English,
 Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada, Malayalam, Punjabi, Urdu,
@@ -246,6 +249,8 @@ substantial Devanagari output, and recognizable meeting vocabulary. Run
 `Scripts/verify-codeswitch.sh` for the harder automatic English-Hindi fixture; its
 voices are joined by only 120 ms and the acceptance test requires one base VAD
 utterance, both language labels, the participant name, and Devanagari output.
+`Scripts/verify-short-codeswitch.sh` checks the brief-island case with English,
+roughly three seconds of Hindi, then English again, with no prompt variable.
 
 ### Advanced Mode
 

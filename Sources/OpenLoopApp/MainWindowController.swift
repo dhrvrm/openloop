@@ -1072,11 +1072,19 @@ private struct MeetingJobPanel: View {
                 if model.meetingJob.isActive {
                     Button("Cancel") { model.cancelMeetingTranscription() }
                 } else if model.meetingJob.canRetry {
-                    Button("Retry locally") { model.retryMeetingTranscription() }
+                    Button(
+                        model.meetingJob.stage == .ready
+                            ? "Retranscribe source"
+                            : "Retry locally"
+                    ) { model.retryMeetingTranscription() }
                         .buttonStyle(.borderedProminent)
                 }
                 if !model.meetingJob.isActive {
-                    Button("Dismiss") { model.clearMeetingJob() }
+                    Button(
+                        model.meetingJob.stagedAudioURL == nil
+                            ? "Dismiss"
+                            : "Dismiss & discard audio"
+                    ) { model.clearMeetingJob() }
                         .buttonStyle(.link)
                 }
                 Spacer()
@@ -1093,7 +1101,9 @@ private struct MeetingJobPanel: View {
     }
 
     private var transcriptText: String? {
-        if model.meetingJob.stage == .ready, let completed = model.meetingTranscripts.first?.text {
+        if model.meetingJob.stage == .ready,
+           let completedID = model.meetingJob.completedTranscriptID,
+           let completed = model.meetingTranscripts.first(where: { $0.id == completedID })?.text {
             return completed
         }
         return model.meetingJob.previewText

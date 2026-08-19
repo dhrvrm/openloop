@@ -16,10 +16,10 @@ enum CodeSwitchChunkPlanner {
         speechRanges: [Range<Int>],
         audioCount: Int,
         sampleRate: Int,
-        probeDuration: TimeInterval = 4,
-        probeStride: TimeInterval = 2,
-        minimumSpeechDuration: TimeInterval = 6,
-        maximumProbeCount: Int = 10
+        probeDuration: TimeInterval = 2,
+        probeStride: TimeInterval = 1,
+        minimumSpeechDuration: TimeInterval = 4,
+        maximumProbeCount: Int = 20
     ) -> [Range<Int>] {
         guard audioCount > 0, sampleRate > 0, maximumProbeCount > 0 else { return [] }
         let probeSamples = max(1, Int(probeDuration * Double(sampleRate)))
@@ -64,12 +64,12 @@ enum CodeSwitchChunkPlanner {
                 .sorted { $0.center < $1.center }
             let runs = languageRuns(stable)
             var cuts: [Int] = []
-            for pair in zip(runs, runs.dropFirst()) {
-                let left = pair.0
-                let right = pair.1
+            for index in runs.indices.dropLast() {
+                let left = runs[index]
+                let right = runs[index + 1]
                 guard left.language != right.language,
-                      left.probes.count >= 2,
-                      right.probes.count >= 2,
+                      isStableRun(at: index, in: runs),
+                      isStableRun(at: index + 1, in: runs),
                       let leftCenter = left.probes.last?.center,
                       let rightCenter = right.probes.first?.center
                 else { continue }
@@ -115,6 +115,11 @@ private extension CodeSwitchChunkPlanner {
     struct LanguageRun {
         let language: String
         var probes: [LanguageProbe]
+
+        var isOrdinarilyStable: Bool { probes.count >= 2 }
+        var isExceptionalSingleton: Bool {
+            probes.count == 1 && probes[0].confidenceMargin >= 0.95
+        }
     }
 
     static func languageRuns(_ probes: [LanguageProbe]) -> [LanguageRun] {
@@ -129,6 +134,21 @@ private extension CodeSwitchChunkPlanner {
             }
         }
         return runs
+    }
+
+    static func isStableRun(at index: Int, in runs: [LanguageRun]) -> Bool {
+        guard runs.indices.contains(index) else { return false }
+        let run = runs[index]
+        if run.isOrdinarilyStable { return true }
+        guard run.isExceptionalSingleton,
+              index > runs.startIndex,
+              index < runs.index(before: runs.endIndex)
+        else { return false }
+        let left = runs[index - 1]
+        let right = runs[index + 1]
+        return left.isOrdinarilyStable
+            && right.isOrdinarilyStable
+            && left.language == right.language
     }
 
     static func quietBoundary(

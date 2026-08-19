@@ -246,24 +246,23 @@ import WhisperKit
         [spoken],
         [spoken],
     ]))
-    #expect(WhisperKitMeetingTranscriber.shouldRetryWithoutPrompt(
-        [blank],
-        promptTokens: [1, 2]
-    ))
-    #expect(!WhisperKitMeetingTranscriber.shouldRetryWithoutPrompt(
-        [spoken],
-        promptTokens: [1, 2]
-    ))
-    #expect(!WhisperKitMeetingTranscriber.shouldRetryWithoutPrompt(
-        [blank],
-        promptTokens: nil
-    ))
-    #expect(WhisperKitMeetingTranscriber.participantPrompt(
-        from: "Participants: Dhruv. Multilingual guidance follows."
-    ) == "Participants: Dhruv.")
-    #expect(WhisperKitMeetingTranscriber.participantPrompt(
-        from: "Multilingual conversation in English and Hindi."
-    ) == nil)
+    let automaticOptions = WhisperKitMeetingTranscriber.decodingOptions(languageCode: nil)
+    #expect(automaticOptions.promptTokens == nil)
+    #expect(automaticOptions.detectLanguage)
+    let forcedHindiOptions = WhisperKitMeetingTranscriber.decodingOptions(languageCode: "hi")
+    #expect(forcedHindiOptions.promptTokens == nil)
+    #expect(!forcedHindiOptions.detectLanguage)
+    #expect(forcedHindiOptions.language == "hi")
+    #expect(WhisperKitMeetingTranscriber.isolatedDecodeRange(
+        coreRange: 400..<600,
+        audioCount: 1_000,
+        sampleRate: 100
+    ) == 380..<620)
+    #expect(WhisperKitMeetingTranscriber.isolatedDecodeRange(
+        coreRange: 0..<100,
+        audioCount: 1_000,
+        sampleRate: 100
+    ) == 0..<120)
 
     let gate = TranscriptionAttemptGate()
     let firstAttempt = gate.beginAttempt()

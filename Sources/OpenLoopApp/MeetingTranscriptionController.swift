@@ -10,6 +10,7 @@ struct MeetingJobPresentation: Equatable, Sendable {
     var startedAt: Date?
     var modelIdentifier: String?
     var stagedAudioURL: URL?
+    var completedTranscriptID: UUID?
     var previewText: String?
     var requestedLanguage = MeetingLanguagePreference.automatic
     var recordingDuration: TimeInterval?
@@ -21,7 +22,8 @@ struct MeetingJobPresentation: Equatable, Sendable {
     }
 
     var canRetry: Bool {
-        guard stage == .failed, let stagedAudioURL else { return false }
+        guard stage == .failed || stage == .cancelled || stage == .ready,
+              let stagedAudioURL else { return false }
         return FileManager.default.fileExists(atPath: stagedAudioURL.path)
     }
 }
@@ -65,6 +67,23 @@ final class MeetingTranscriptionController: ObservableObject {
     func refresh() async {
         transcripts = (try? await repository.meetingTranscripts()) ?? []
         engineDiagnostics = await transcriber.diagnostics()
+        guard job.stage == nil,
+              let transcript = transcripts
+                .sorted(by: { $0.createdAt > $1.createdAt })
+                .first(where: { sourceAudioURL(for: $0) != nil }),
+              let sourceURL = sourceAudioURL(for: transcript)
+        else { return }
+        job = MeetingJobPresentation(
+            stage: .ready,
+            fraction: 1,
+            sourceName: transcript.sourceName,
+            message: "Transcript ready. Source audio is kept locally for retranscription.",
+            startedAt: transcript.createdAt,
+            modelIdentifier: transcript.modelIdentifier,
+            stagedAudioURL: sourceURL,
+            completedTranscriptID: transcript.id,
+            previewText: transcript.text
+        )
     }
 
     func importAudio(_ sourceURL: URL) {
@@ -137,6 +156,7 @@ final class MeetingTranscriptionController: ObservableObject {
             recordEvent(stage: .failed, message: job.message, fraction: 0)
             return
         }
+        guard job.stage == .requestingMicrophone else { return }
         do {
             try FileManager.default.createDirectory(
                 at: stagingDirectory,
@@ -167,12 +187,13 @@ final class MeetingTranscriptionController: ObservableObject {
     }
 
     func retry() {
-        guard job.canRetry, let stagedURL = job.stagedAudioURL else { return }
+        guard work == nil, job.canRetry, let stagedURL = job.stagedAudioURL else { return }
         start(
             stagedURL: stagedURL,
             sourceName: job.sourceName ?? stagedURL.lastPathComponent,
             recordingDuration: job.recordingDuration,
-            recordingPeakDecibels: job.recordingPeakDecibels
+            recordingPeakDecibels: job.recordingPeakDecibels,
+            replacingTranscriptID: job.completedTranscriptID
         )
     }
 
@@ -183,23 +204,40 @@ final class MeetingTranscriptionController: ObservableObject {
         recordingDecibels = nil
         recordingStartedAt = nil
         peakRecordingDecibels = nil
-        work?.cancel()
-        work = nil
+        if let work {
+            work.cancel()
+            job.message = "Cancelling local transcription"
+            if let stage = job.stage {
+                recordEvent(stage: stage, message: job.message, fraction: job.fraction)
+            }
+            return
+        }
         job.stage = .cancelled
         job.message = "Cancelled. The local audio copy is available to retry."
         recordEvent(stage: .cancelled, message: job.message, fraction: job.fraction)
     }
 
     func clearFinishedJob() {
-        guard !job.isActive else { return }
+        guard work == nil, !job.isActive else { return }
         if let url = job.stagedAudioURL { try? FileManager.default.removeItem(at: url) }
         job = MeetingJobPresentation()
     }
 
     func deleteTranscript(id: UUID) async {
+        if job.isActive,
+           job.completedTranscriptID == id,
+           let activeWork = work {
+            activeWork.cancel()
+            await activeWork.value
+        }
+        let sourceURL = transcripts.first(where: { $0.id == id }).flatMap(sourceAudioURL(for:))
         do {
             try await repository.deleteMeetingTranscript(id: id)
             transcripts.removeAll { $0.id == id }
+            if let sourceURL { try? FileManager.default.removeItem(at: sourceURL) }
+            if job.completedTranscriptID == id {
+                job = MeetingJobPresentation()
+            }
         } catch {
             job = MeetingJobPresentation(
                 stage: .failed,
@@ -219,7 +257,8 @@ final class MeetingTranscriptionController: ObservableObject {
         stagedURL: URL,
         sourceName: String,
         recordingDuration: TimeInterval? = nil,
-        recordingPeakDecibels: Float? = nil
+        recordingPeakDecibels: Float? = nil,
+        replacingTranscriptID: UUID? = nil
     ) {
         job = MeetingJobPresentation(
             stage: .waitingForModel,
@@ -229,6 +268,7 @@ final class MeetingTranscriptionController: ObservableObject {
             startedAt: .now,
             modelIdentifier: transcriber.modelIdentifier,
             stagedAudioURL: stagedURL,
+            completedTranscriptID: replacingTranscriptID,
             requestedLanguage: languagePreference,
             recordingDuration: recordingDuration,
             recordingPeakDecibels: recordingPeakDecibels
@@ -252,21 +292,27 @@ final class MeetingTranscriptionController: ObservableObject {
                 job.fraction = 1
                 job.message = "Encrypting the transcript"
                 recordEvent(stage: .saving, message: job.message, fraction: 1)
+                let replacedTranscript = replacingTranscriptID.flatMap { replacementID in
+                    transcripts.first { $0.id == replacementID }
+                }
                 let transcript = try MeetingTranscript(
+                    id: replacingTranscriptID ?? UUID(),
                     sourceName: sourceName,
+                    createdAt: replacedTranscript?.createdAt ?? .now,
                     duration: output.duration,
                     detectedLanguage: output.detectedLanguage,
                     modelIdentifier: output.modelIdentifier,
-                    segments: output.segments
+                    segments: output.segments,
+                    sourceAudioFileName: stagedURL.lastPathComponent
                 )
                 job.previewText = transcript.text
                 try await repository.save(meetingTranscript: transcript)
+                job.completedTranscriptID = transcript.id
+                try Task.checkCancellation()
                 transcripts = try await repository.meetingTranscripts()
-                try? FileManager.default.removeItem(at: stagedURL)
                 job.stage = .ready
                 job.fraction = 1
-                job.message = "Transcript ready below and saved in Recall"
-                job.stagedAudioURL = nil
+                job.message = "Transcript ready below. Source audio is kept locally for retranscription."
                 engineDiagnostics = await transcriber.diagnostics()
                 recordEvent(stage: .ready, message: job.message, fraction: 1)
                 work = nil
@@ -329,6 +375,12 @@ final class MeetingTranscriptionController: ObservableObject {
         return destination
     }
 
+    private func sourceAudioURL(for transcript: MeetingTranscript) -> URL? {
+        guard let fileName = transcript.sourceAudioFileName else { return nil }
+        let url = stagingDirectory.appendingPathComponent(fileName, isDirectory: false)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     private static func title(for stage: MeetingTranscriptionStage) -> String {
         switch stage {
         case .requestingMicrophone: "Requesting microphone access"
@@ -371,6 +423,8 @@ final class MeetingTranscriptionController: ObservableObject {
             return "No usable speech was found. Keep the audio copy and retry, or choose another recording."
         case .emptySegment, .invalidSegmentRange:
             return "Speech was decoded, but its timestamps were invalid. Keep the audio copy and retry locally."
+        case .invalidSourceAudioReference:
+            return "The local source-audio reference was invalid. Import or record the audio again."
         case .localModelUnavailable:
             return "The local transcription model is unavailable. Check the model status in Advanced, then retry."
         case .persistenceUnsupported:

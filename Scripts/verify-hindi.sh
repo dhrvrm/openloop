@@ -4,7 +4,6 @@ set -euo pipefail
 TASK_ROOT=${0:A:h:h}
 TASK_MODEL_STORAGE=${OPENLOOP_MODEL_STORAGE:-"$HOME/Library/Application Support/OpenLoopADHD/Models/WhisperKit"}
 TASK_FIXTURE_DIR=$(mktemp -d /tmp/openloop-hindi-acceptance.XXXXXX)
-TASK_CONTEXT='Participants: Dhruv. Multilingual conversation in English and Hindi (हिन्दी), including Hinglish code-switching. Preserve names. Write Hindi speech in Devanagari and English speech in Latin; do not translate.'
 
 cleanup() {
     if [[ -n ${TASK_FIXTURE_DIR:-} && $TASK_FIXTURE_DIR == /tmp/openloop-hindi-acceptance.* ]]; then
@@ -28,5 +27,4 @@ afconvert -f WAVE -d LEI16@16000 \
 env -u OPENLOOP_LANGUAGE_CODE \
 OPENLOOP_HINDI_FIXTURE="$TASK_FIXTURE_DIR/hinglish.wav" \
 OPENLOOP_MODEL_STORAGE="$TASK_MODEL_STORAGE" \
-OPENLOOP_CONTEXT_PROMPT="$TASK_CONTEXT" \
     "$TASK_ROOT/Scripts/test.sh" --filter localWhisperRecognizesHindiFixture

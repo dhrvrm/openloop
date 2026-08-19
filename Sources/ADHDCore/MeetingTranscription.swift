@@ -46,6 +46,7 @@ public enum MeetingTranscriptionError: Error, Equatable, Sendable {
     case invalidSegmentRange
     case emptyTranscript
     case unsupportedAudioFormat(String)
+    case invalidSourceAudioReference
     case localModelUnavailable
     case persistenceUnsupported
 }
@@ -85,6 +86,7 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
     public let detectedLanguage: String?
     public let modelIdentifier: String
     public let segments: [TranscriptSegment]
+    public let sourceAudioFileName: String?
 
     public init(
         id: UUID = UUID(),
@@ -93,7 +95,8 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
         duration: TimeInterval,
         detectedLanguage: String? = nil,
         modelIdentifier: String,
-        segments: [TranscriptSegment]
+        segments: [TranscriptSegment],
+        sourceAudioFileName: String? = nil
     ) throws {
         let ordered = segments.sorted {
             if $0.start == $1.start { return $0.id.uuidString < $1.id.uuidString }
@@ -107,9 +110,59 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
         self.detectedLanguage = detectedLanguage?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.modelIdentifier = modelIdentifier
         self.segments = ordered
+        self.sourceAudioFileName = try Self.validatedSourceAudioFileName(sourceAudioFileName)
     }
 
     public var text: String { segments.map(\.text).joined(separator: "\n") }
+
+    private static func validatedSourceAudioFileName(_ value: String?) throws -> String? {
+        guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !normalized.isEmpty else { return nil }
+        guard normalized != ".",
+              normalized != "..",
+              !normalized.contains("/"),
+              !normalized.contains("\\"),
+              URL(fileURLWithPath: normalized).lastPathComponent == normalized
+        else { throw MeetingTranscriptionError.invalidSourceAudioReference }
+        return normalized
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case sourceName
+        case createdAt
+        case duration
+        case detectedLanguage
+        case modelIdentifier
+        case segments
+        case sourceAudioFileName
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            id: values.decode(UUID.self, forKey: .id),
+            sourceName: values.decode(String.self, forKey: .sourceName),
+            createdAt: values.decode(Date.self, forKey: .createdAt),
+            duration: values.decode(TimeInterval.self, forKey: .duration),
+            detectedLanguage: values.decodeIfPresent(String.self, forKey: .detectedLanguage),
+            modelIdentifier: values.decode(String.self, forKey: .modelIdentifier),
+            segments: values.decode([TranscriptSegment].self, forKey: .segments),
+            sourceAudioFileName: values.decodeIfPresent(String.self, forKey: .sourceAudioFileName)
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(id, forKey: .id)
+        try values.encode(sourceName, forKey: .sourceName)
+        try values.encode(createdAt, forKey: .createdAt)
+        try values.encode(duration, forKey: .duration)
+        try values.encodeIfPresent(detectedLanguage, forKey: .detectedLanguage)
+        try values.encode(modelIdentifier, forKey: .modelIdentifier)
+        try values.encode(segments, forKey: .segments)
+        try values.encodeIfPresent(sourceAudioFileName, forKey: .sourceAudioFileName)
+    }
 }
 
 private extension String {

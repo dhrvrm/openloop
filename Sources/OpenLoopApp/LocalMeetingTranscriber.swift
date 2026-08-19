@@ -46,20 +46,17 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
     nonisolated let modelIdentifier: String
     private let modelStorageURL: URL
     private let speakerDiarizationEnabled: Bool
-    private let contextPrompt: String?
     private var whisperKit: WhisperKit?
     private var speakerKit: SpeakerKit?
 
     init(
         modelIdentifier: String = "large-v3-v20240930_626MB",
         modelStorageURL: URL,
-        speakerDiarizationEnabled: Bool = true,
-        contextPrompt: String? = nil
+        speakerDiarizationEnabled: Bool = true
     ) {
         self.modelIdentifier = modelIdentifier
         self.modelStorageURL = modelStorageURL
         self.speakerDiarizationEnabled = speakerDiarizationEnabled
-        self.contextPrompt = contextPrompt?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func diagnostics() async -> MeetingEngineDiagnostics {
@@ -102,23 +99,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
 
         let callbackGate = TranscriptionAttemptGate()
 
-        let promptTokens = Self.promptTokens(
-            for: Self.participantPrompt(from: contextPrompt),
-            pipeline: pipeline
-        )
-        let options = DecodingOptions(
-            verbose: false,
-            task: .transcribe,
-            language: languageCode,
-            temperature: 0,
-            usePrefillPrompt: true,
-            detectLanguage: languageCode == nil,
-            skipSpecialTokens: true,
-            withoutTimestamps: false,
-            wordTimestamps: true,
-            promptTokens: promptTokens,
-            concurrentWorkerCount: 4
-        )
+        let options = Self.decodingOptions(languageCode: languageCode)
         let windows: [TranscriptionResult]
         if languageCode == nil, duration > 0, duration <= 45 {
             let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path)
@@ -130,17 +111,12 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                 progress: progress
             )
             if chunks.count > 1 {
-                var utteranceOptions = options
-                utteranceOptions.promptTokens = Self.promptTokens(
-                    for: Self.participantPrompt(from: contextPrompt),
-                    pipeline: pipeline
-                )
                 do {
                     let utteranceBatches = try await transcribeUtterances(
                         audio: audio,
                         chunks: chunks,
                         pipeline: pipeline,
-                        options: utteranceOptions,
+                        options: options,
                         progress: progress
                     )
                     if Self.allUtterancesHaveUsableTranscript(utteranceBatches) {
@@ -157,8 +133,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                             options: options,
                             duration: duration,
                             progress: progress,
-                            callbackGate: callbackGate,
-                            retryWithoutPrompt: true
+                            callbackGate: callbackGate
                         )
                     }
                 } catch {
@@ -174,8 +149,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                         options: options,
                         duration: duration,
                         progress: progress,
-                        callbackGate: callbackGate,
-                        retryWithoutPrompt: true
+                        callbackGate: callbackGate
                     )
                 }
             } else {
@@ -185,8 +159,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                     options: options,
                     duration: duration,
                     progress: progress,
-                    callbackGate: callbackGate,
-                    retryWithoutPrompt: true
+                    callbackGate: callbackGate
                 )
             }
         } else {
@@ -196,8 +169,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                 options: options,
                 duration: duration,
                 progress: progress,
-                callbackGate: callbackGate,
-                retryWithoutPrompt: duration > 0 && duration <= 45
+                callbackGate: callbackGate
             )
         }
         await callbackGate.invalidateAndDrain()
@@ -268,6 +240,16 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                 confidenceMargin: Self.languageConfidenceMargin(detection.langProbs)
             ))
         }
+        if !probes.isEmpty {
+            let scan = probes.map {
+                "\($0.language.lowercased()) \(Int(($0.confidenceMargin * 100).rounded()))%"
+            }.joined(separator: " · ")
+            await progress(.init(
+                stage: .preparingAudio,
+                fraction: 1,
+                message: "Language scan: \(scan)"
+            ))
+        }
         let chunks = CodeSwitchChunkPlanner.plan(
             audio: audio,
             speechRanges: speechRanges,
@@ -293,8 +275,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         options: DecodingOptions,
         duration: TimeInterval,
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void,
-        callbackGate: TranscriptionAttemptGate,
-        retryWithoutPrompt: Bool = false
+        callbackGate: TranscriptionAttemptGate
     ) async throws -> [TranscriptionResult] {
         let attempt = callbackGate.beginAttempt()
         let callback: TranscriptionCallback = { update in
@@ -327,22 +308,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         guard let first = results.first else {
             throw MeetingTranscriptionError.emptyTranscript
         }
-        let windows = try first.get()
-        guard retryWithoutPrompt,
-              Self.shouldRetryWithoutPrompt(windows, promptTokens: options.promptTokens)
-        else { return windows }
-        var promptlessOptions = options
-        promptlessOptions.promptTokens = nil
-        await callbackGate.invalidateAndDrain()
-        return try await transcribeFile(
-            audioURL: audioURL,
-            pipeline: pipeline,
-            options: promptlessOptions,
-            duration: duration,
-            progress: progress,
-            callbackGate: callbackGate,
-            retryWithoutPrompt: false
-        )
+        return try first.get()
     }
 
     private func transcribeUtterances(
@@ -355,27 +321,28 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         var batches: [[TranscriptionResult]] = []
         for (index, chunk) in chunks.enumerated() {
             try Task.checkCancellation()
-            var results = try await pipeline.transcribe(
-                audioArray: Array(audio[chunk.decodeRange]),
-                audioArrayOffset: chunk.decodeRange.lowerBound,
-                decodeOptions: options
-            )
-            if !Self.hasUsableTranscript(results), options.promptTokens != nil {
-                var promptless = options
-                promptless.promptTokens = nil
-                results = try await pipeline.transcribe(
-                    audioArray: Array(audio[chunk.decodeRange]),
-                    audioArrayOffset: chunk.decodeRange.lowerBound,
-                    decodeOptions: promptless
+            let coreAudio = Array(audio[chunk.coreRange])
+            let chunkLanguage = try? await pipeline.detectLangauge(audioArray: coreAudio).language
+            let chunkOptions = chunkLanguage.map(Self.decodingOptions(languageCode:)) ?? options
+            let transcriptionRange = chunkLanguage == nil
+                ? chunk.decodeRange
+                : Self.isolatedDecodeRange(
+                    coreRange: chunk.coreRange,
+                    audioCount: audio.count,
+                    sampleRate: WhisperKit.sampleRate
                 )
-            }
-            let seekTime = Float(chunk.decodeRange.lowerBound) / Float(WhisperKit.sampleRate)
+            let results = try await pipeline.transcribe(
+                audioArray: Array(audio[transcriptionRange]),
+                audioArrayOffset: transcriptionRange.lowerBound,
+                decodeOptions: chunkOptions
+            )
+            let seekTime = Float(transcriptionRange.lowerBound) / Float(WhisperKit.sampleRate)
             for result in results {
                 result.seekTime = seekTime
                 let absolute = result.segments.map {
                     TranscriptionUtilities.updateSegmentTimings(
                         segment: $0,
-                        seekOffsetIndex: chunk.decodeRange.lowerBound
+                        seekOffsetIndex: transcriptionRange.lowerBound
                     )
                 }
                 result.segments = Self.trim(
@@ -593,11 +560,32 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         !batches.isEmpty && batches.allSatisfy(hasUsableTranscript)
     }
 
-    static func shouldRetryWithoutPrompt(
-        _ results: [TranscriptionResult],
-        promptTokens: [Int]?
-    ) -> Bool {
-        promptTokens?.isEmpty == false && !hasUsableTranscript(results)
+    static func decodingOptions(languageCode: String?) -> DecodingOptions {
+        DecodingOptions(
+            verbose: false,
+            task: .transcribe,
+            language: languageCode,
+            temperature: 0,
+            usePrefillPrompt: true,
+            detectLanguage: languageCode == nil,
+            skipSpecialTokens: true,
+            withoutTimestamps: false,
+            wordTimestamps: true,
+            promptTokens: nil,
+            concurrentWorkerCount: 4
+        )
+    }
+
+    static func isolatedDecodeRange(
+        coreRange: Range<Int>,
+        audioCount: Int,
+        sampleRate: Int,
+        context: TimeInterval = 0.2
+    ) -> Range<Int> {
+        let contextSamples = max(0, Int(context * Double(sampleRate)))
+        let lowerBound = max(0, coreRange.lowerBound - contextSamples)
+        let upperBound = min(audioCount, coreRange.upperBound + contextSamples)
+        return lowerBound..<upperBound
     }
 
     static func languageConfidenceMargin(_ probabilities: [String: Float]) -> Float {
@@ -693,24 +681,6 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         String(word.lowercased().unicodeScalars.filter {
             CharacterSet.letters.contains($0) || CharacterSet.decimalDigits.contains($0)
         })
-    }
-
-    static func participantPrompt(from context: String?) -> String? {
-        guard let firstSentence = context?.split(separator: ".", maxSplits: 1).first else {
-            return nil
-        }
-        let value = firstSentence.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard value.hasPrefix("Participants:") else { return nil }
-        return value + "."
-    }
-
-    private static func promptTokens(for prompt: String?, pipeline: WhisperKit) -> [Int]? {
-        guard let prompt,
-              !prompt.isEmpty,
-              let tokenizer = pipeline.tokenizer else { return nil }
-        let tokens = tokenizer.encode(text: " " + prompt)
-            .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
-        return tokens.isEmpty ? nil : tokens
     }
 
     private static func audioDuration(_ url: URL) async -> TimeInterval {

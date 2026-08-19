@@ -4,7 +4,7 @@ import Testing
 @testable import OpenLoopApp
 
 @MainActor
-@Test func importedAudioShowsProgressPersistsAndRemovesStagingCopy() async throws {
+@Test func importedAudioShowsProgressPersistsAndRetainsRetryableSource() async throws {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     defer { try? FileManager.default.removeItem(at: root) }
@@ -24,7 +24,7 @@ import Testing
     await controller.waitUntilSettledForTesting()
 
     #expect(controller.job.stage == .ready)
-    #expect(controller.job.message == "Transcript ready below and saved in Recall")
+    #expect(controller.job.message == "Transcript ready below. Source audio is kept locally for retranscription.")
     #expect(controller.transcripts.count == 1)
     #expect(controller.transcripts[0].text == "नमस्ते team")
     #expect(controller.job.previewText == "नमस्ते team")
@@ -36,10 +36,119 @@ import Testing
         .saving,
         .ready,
     ])
-    #expect(try FileManager.default.contentsOfDirectory(
-        at: root.appendingPathComponent("staging"),
-        includingPropertiesForKeys: nil
-    ).isEmpty)
+    let retainedURL = try #require(controller.job.stagedAudioURL)
+    #expect(FileManager.default.fileExists(atPath: retainedURL.path))
+    #expect(controller.job.canRetry)
+    #expect(controller.job.completedTranscriptID == controller.transcripts[0].id)
+    #expect(controller.transcripts[0].sourceAudioFileName == retainedURL.lastPathComponent)
+}
+
+@MainActor
+@Test func retranscribingRetainedSourceReplacesWrongTranscriptID() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let audio = root.appendingPathComponent("mixed.m4a")
+    try Data("audio fixture".utf8).write(to: audio)
+    let repository = MeetingRepository()
+    let controller = MeetingTranscriptionController(
+        repository: repository,
+        transcriber: SequenceMeetingTranscriber(texts: ["wrong transcript", "अब सही transcript"]),
+        stagingDirectory: root.appendingPathComponent("staging")
+    )
+
+    controller.importAudio(audio)
+    await controller.waitUntilSettledForTesting()
+    let originalID = try #require(controller.transcripts.first?.id)
+    controller.retry()
+    await controller.waitUntilSettledForTesting()
+
+    #expect(controller.transcripts.count == 1)
+    #expect(controller.transcripts.first?.id == originalID)
+    #expect(controller.transcripts.first?.text == "अब सही transcript")
+    #expect(controller.job.completedTranscriptID == originalID)
+}
+
+@MainActor
+@Test func dismissingCompletedJobExplicitlyDiscardsRetainedAudio() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let audio = root.appendingPathComponent("meeting.m4a")
+    try Data("audio fixture".utf8).write(to: audio)
+    let controller = MeetingTranscriptionController(
+        repository: MeetingRepository(),
+        transcriber: SuccessfulMeetingTranscriber(),
+        stagingDirectory: root.appendingPathComponent("staging")
+    )
+
+    controller.importAudio(audio)
+    await controller.waitUntilSettledForTesting()
+    let retainedURL = try #require(controller.job.stagedAudioURL)
+    controller.clearFinishedJob()
+
+    #expect(!FileManager.default.fileExists(atPath: retainedURL.path))
+    #expect(controller.job.stage == nil)
+}
+
+@MainActor
+@Test func refreshRestoresNewestRetainedSourceForRetranscription() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let staging = root.appendingPathComponent("staging", isDirectory: true)
+    try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+    let sourceURL = staging.appendingPathComponent("retained.m4a")
+    try Data("audio fixture".utf8).write(to: sourceURL)
+    let repository = MeetingRepository()
+    let transcript = try MeetingTranscript(
+        sourceName: "meeting.m4a",
+        duration: 4,
+        modelIdentifier: "local-test-model",
+        segments: [try TranscriptSegment(start: 0, end: 4, text: "saved transcript")],
+        sourceAudioFileName: sourceURL.lastPathComponent
+    )
+    try await repository.save(meetingTranscript: transcript)
+    let controller = MeetingTranscriptionController(
+        repository: repository,
+        transcriber: SuccessfulMeetingTranscriber(),
+        stagingDirectory: staging
+    )
+
+    await controller.refresh()
+
+    #expect(controller.job.stage == .ready)
+    #expect(controller.job.canRetry)
+    #expect(controller.job.completedTranscriptID == transcript.id)
+    #expect(controller.job.stagedAudioURL == sourceURL)
+    #expect(controller.job.previewText == "saved transcript")
+}
+
+@MainActor
+@Test func deletingTranscriptAlsoDeletesItsRetainedSource() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let audio = root.appendingPathComponent("meeting.m4a")
+    try Data("audio fixture".utf8).write(to: audio)
+    let controller = MeetingTranscriptionController(
+        repository: MeetingRepository(),
+        transcriber: SuccessfulMeetingTranscriber(),
+        stagingDirectory: root.appendingPathComponent("staging")
+    )
+
+    controller.importAudio(audio)
+    await controller.waitUntilSettledForTesting()
+    let transcriptID = try #require(controller.transcripts.first?.id)
+    let retainedURL = try #require(controller.job.stagedAudioURL)
+    await controller.deleteTranscript(id: transcriptID)
+
+    #expect(controller.transcripts.isEmpty)
+    #expect(!FileManager.default.fileExists(atPath: retainedURL.path))
+    #expect(controller.job.stage == nil)
 }
 
 @MainActor
@@ -185,6 +294,57 @@ import Testing
     #expect(await transcriber.transcriptionCount() == 1)
 }
 
+@MainActor
+@Test func retryWaitsForCancelledTranscriptionToUnwind() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let audio = root.appendingPathComponent("meeting.m4a")
+    try Data("audio fixture".utf8).write(to: audio)
+    let transcriber = CancellableMeetingTranscriber()
+    let controller = MeetingTranscriptionController(
+        repository: MeetingRepository(),
+        transcriber: transcriber,
+        stagingDirectory: root.appendingPathComponent("staging")
+    )
+
+    controller.importAudio(audio)
+    while controller.job.stage != .transcribing { await Task.yield() }
+    controller.cancel()
+    controller.retry()
+
+    #expect(await transcriber.transcriptionCount() == 1)
+    await controller.waitUntilSettledForTesting()
+    #expect(controller.job.stage == .cancelled)
+}
+
+@MainActor
+@Test func retryKeepsReplacementIDWhenRefreshAfterSaveFails() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let audio = root.appendingPathComponent("meeting.m4a")
+    try Data("audio fixture".utf8).write(to: audio)
+    let repository = MeetingRepository(failFetchAfterSave: true)
+    let controller = MeetingTranscriptionController(
+        repository: repository,
+        transcriber: SuccessfulMeetingTranscriber(),
+        stagingDirectory: root.appendingPathComponent("staging")
+    )
+
+    controller.importAudio(audio)
+    await controller.waitUntilSettledForTesting()
+    let persistedID = try #require(controller.job.completedTranscriptID)
+    controller.retry()
+    await controller.waitUntilSettledForTesting()
+
+    let stored = await repository.storedValues()
+    #expect(stored.count == 1)
+    #expect(stored.first?.id == persistedID)
+}
+
 private actor SuccessfulMeetingTranscriber: MeetingTranscribing {
     nonisolated let modelIdentifier = "local-test-model"
     private var languageCodes: [String?] = []
@@ -242,11 +402,72 @@ private actor EmptyMeetingTranscriber: MeetingTranscribing {
     func transcriptionCount() -> Int { count }
 }
 
+private actor CancellableMeetingTranscriber: MeetingTranscribing {
+    nonisolated let modelIdentifier = "local-test-model"
+    private var count = 0
+
+    func transcribe(
+        audioURL: URL,
+        progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
+    ) async throws -> LocalTranscriptionOutput {
+        count += 1
+        await progress(.init(stage: .transcribing, fraction: 0.5, message: "Working"))
+        while true {
+            try Task.checkCancellation()
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    func transcriptionCount() -> Int { count }
+}
+
+private actor SequenceMeetingTranscriber: MeetingTranscribing {
+    nonisolated let modelIdentifier = "local-test-model"
+    private let texts: [String]
+    private var index = 0
+
+    init(texts: [String]) {
+        self.texts = texts
+    }
+
+    func transcribe(
+        audioURL: URL,
+        progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
+    ) async throws -> LocalTranscriptionOutput {
+        let text = texts[min(index, texts.count - 1)]
+        index += 1
+        await progress(.init(stage: .transcribing, fraction: 0.5, previewText: text))
+        return LocalTranscriptionOutput(
+            duration: 4,
+            detectedLanguage: "en + hi",
+            modelIdentifier: modelIdentifier,
+            segments: [try TranscriptSegment(start: 0, end: 4, text: text)]
+        )
+    }
+}
+
 private actor MeetingRepository: ThoughtRepository {
     private var values: [MeetingTranscript] = []
+    private let failFetchAfterSave: Bool
+    private var didSave = false
 
-    func save(meetingTranscript: MeetingTranscript) async throws { values.append(meetingTranscript) }
-    func meetingTranscripts() async throws -> [MeetingTranscript] { values }
+    init(failFetchAfterSave: Bool = false) {
+        self.failFetchAfterSave = failFetchAfterSave
+    }
+
+    func save(meetingTranscript: MeetingTranscript) async throws {
+        if let index = values.firstIndex(where: { $0.id == meetingTranscript.id }) {
+            values[index] = meetingTranscript
+        } else {
+            values.append(meetingTranscript)
+        }
+        didSave = true
+    }
+    func meetingTranscripts() async throws -> [MeetingTranscript] {
+        if failFetchAfterSave, didSave { throw MeetingRepositoryFailure() }
+        return values
+    }
+    func storedValues() -> [MeetingTranscript] { values }
     func deleteMeetingTranscript(id: UUID) async throws { values.removeAll { $0.id == id } }
     func save(capture: RawCapture) async throws {}
     func save(proposal: ClarificationProposal) async throws {}
@@ -256,6 +477,8 @@ private actor MeetingRepository: ThoughtRepository {
     func openIntentions() async throws -> [Intention] { [] }
     func proposal(captureID: UUID) async throws -> ClarificationProposal? { nil }
 }
+
+private struct MeetingRepositoryFailure: Error {}
 
 @MainActor
 private final class FakeMeetingRecorder: MeetingAudioRecording {
