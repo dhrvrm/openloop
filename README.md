@@ -46,6 +46,8 @@ npm install
 npm run build
 ```
 
+Repository maintainers can apply the canonical description, homepage, topics, and GitHub Pages setting with `Scripts/configure-github.sh` after authenticating GitHub CLI with admin access.
+
 ## Repository map
 
 ```text
