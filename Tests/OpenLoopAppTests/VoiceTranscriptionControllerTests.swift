@@ -72,6 +72,27 @@ private final class VoiceLearningProbe {
 }
 
 @MainActor
+private final class AsyncLatch {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard isOpen == false else { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func open() {
+        guard isOpen == false else { return }
+        isOpen = true
+        let pending = waiters
+        waiters.removeAll()
+        pending.forEach { $0.resume() }
+    }
+}
+
+@MainActor
 @Test func oneToggleStartsAndSecondToggleStopsAndSavesNormalizedTranscript() async {
     let transcriber = FakeVoiceTranscriber()
     var saved: [String] = []
@@ -166,23 +187,24 @@ private final class VoiceLearningProbe {
 }
 
 @MainActor
-@Test func oneMinutePolicyAutomaticallyStopsAndSavesAtTheInjectedLimit() async throws {
+@Test func oneMinutePolicyAutomaticallyStopsAndSavesAtTheInjectedLimit() async {
     let transcriber = FakeVoiceTranscriber()
+    let durationReached = AsyncLatch()
+    let transcriptSaved = AsyncLatch()
     var saved: [String] = []
     let controller = VoiceTranscriptionController(
         transcriber: transcriber,
-        maximumDuration: .milliseconds(10)
+        maximumDuration: .seconds(60),
+        waitForDuration: { _ in await durationReached.wait() }
     ) { text in
         saved.append(text)
+        transcriptSaved.open()
         return true
     }
     await controller.toggle()
     transcriber.emit("automatic limit transcript")
-
-    let deadline = ContinuousClock.now.advanced(by: .seconds(1))
-    while controller.state != .idle && ContinuousClock.now < deadline {
-        try await Task.sleep(for: .milliseconds(5))
-    }
+    durationReached.open()
+    await transcriptSaved.wait()
 
     #expect(controller.state == .idle)
     #expect(transcriber.stopCount == 1)

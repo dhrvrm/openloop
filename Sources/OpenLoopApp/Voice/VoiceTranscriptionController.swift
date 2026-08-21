@@ -146,6 +146,7 @@ final class VoiceTranscriptionController: ObservableObject {
     private let transcriber: any VoiceTranscribing
     private let save: @MainActor (String) async -> Bool
     private let maximumDuration: Duration
+    private let waitForDuration: @MainActor @Sendable (Duration) async -> Void
     private let vocabulary: @MainActor @Sendable () async -> [String]
     private let now: @MainActor @Sendable () -> Date
     private let recordCorrection: @MainActor @Sendable (String, String, Date) async -> Void
@@ -157,6 +158,9 @@ final class VoiceTranscriptionController: ObservableObject {
     init(
         transcriber: any VoiceTranscribing,
         maximumDuration: Duration = .seconds(60),
+        waitForDuration: @escaping @MainActor @Sendable (Duration) async -> Void = { duration in
+            try? await Task.sleep(for: duration)
+        },
         vocabulary: @escaping @MainActor @Sendable () async -> [String] = { [] },
         now: @escaping @MainActor @Sendable () -> Date = { .now },
         recordCorrection: @escaping @MainActor @Sendable (String, String, Date) async -> Void = { _, _, _ in },
@@ -164,6 +168,7 @@ final class VoiceTranscriptionController: ObservableObject {
     ) {
         self.transcriber = transcriber
         self.maximumDuration = maximumDuration
+        self.waitForDuration = waitForDuration
         self.vocabulary = vocabulary
         self.now = now
         self.recordCorrection = recordCorrection
@@ -304,8 +309,8 @@ final class VoiceTranscriptionController: ObservableObject {
 
     private func startDurationLimit() {
         durationTask?.cancel()
-        durationTask = Task { @MainActor [weak self, maximumDuration] in
-            try? await Task.sleep(for: maximumDuration)
+        durationTask = Task { @MainActor [weak self, maximumDuration, waitForDuration] in
+            await waitForDuration(maximumDuration)
             guard Task.isCancelled == false else { return }
             await self?.stopAndSave()
         }
