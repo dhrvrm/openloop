@@ -81,6 +81,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private var hotKey: GlobalHotKey?
     private var voiceHotKey: GlobalHotKey?
     private var recallHotKey: GlobalHotKey?
+    private var voiceCaptureWindow: VoiceCaptureWindowController?
     private var model: AppModel?
     private var pauseMenuItem: NSMenuItem?
     private var privateModeMenuItem: NSMenuItem?
@@ -251,8 +252,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             )
             model.attachMeetingTranscription(meetingController)
             let mainWindow = MainWindowController(model: model)
+            let voiceCaptureWindow = VoiceCaptureWindowController(model: model)
             self.quickCapture = quickCapture
             self.mainWindow = mainWindow
+            self.voiceCaptureWindow = voiceCaptureWindow
             self.model = model
             self.contextProvider = contextProvider
             let applicationContextObserver = ApplicationContextObserver { [weak model] application in

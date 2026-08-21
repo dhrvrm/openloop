@@ -62,6 +62,7 @@ final class AppModel: ObservableObject {
     @Published var dictationProcessingMessage: String?
     @Published var dictationActionNotice: String?
     @Published var isVoiceContextEnabled: Bool
+    @Published private(set) var isSystemDictationActive = false
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -89,7 +90,6 @@ final class AppModel: ObservableObject {
     private var meetingMeterObservation: AnyCancellable?
     private var meetingStreamingObservation: AnyCancellable?
     private var dictationCoordinator: (any VoiceDictationCoordinating)?
-    private var shouldDeliverCurrentRecording = false
     private var deliveredTranscriptID: UUID?
 
     init(
@@ -168,7 +168,7 @@ final class AppModel: ObservableObject {
             return
         }
         if meetingJob.stage == .recording {
-            if shouldDeliverCurrentRecording {
+            if isSystemDictationActive {
                 Task { await meetingController.toggleRecording() }
             } else {
                 commandError = "A meeting recording is already active. Stop it from Now before dictating."
@@ -183,7 +183,7 @@ final class AppModel: ObservableObject {
             commandError = "System-wide text output is unavailable."
             return
         }
-        shouldDeliverCurrentRecording = true
+        isSystemDictationActive = true
         deliveredTranscriptID = nil
         lastDictationDelivery = nil
         dictationActionNotice = nil
@@ -192,11 +192,9 @@ final class AppModel: ObservableObject {
         Task { await meetingController.toggleRecording() }
     }
 
-    var isSystemDictationActive: Bool {
-        shouldDeliverCurrentRecording
-    }
-
     func cancelVoiceCapture() {
+        isSystemDictationActive = false
+        isDeliveringDictation = false
         if meetingController != nil {
             meetingController?.cancel()
         } else {
@@ -279,6 +277,13 @@ final class AppModel: ObservableObject {
         dictationActionNotice = "Voice command cancelled."
     }
 
+    func dismissDictationStatus() {
+        lastDictationDelivery = nil
+        dictationActionNotice = nil
+        dictationProcessingMessage = nil
+        commandError = nil
+    }
+
     func undoLastDictationOutput() {
         guard let result = dictationCoordinator?.undoLastOutput() else { return }
         if result.inserted {
@@ -292,11 +297,12 @@ final class AppModel: ObservableObject {
     }
 
     private func handleDictationJob(_ job: MeetingJobPresentation) {
-        guard shouldDeliverCurrentRecording else { return }
+        guard isSystemDictationActive else { return }
         if job.stage == .failed || job.stage == .cancelled {
-            shouldDeliverCurrentRecording = false
+            isSystemDictationActive = false
             isDeliveringDictation = false
             commandError = job.message
+            dictationActionNotice = job.message
             return
         }
         guard job.stage == .ready,
@@ -307,7 +313,7 @@ final class AppModel: ObservableObject {
               let dictationCoordinator
         else { return }
         deliveredTranscriptID = transcriptID
-        shouldDeliverCurrentRecording = false
+        isSystemDictationActive = false
         isDeliveringDictation = true
         dictationProcessingMessage = "Processing transcript locally"
         let mode = voiceMode

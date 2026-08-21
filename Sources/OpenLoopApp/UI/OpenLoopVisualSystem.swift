@@ -88,6 +88,7 @@ enum OpenLoopVisualSystem {
         case .inbox: inbox
         case .later: later
         case .return: returnColor
+        case .transcripts: recording
         case .context: context
         case .emerging: emerging
         case .ask: ask
@@ -101,6 +102,7 @@ enum OpenLoopVisualSystem {
         case "Inbox": "tray.fill"
         case "Later": "archivebox.fill"
         case "Return": "arrow.uturn.backward.circle.fill"
+        case "Transcripts": "waveform.and.mic"
         case "Context": "point.3.connected.trianglepath.dotted"
         case "Emerging": "sparkles"
         case "Ask your context": "text.magnifyingglass"
@@ -115,6 +117,7 @@ enum OpenLoopVisualSystem {
         case "Inbox": inbox
         case "Later": later
         case "Return": returnColor
+        case "Transcripts": recording
         case "Context": context
         case "Emerging": emerging
         case "Ask your context": ask

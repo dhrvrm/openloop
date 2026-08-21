@@ -1,167 +1,260 @@
+import ADHDCore
 import AppKit
 import Combine
 import SwiftUI
 
-private struct VoiceCaptureView: View {
-    @ObservedObject var controller: VoiceTranscriptionController
+enum VoiceHUDPhase: Equatable {
+    case hidden
+    case recording
+    case processing
+    case confirmation
+    case success
+    case failure
+}
+
+enum VoiceHUDPresentation {
+    static func phase(
+        isSystemDictationActive: Bool,
+        meetingStage: MeetingTranscriptionStage?,
+        isDelivering: Bool,
+        deliveryState: VoiceDictationDeliveryState?,
+        hasNotice: Bool
+    ) -> VoiceHUDPhase {
+        if isSystemDictationActive, meetingStage == .recording { return .recording }
+        if isDelivering || (isSystemDictationActive && meetingStage != .failed) {
+            return .processing
+        }
+        switch deliveryState {
+        case .awaitingConfirmation: return .confirmation
+        case .inserted: return .success
+        case .failed: return .failure
+        case nil: return hasNotice ? .failure : .hidden
+        }
+    }
+}
+
+private struct GlobalVoiceHUD: View {
+    @ObservedObject var model: AppModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 9) {
                 Circle()
-                    .fill(controller.state == .recording ? Color.red : Color.secondary.opacity(0.35))
-                    .frame(width: 10, height: 10)
-                    .accessibilityHidden(true)
+                    .fill(phase == .recording ? OpenLoopVisualSystem.recording : statusTint)
+                    .frame(width: 9, height: 9)
                 Text(title)
-                    .font(.headline)
+                    .font(.system(size: 14, weight: .semibold))
                 Spacer()
-                if controller.state == .recording, let startedAt = controller.startedAt {
+                if phase == .recording, let startedAt = model.meetingJob.startedAt {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         Text(elapsed(from: startedAt, to: context.date))
-                            .font(.callout.monospacedDigit())
+                            .font(.caption.monospacedDigit().weight(.medium))
                             .foregroundStyle(.secondary)
                     }
                 }
+                Text(decibelText)
+                    .font(.caption.monospacedDigit().weight(.medium))
+                    .foregroundStyle(.secondary)
             }
 
-            Text(controller.statusMessage)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
-            if controller.state == .recording {
-                HStack(alignment: .center, spacing: 5) {
-                    ForEach(0..<5, id: \.self) { index in
-                        Capsule()
-                            .fill(activityColor(for: index))
-                            .frame(width: 5, height: CGFloat(8 + index * 3))
-                    }
-                    Text(controller.hasDetectedSpeech ? "Voice detected" : "Listening")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Microphone activity")
-                .accessibilityValue(controller.hasDetectedSpeech ? "Voice detected" : "Listening")
+            if phase == .recording {
+                meter
+                transcript
+            } else {
+                Text(statusText)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            TextEditor(text: Binding(
-                get: { controller.transcript },
-                set: { controller.editTranscript($0) }
-            ))
-                .font(.body)
-                .scrollContentBackground(.hidden)
-                .padding(10)
-                .background(
-                    Color(nsColor: .textBackgroundColor),
-                    in: RoundedRectangle(cornerRadius: 9)
-                )
-                .frame(minHeight: 110)
-                .disabled(controller.state == .requestingPermission || controller.state == .saving)
-                .accessibilityLabel("Live transcript")
-
-            Text("Edits improve names and technical words on this Mac")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-
-            HStack {
-                Text("⌃⌥Space to \(controller.state == .recording ? "stop and save" : "start")")
-                    .font(.caption)
+            HStack(spacing: 10) {
+                Text("⌃⌥Space")
+                    .font(.caption.monospaced())
                     .foregroundStyle(.tertiary)
                 Spacer()
-                Button("Cancel") { controller.cancel() }
-                primaryButton
+                if phase == .recording {
+                    Button("Cancel") { model.cancelVoiceCapture() }
+                    Button("Stop & insert") { model.toggleSystemDictation() }
+                        .buttonStyle(OpenLoopAccessoryButtonStyle(tint: OpenLoopVisualSystem.recording))
+                } else if phase == .confirmation {
+                    Button("Cancel") { model.discardPendingVoiceCommand() }
+                    Button("Confirm") { model.confirmPendingVoiceCommand() }
+                        .buttonStyle(OpenLoopAccessoryButtonStyle())
+                } else if phase == .failure {
+                    Button("Dismiss") { model.dismissDictationStatus() }
+                }
             }
+            .controlSize(.small)
         }
-        .padding(20)
-        .frame(width: 500)
+        .padding(16)
+        .frame(width: 430)
+        .background(OpenLoopVisualSystem.raised)
     }
 
-    @ViewBuilder private var primaryButton: some View {
-        switch controller.state {
-        case .recording:
-            Button("Stop & Save") { Task { await controller.toggle() } }
-                .buttonStyle(.borderedProminent)
-        case .failed:
-            Button(controller.transcript.isEmpty ? "Try Again" : "Retry Save") {
-                Task { await controller.toggle() }
-            }
-            .buttonStyle(.borderedProminent)
-        case .requestingPermission:
-            Button("Checking…") {}
-                .buttonStyle(.borderedProminent)
-                .disabled(true)
-        case .saving:
-            Button("Saving…") {}
-                .buttonStyle(.borderedProminent)
-                .disabled(true)
-        case .idle:
-            EmptyView()
-        }
+    private var phase: VoiceHUDPhase {
+        VoiceHUDPresentation.phase(
+            isSystemDictationActive: model.isSystemDictationActive,
+            meetingStage: model.meetingJob.stage,
+            isDelivering: model.isDeliveringDictation,
+            deliveryState: model.lastDictationDelivery?.state,
+            hasNotice: model.dictationActionNotice != nil || model.commandError != nil
+        )
     }
 
     private var title: String {
-        switch controller.state {
-        case .idle: "Voice capture"
-        case .requestingPermission: "Preparing voice capture"
-        case .recording: "Recording"
-        case .saving: "Saving transcript"
-        case .failed: "Voice capture needs attention"
+        switch phase {
+        case .hidden: "Dictation"
+        case .recording: "Listening"
+        case .processing: "Preparing your words"
+        case .confirmation: "Confirm voice command"
+        case .success: "Inserted"
+        case .failure: "Dictation needs attention"
         }
+    }
+
+    private var statusText: String {
+        if let delivery = model.lastDictationDelivery { return delivery.statusMessage }
+        return model.commandError
+            ?? model.dictationActionNotice
+            ?? model.dictationProcessingMessage
+            ?? model.meetingJob.message
+    }
+
+    private var statusTint: Color {
+        phase == .failure ? .orange : OpenLoopVisualSystem.accent
+    }
+
+    private var transcript: some View {
+        let snapshot = model.streamingVoiceSession
+        return VStack(alignment: .leading, spacing: 5) {
+            if let stable = snapshot?.transcript.stableText, !stable.isEmpty {
+                Text(stable)
+                    .foregroundStyle(.primary)
+            }
+            if let partial = snapshot?.transcript.unstableText, !partial.isEmpty {
+                Text(partial)
+                    .foregroundStyle(.secondary)
+                Text("Still listening")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            if snapshot?.transcript.visibleText.isEmpty != false {
+                Text("Speak naturally in Hindi, English, or both.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.system(size: 14))
+        .lineLimit(4)
+        .frame(maxWidth: .infinity, minHeight: 40, alignment: .topLeading)
+        .textSelection(.enabled)
+        .accessibilityLabel("Live dictation transcript")
+    }
+
+    private var meter: some View {
+        HStack(alignment: .center, spacing: 3) {
+            ForEach(0..<18, id: \.self) { index in
+                Capsule(style: .continuous)
+                    .fill(index <= activeBarCount
+                        ? OpenLoopVisualSystem.recording
+                        : Color.secondary.opacity(0.16))
+                    .frame(width: 4, height: CGFloat(6 + (index * 7 % 20)))
+            }
+        }
+        .frame(height: 28)
+        .animation(.easeOut(duration: 0.1), value: model.recordingDecibels)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Microphone level")
+        .accessibilityValue(decibelText)
+    }
+
+    private var activeBarCount: Int {
+        guard let decibels = model.recordingDecibels else { return 0 }
+        return Int((min(0, max(-60, decibels)) + 60) / 60 * 17)
+    }
+
+    private var decibelText: String {
+        model.recordingDecibels.map { String(format: "%.0f dB", $0) } ?? "— dB"
     }
 
     private func elapsed(from start: Date, to end: Date) -> String {
         let seconds = max(0, Int(end.timeIntervalSince(start)))
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
-
-    private func activityColor(for index: Int) -> Color {
-        let threshold = Double(index + 1) / 5
-        return controller.audioLevel >= threshold
-            ? .accentColor
-            : Color.secondary.opacity(0.2)
-    }
 }
 
 @MainActor
 final class VoiceCaptureWindowController {
-    private let controller: VoiceTranscriptionController
+    private let model: AppModel
     private let window: NSPanel
-    private var stateObservation: AnyCancellable?
+    private var modelObservation: AnyCancellable?
+    private var successDismissal: Task<Void, Never>?
+    private var suppressedSuccessToken: String?
 
-    init(controller: VoiceTranscriptionController) {
-        self.controller = controller
+    init(model: AppModel) {
+        self.model = model
         window = NSPanel(
             contentRect: .zero,
-            styleMask: [.titled, .utilityWindow, .nonactivatingPanel],
+            styleMask: [.nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        window.title = "Voice Capture"
         window.level = .floating
         window.isReleasedWhenClosed = false
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        window.contentViewController = NSHostingController(
-            rootView: VoiceCaptureView(controller: controller)
-        )
-        stateObservation = controller.$state.sink { [weak self] state in
-            guard let self else { return }
-            if state == .idle {
-                window.orderOut(nil)
-            } else {
-                showWindow()
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.hasShadow = true
+        window.contentViewController = NSHostingController(rootView: GlobalVoiceHUD(model: model))
+        modelObservation = model.objectWillChange.sink { [weak self] _ in
+            Task { @MainActor in
+                await Task.yield()
+                self?.refreshVisibility()
             }
         }
     }
 
-    func toggle() {
-        if controller.state == .idle || controller.state == .failed {
-            showWindow()
+    private func refreshVisibility() {
+        let phase = VoiceHUDPresentation.phase(
+            isSystemDictationActive: model.isSystemDictationActive,
+            meetingStage: model.meetingJob.stage,
+            isDelivering: model.isDeliveringDictation,
+            deliveryState: model.lastDictationDelivery?.state,
+            hasNotice: model.dictationActionNotice != nil || model.commandError != nil
+        )
+        if phase == .hidden {
+            successDismissal?.cancel()
+            window.orderOut(nil)
+            return
         }
-        Task { await controller.toggle() }
+        if phase == .recording || phase == .processing { suppressedSuccessToken = nil }
+        if phase == .success {
+            let token = model.lastDictationDelivery.map {
+                "\($0.state.rawValue)|\($0.processedText)"
+            }
+            guard token != suppressedSuccessToken else { return }
+            successDismissal?.cancel()
+            successDismissal = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(2.2))
+                guard !Task.isCancelled, let self else { return }
+                suppressedSuccessToken = token
+                window.orderOut(nil)
+            }
+        }
+        showWithoutActivating()
     }
 
-    private func showWindow() {
-        window.center()
+    private func showWithoutActivating() {
+        if let screen = NSScreen.main {
+            let size = window.frame.size
+            let visible = screen.visibleFrame
+            window.setFrameOrigin(NSPoint(
+                x: visible.midX - size.width / 2,
+                y: visible.maxY - size.height - 24
+            ))
+        } else {
+            window.center()
+        }
         window.orderFrontRegardless()
     }
 }

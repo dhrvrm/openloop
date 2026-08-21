@@ -34,16 +34,47 @@ struct V1ReliabilityTests {
             "Now", "Inbox", "Later", "Return",
         ])
         #expect(WorkspaceOrientation.sections[1].destinations.map(\.title) == [
-            "Context", "Emerging", "Ask", "Act",
+            "Transcripts", "Context", "Emerging", "Ask", "Act",
         ])
-        #expect(Set(WorkspaceOrientation.destinations.map(\.id)).count == 8)
-        #expect(Set(WorkspaceOrientation.destinations.map(\.icon)).count == 8)
+        #expect(Set(WorkspaceOrientation.destinations.map(\.id)).count == 9)
+        #expect(Set(WorkspaceOrientation.destinations.map(\.icon)).count == 9)
         #expect(WorkspaceOrientation.destination(atLegacyTab: 0) == .now)
         #expect(WorkspaceOrientation.destination(atLegacyTab: 3) == .ask)
         #expect(WorkspaceOrientation.destination(atLegacyTab: 99) == .now)
         #expect(WorkspaceOrientation.quickCaptureShortcut.contains("Space"))
         #expect(WorkspaceOrientation.voiceCaptureShortcut.contains("⌃⌥Space"))
         #expect(WorkspaceOrientation.emptyCaptureGuidance.contains("Command-Shift-Space"))
+    }
+
+    @Test func globalVoiceHUDUsesOneObservableSessionState() {
+        #expect(VoiceHUDPresentation.phase(
+            isSystemDictationActive: true,
+            meetingStage: .recording,
+            isDelivering: false,
+            deliveryState: nil,
+            hasNotice: false
+        ) == .recording)
+        #expect(VoiceHUDPresentation.phase(
+            isSystemDictationActive: false,
+            meetingStage: .ready,
+            isDelivering: true,
+            deliveryState: nil,
+            hasNotice: false
+        ) == .processing)
+        #expect(VoiceHUDPresentation.phase(
+            isSystemDictationActive: false,
+            meetingStage: .ready,
+            isDelivering: false,
+            deliveryState: .inserted,
+            hasNotice: false
+        ) == .success)
+        #expect(VoiceHUDPresentation.phase(
+            isSystemDictationActive: false,
+            meetingStage: .failed,
+            isDelivering: false,
+            deliveryState: nil,
+            hasNotice: true
+        ) == .failure)
     }
 
     @Test func visibleRecordControlNamesEveryVoiceState() {

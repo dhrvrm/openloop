@@ -10,6 +10,7 @@ struct WorkspaceDestination: Equatable, Identifiable, Sendable {
         case inbox = 5
         case later = 6
         case `return` = 7
+        case transcripts = 8
     }
 
     let id: ID
@@ -44,6 +45,7 @@ enum WorkspaceOrientation {
             id: .intelligence,
             title: "Intelligence",
             destinations: [
+                WorkspaceDestination(id: .transcripts, title: "Transcripts", icon: "waveform.and.mic"),
                 WorkspaceDestination(
                     id: .context,
                     title: "Context",

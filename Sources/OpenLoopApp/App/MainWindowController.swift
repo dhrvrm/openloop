@@ -93,6 +93,7 @@ private struct MainView: View {
         case .inbox: inboxView
         case .later: laterView
         case .return: returnView
+        case .transcripts: transcriptsView
         case .now: nowView
         }
     }
@@ -164,6 +165,7 @@ private struct MainView: View {
         case .inbox: model.reviewItems.filter(\.needsDecision).count
         case .later: model.reviewItems.filter { !$0.needsDecision }.count
         case .return: model.returns.count
+        case .transcripts: model.meetingTranscripts.count
         case .context: model.semanticNodes.count
         case .emerging: model.emergingThreads.count + model.unresolvedSemanticNodes.count
         case .act: model.openLoops.count + model.returns.count
@@ -595,6 +597,27 @@ private struct MainView: View {
                     await model.refreshPrivacy()
                     _ = await model.refresh()
                 }
+            }
+        }
+    }
+
+    private var transcriptsView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    ScreenHeader(
+                        eyebrow: "VOICE EVIDENCE",
+                        title: "Transcripts",
+                        detail: "Recordings, exact words, summaries, decisions, and possible next steps stay together."
+                    )
+                    meetingTranscriptSection { evidenceID in
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo(evidenceID, anchor: .center)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, OpenLoopVisualSystem.space4)
             }
         }
     }
@@ -1814,78 +1837,6 @@ private struct MeetingTranscriptRow: View {
         return total >= 3_600
             ? String(format: "%d:%02d:%02d", total / 3_600, total / 60 % 60, total % 60)
             : String(format: "%d:%02d", total / 60, total % 60)
-    }
-}
-
-private struct VoiceInlineStatus: View {
-    @ObservedObject var model: AppModel
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 9) {
-            indicator
-                .padding(.top, 3)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(statusTitle)
-                        .font(.callout.weight(.medium))
-                    if model.voiceCapture.state == .recording,
-                       let startedAt = model.voiceCapture.startedAt {
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            Text(elapsed(from: startedAt, to: context.date))
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                if !model.voiceCapture.statusMessage.isEmpty {
-                    Text(model.voiceCapture.statusMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if !model.voiceCapture.transcript.isEmpty {
-                    Text(model.voiceCapture.transcript)
-                        .font(.callout)
-                        .lineLimit(2)
-                        .textSelection(.enabled)
-                }
-            }
-            Spacer(minLength: 8)
-            if model.voiceCapture.state == .recording || model.voiceCapture.state == .failed {
-                Button("Cancel") { model.cancelVoiceCapture() }
-                    .buttonStyle(.link)
-            }
-        }
-        .padding(.top, 2)
-        .accessibilityElement(children: .combine)
-    }
-
-    @ViewBuilder private var indicator: some View {
-        switch model.voiceCapture.state {
-        case .recording:
-            Circle().fill(Color.red).frame(width: 9, height: 9)
-        case .requestingPermission, .saving:
-            ProgressView().controlSize(.small)
-        case .failed:
-            Image(systemName: "exclamationmark.circle")
-                .foregroundStyle(.secondary)
-        case .idle:
-            EmptyView()
-        }
-    }
-
-    private var statusTitle: String {
-        switch model.voiceCapture.state {
-        case .idle: "Voice capture"
-        case .requestingPermission: "Preparing voice capture"
-        case .recording: "Recording"
-        case .saving: "Saving transcript"
-        case .failed: "Voice capture needs attention"
-        }
-    }
-
-    private func elapsed(from start: Date, to end: Date) -> String {
-        let seconds = max(0, Int(end.timeIntervalSince(start)))
-        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }
 
