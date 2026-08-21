@@ -6,10 +6,7 @@ artifacts_dir="$openloop_root/.artifacts"
 stage_dir="$artifacts_dir/dmg-stage"
 app_bundle="$artifacts_dir/app/OpenLoop ADHD.app"
 version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$openloop_root/Resources/Info.plist")"
-architecture="$(/usr/bin/uname -m)"
-if [[ "$architecture" == "arm64" ]]; then
-    architecture="arm64"
-fi
+architecture="${OPENLOOP_ARCHITECTURE:-arm64}"
 dmg_path="$artifacts_dir/OpenLoop-$version-$architecture.dmg"
 
 "$openloop_root/Scripts/build-app.sh"

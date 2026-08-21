@@ -10,11 +10,11 @@ permissions:
 
 jobs:
   dmg:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+        run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
       - name: Validate tag matches plist
         if: startsWith(github.ref, 'refs/tags/')
         run: |
