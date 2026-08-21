@@ -235,6 +235,27 @@ public struct SemanticThread: Equatable, Identifiable, Sendable {
     public var id: UUID { node.id }
 }
 
+public struct SemanticAnswer: Equatable, Identifiable, Sendable {
+    public let node: SemanticNode
+    public let relevance: Double
+    public let related: [SemanticNode]
+    public let history: [SemanticGraphEvent]
+
+    public var id: UUID { node.id }
+
+    public init(
+        node: SemanticNode,
+        relevance: Double,
+        related: [SemanticNode],
+        history: [SemanticGraphEvent]
+    ) {
+        self.node = node
+        self.relevance = min(1, max(0, relevance))
+        self.related = related
+        self.history = history
+    }
+}
+
 public struct SemanticGraphProjection: Sendable {
     public init() {}
 

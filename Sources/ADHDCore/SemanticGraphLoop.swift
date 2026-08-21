@@ -321,8 +321,74 @@ public actor SemanticGraphLoop {
         projection.unresolved(in: try await graph())
     }
 
-    public func ask(_ query: String, limit: Int = 5) async throws -> [SemanticNode] {
-        projection.ask(query, in: try await graph(), limit: limit)
+    public func ask(_ query: String, limit: Int = 5) async throws -> [SemanticAnswer] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let queryTerms = Self.terms(query)
+        guard !queryTerms.isEmpty, limit > 0 else { return [] }
+        let graph = try await graph()
+        let queryEmbedding = await queryEmbedding(for: query)
+        let dates = graph.nodes.values.map(\.createdAt)
+        let oldest = dates.min() ?? .distantPast
+        let newest = dates.max() ?? oldest
+        let dateRange = newest.timeIntervalSince(oldest)
+        let maximumDegree = max(1, graph.nodes.keys.map { Self.degree(of: $0, in: graph) }.max() ?? 1)
+
+        var ranked: [SemanticAnswer] = []
+        for source in graph.nodes.values {
+            let lexical = Self.lexicalRelevance(queryTerms, claim: source.claim)
+            let vector = Self.vectorRelevance(
+                nodeID: source.id,
+                graph: graph,
+                queryEmbedding: queryEmbedding
+            )
+            guard lexical > 0 || vector >= 0.55 else { continue }
+
+            let node = Self.currentNode(for: source, in: graph)
+            let degree = Double(Self.degree(of: node.id, in: graph)) / Double(maximumDegree)
+            let recency = dateRange > 0
+                ? node.createdAt.timeIntervalSince(oldest) / dateRange
+                : 1
+            let evidence = min(1, Double(node.evidence.count) / 3)
+            let relevance = (lexical * 0.40)
+                + (max(0, vector) * 0.32)
+                + (degree * 0.08)
+                + (node.confidence * 0.08)
+                + (recency * 0.06)
+                + (evidence * 0.06)
+            let related = Self.relatedNodes(to: node.id, in: graph, including: source)
+            let history = Self.history(for: node.id, matchedNodeID: source.id, in: graph)
+            ranked.append(SemanticAnswer(
+                node: node,
+                relevance: relevance,
+                related: related,
+                history: history
+            ))
+        }
+
+        var seen = Set<UUID>()
+        return ranked.sorted {
+            if $0.relevance != $1.relevance { return $0.relevance > $1.relevance }
+            if $0.node.confidence != $1.node.confidence {
+                return $0.node.confidence > $1.node.confidence
+            }
+            if $0.node.createdAt != $1.node.createdAt {
+                return $0.node.createdAt > $1.node.createdAt
+            }
+            return $0.node.id.uuidString < $1.node.id.uuidString
+        }.filter { seen.insert($0.node.id).inserted }
+            .prefix(limit)
+            .map { $0 }
+    }
+
+    private func queryEmbedding(for query: String) async -> (identifier: String, values: [Double])? {
+        guard let embeddingProvider else { return nil }
+        do {
+            guard let values = try await embeddingProvider.vectors(for: [query]).first,
+                  !values.isEmpty else { return nil }
+            return (await embeddingProvider.identifier, values)
+        } catch {
+            return nil
+        }
     }
 
     private static func semanticNode(for record: MemoryRecord) throws -> SemanticNode {
@@ -370,6 +436,89 @@ public actor SemanticGraphLoop {
 
     private static func relationPair(_ left: UUID, _ right: UUID) -> String {
         [left.uuidString, right.uuidString].sorted().joined(separator: "|")
+    }
+
+    private static func terms(_ value: String) -> Set<String> {
+        Set(value.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init))
+    }
+
+    private static func lexicalRelevance(_ queryTerms: Set<String>, claim: String) -> Double {
+        guard !queryTerms.isEmpty else { return 0 }
+        let claimTerms = terms(claim)
+        return Double(queryTerms.intersection(claimTerms).count) / Double(queryTerms.count)
+    }
+
+    private static func vectorRelevance(
+        nodeID: UUID,
+        graph: SemanticGraph,
+        queryEmbedding: (identifier: String, values: [Double])?
+    ) -> Double {
+        guard let queryEmbedding,
+              let vector = graph.vectors[nodeID],
+              vector.providerIdentifier == queryEmbedding.identifier,
+              vector.values.count == queryEmbedding.values.count else { return 0 }
+        return cosineSimilarity(vector.values, queryEmbedding.values)
+    }
+
+    private static func currentNode(for source: SemanticNode, in graph: SemanticGraph) -> SemanticNode {
+        var current = source
+        var visited = Set<UUID>()
+        while current.status == .superseded,
+              let replacementID = current.supersededBy,
+              visited.insert(current.id).inserted,
+              let replacement = graph.nodes[replacementID] {
+            current = replacement
+        }
+        return current
+    }
+
+    private static func degree(of nodeID: UUID, in graph: SemanticGraph) -> Int {
+        graph.relations.values.reduce(0) { count, relation in
+            count + ((relation.sourceID == nodeID || relation.targetID == nodeID) ? 1 : 0)
+        }
+    }
+
+    private static func relatedNodes(
+        to nodeID: UUID,
+        in graph: SemanticGraph,
+        including matchedNode: SemanticNode
+    ) -> [SemanticNode] {
+        let linked = graph.relations.values.compactMap { relation -> (SemanticNode, Double)? in
+            let otherID: UUID
+            if relation.sourceID == nodeID {
+                otherID = relation.targetID
+            } else if relation.targetID == nodeID {
+                otherID = relation.sourceID
+            } else {
+                return nil
+            }
+            guard let node = graph.nodes[otherID] else { return nil }
+            return (node, relation.confidence)
+        }.sorted {
+            if $0.1 != $1.1 { return $0.1 > $1.1 }
+            return $0.0.createdAt > $1.0.createdAt
+        }.map(\.0)
+
+        var seen = Set<UUID>()
+        var result = linked.filter { seen.insert($0.id).inserted }
+        if matchedNode.id != nodeID, seen.insert(matchedNode.id).inserted {
+            result.insert(matchedNode, at: 0)
+        }
+        return result
+    }
+
+    private static func history(
+        for nodeID: UUID,
+        matchedNodeID: UUID,
+        in graph: SemanticGraph
+    ) -> [SemanticGraphEvent] {
+        let combined = graph.history(for: nodeID)
+            + (matchedNodeID == nodeID ? [] : graph.history(for: matchedNodeID))
+        var seen = Set<UUID>()
+        return combined.filter { seen.insert($0.id).inserted }.sorted {
+            if $0.occurredAt != $1.occurredAt { return $0.occurredAt < $1.occurredAt }
+            return $0.id.uuidString < $1.id.uuidString
+        }
     }
 
     private static func cosineSimilarity(_ left: [Double], _ right: [Double]) -> Double {

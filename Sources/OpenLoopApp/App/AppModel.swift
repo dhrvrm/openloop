@@ -51,7 +51,7 @@ final class AppModel: ObservableObject {
     @Published var emergingThreads: [SemanticThread] = []
     @Published var unresolvedSemanticNodes: [SemanticNode] = []
     @Published var semanticQuery = ""
-    @Published var semanticAnswers: [SemanticNode] = []
+    @Published var semanticAnswers: [SemanticAnswer] = []
     @Published var isRefreshingSemanticGraph = false
     @Published var semanticError: String?
     @Published var voiceQualityAudit: VoiceQualityCorpusAudit?

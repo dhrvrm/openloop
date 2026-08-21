@@ -71,7 +71,117 @@ private struct SemanticFixtureEmbeddings: EmbeddingProvider {
     ])
 
     #expect(try await loop.unresolved() == [problem])
-    #expect(try await loop.ask("checkout performance") == [problem])
+    #expect(try await loop.ask("checkout performance").map(\.node) == [problem])
+}
+
+@Test func askCombinesStoredVectorsWithEvidenceAndGraphContext() async throws {
+    let repository = SemanticLoopRepository()
+    let query = "What did I notice about payment speed?"
+    let checkout = try SemanticNode(
+        kind: .problem,
+        claim: "Checkout performance degraded after PostHog",
+        confidence: 0.84,
+        status: .active,
+        evidence: [try SemanticEvidence(
+            id: RecallEvidenceID(kind: .capture, id: UUID()),
+            excerpt: "Checkout became slow after analytics changed",
+            occurredAt: Date(timeIntervalSince1970: 60)
+        )],
+        createdAt: Date(timeIntervalSince1970: 60)
+    )
+    let unrelated = try SemanticNode(
+        kind: .idea,
+        claim: "Separate authentication module",
+        confidence: 0.9,
+        status: .active,
+        evidence: [try SemanticEvidence(
+            id: RecallEvidenceID(kind: .capture, id: UUID()),
+            excerpt: "Split auth into its own module",
+            occurredAt: Date(timeIntervalSince1970: 61)
+        )],
+        createdAt: Date(timeIntervalSince1970: 61)
+    )
+    let provider = SemanticFixtureEmbeddings(values: [
+        query: [1, 0, 0],
+    ])
+    let loop = SemanticGraphLoop(repository: repository, embeddingProvider: provider)
+    try await loop.append([
+        .node(id: UUID(), occurredAt: checkout.createdAt, value: checkout),
+        .node(id: UUID(), occurredAt: unrelated.createdAt, value: unrelated),
+        .vector(
+            id: UUID(),
+            occurredAt: checkout.createdAt,
+            nodeID: checkout.id,
+            value: try SemanticVector(
+                providerIdentifier: "semantic-fixture-v1",
+                values: [0.98, 0.02, 0]
+            )
+        ),
+        .vector(
+            id: UUID(),
+            occurredAt: unrelated.createdAt,
+            nodeID: unrelated.id,
+            value: try SemanticVector(
+                providerIdentifier: "semantic-fixture-v1",
+                values: [0, 1, 0]
+            )
+        ),
+    ])
+
+    let answers = try await loop.ask(query)
+
+    #expect(answers.map(\.node) == [checkout])
+    #expect(answers[0].node.evidence.count == 1)
+    #expect(!answers[0].history.isEmpty)
+}
+
+@Test func askResolvesAnOldBeliefToItsCurrentSupersedingBelief() async throws {
+    let repository = SemanticLoopRepository()
+    let loop = SemanticGraphLoop(repository: repository)
+    let evidenceID = RecallEvidenceID(kind: .capture, id: UUID())
+    let old = try SemanticNode(
+        kind: .decision,
+        claim: "Use Redis for sessions",
+        confidence: 1,
+        status: .active,
+        evidence: [try SemanticEvidence(
+            id: evidenceID,
+            excerpt: "We decided to use Redis for sessions",
+            occurredAt: Date(timeIntervalSince1970: 70)
+        )],
+        createdAt: Date(timeIntervalSince1970: 70)
+    )
+    let current = try SemanticNode(
+        kind: .decision,
+        claim: "Use Postgres for sessions",
+        confidence: 1,
+        status: .active,
+        evidence: [try SemanticEvidence(
+            id: RecallEvidenceID(kind: .capture, id: UUID()),
+            excerpt: "We changed the session store to Postgres",
+            occurredAt: Date(timeIntervalSince1970: 80)
+        )],
+        createdAt: Date(timeIntervalSince1970: 80)
+    )
+    try await loop.append([
+        .node(id: UUID(), occurredAt: old.createdAt, value: old),
+        .node(id: UUID(), occurredAt: current.createdAt, value: current),
+        .supersession(
+            id: UUID(),
+            occurredAt: Date(timeIntervalSince1970: 80),
+            oldID: old.id,
+            newID: current.id
+        ),
+    ])
+
+    let answers = try await loop.ask("Redis sessions")
+
+    #expect(answers.map(\.node) == [current])
+    #expect(answers[0].related.contains(where: { $0.id == old.id }))
+    #expect(answers[0].history.contains(where: { event in
+        if case .supersession = event { return true }
+        return false
+    }))
 }
 
 @Test func semanticExtractionPreservesUncertaintyAndGroundsEveryMeaning() async throws {

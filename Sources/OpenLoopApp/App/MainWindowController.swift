@@ -773,8 +773,26 @@ private struct MainView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(model.semanticAnswers) { node in
-                    SemanticNodeRow(node: node, showEvidence: true)
+                ForEach(model.semanticAnswers) { answer in
+                    VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space1) {
+                        SemanticNodeRow(node: answer.node, showEvidence: true)
+                        HStack(spacing: OpenLoopVisualSystem.space2) {
+                            if !answer.related.isEmpty {
+                                Text("\(answer.related.count) connected")
+                            }
+                            if answer.history.contains(where: { event in
+                                if case .supersession = event { return true }
+                                return false
+                            }) {
+                                Text("Belief updated")
+                            }
+                            if model.isAdvancedModeEnabled {
+                                Text("\(Int((answer.relevance * 100).rounded()))% relevance")
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
