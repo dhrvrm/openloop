@@ -132,7 +132,7 @@ final class VoiceCaptureWindowController {
         self.controller = controller
         window = NSPanel(
             contentRect: .zero,
-            styleMask: [.titled, .utilityWindow],
+            styleMask: [.titled, .utilityWindow, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -162,7 +162,6 @@ final class VoiceCaptureWindowController {
 
     private func showWindow() {
         window.center()
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
     }
 }
