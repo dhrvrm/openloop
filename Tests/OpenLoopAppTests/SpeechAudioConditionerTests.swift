@@ -12,7 +12,7 @@ import Testing
     let settled = output.suffix(8_000)
     let settledMean = settled.reduce(0, +) / Float(settled.count)
     #expect(abs(settledMean) < 0.001)
-    #expect(output.allSatisfy(\.isFinite))
+    #expect(output.allSatisfy { $0.isFinite })
     #expect(output.allSatisfy { abs($0) <= 0.98 })
 }
 
