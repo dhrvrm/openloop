@@ -72,7 +72,7 @@ struct SemanticGraph3DView: View {
                                     camera = SemanticGraphCamera()
                                 }
                             }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(OpenLoopAccessoryButtonStyle(tint: OpenLoopVisualSystem.muted))
                         }
                         Spacer()
                         HStack {
@@ -83,7 +83,6 @@ struct SemanticGraph3DView: View {
                         }
                     }
                     .padding(OpenLoopVisualSystem.space3)
-                    .allowsHitTesting(false)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius, style: .continuous))
                 .overlay {

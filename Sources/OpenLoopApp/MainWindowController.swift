@@ -145,7 +145,7 @@ private struct MainView: View {
                     .frame(height: 38)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(OpenLoopNavigationButtonStyle())
                 .font(OpenLoopVisualSystem.sidebarLabel)
                 .foregroundStyle(model.isAdvancedModeEnabled ? OpenLoopVisualSystem.accent : .secondary)
                 .help("Show system details · ⌥⌘I")
@@ -1036,7 +1036,7 @@ private struct WorkspaceSidebarButton: View {
                 )
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(OpenLoopNavigationButtonStyle())
         .onHover { hovered in
             withAnimation(.easeOut(duration: 0.12)) { isHovered = hovered }
         }
@@ -1047,6 +1047,7 @@ private struct QuickAddComposer: View {
     @ObservedObject var model: AppModel
     @Binding var text: String
     let submit: () async -> Void
+    @FocusState private var isTextFieldFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1058,6 +1059,7 @@ private struct QuickAddComposer: View {
                 TextField("New thought, task, or note", text: $text)
                     .textFieldStyle(.plain)
                     .font(OpenLoopVisualSystem.rowTitle)
+                    .focused($isTextFieldFocused)
                     .onSubmit { Task { await submit() } }
                 Button {
                     Task { await submit() }
@@ -1087,7 +1089,12 @@ private struct QuickAddComposer: View {
                     cornerRadius: OpenLoopVisualSystem.editorRadius,
                     style: .continuous
                 )
-                .stroke(OpenLoopVisualSystem.hairline, lineWidth: 0.65)
+                .stroke(
+                    isTextFieldFocused
+                        ? OpenLoopVisualSystem.focusRing
+                        : OpenLoopVisualSystem.hairline,
+                    lineWidth: isTextFieldFocused ? 1.25 : 0.65
+                )
             }
 
             HStack(alignment: .center, spacing: 0) {
@@ -1213,9 +1220,9 @@ private struct DictationDeliveryPanel: View {
                 )
                 .font(.callout.weight(.semibold))
                 Spacer()
-                Text(model.voiceMode.displayName.uppercased())
-                    .font(.caption2.monospaced().weight(.semibold))
-                    .foregroundStyle(OpenLoopVisualSystem.accent)
+                Text(model.voiceMode.displayName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(OpenLoopVisualSystem.muted)
             }
             if model.isDeliveringDictation {
                 ProgressView()
@@ -1325,7 +1332,10 @@ private struct RecordingLevelMeter: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(.red.opacity(0.06), in: RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius, style: .continuous))
+        .background(
+            OpenLoopVisualSystem.recording.opacity(0.045),
+            in: RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius, style: .continuous)
+        )
         .overlay {
             RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius, style: .continuous)
                 .stroke(.red.opacity(0.20), lineWidth: 0.75)
@@ -1671,7 +1681,8 @@ private struct MeetingTranscriptRow: View {
                 }
             }
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, OpenLoopVisualSystem.space2)
+        .openLoopInteractiveRow()
         .overlay(alignment: .bottom) { Divider() }
     }
 
@@ -1959,13 +1970,18 @@ private struct ReadyTaskRow: View {
             .frame(width: 24)
             .opacity(isHovered ? 1 : 0.34)
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .padding(.horizontal, 2)
         .frame(minHeight: OpenLoopVisualSystem.taskRowMinimumHeight)
         .contentShape(Rectangle())
         .background(
-            isDropTarget ? OpenLoopVisualSystem.accentSoft : Color.clear,
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            isDropTarget
+                ? OpenLoopVisualSystem.accentSoft
+                : (isHovered ? OpenLoopVisualSystem.selectionInactive : Color.clear),
+            in: RoundedRectangle(
+                cornerRadius: OpenLoopVisualSystem.sidebarSelectionRadius,
+                style: .continuous
+            )
         )
         .draggable(item.id.uuidString) {
             Label(item.desiredOutcome, systemImage: "circle")
@@ -2073,7 +2089,8 @@ private struct ClarificationReviewRow: View {
                 }
             }
         }
-        .padding(.vertical, 9)
+        .padding(.vertical, 7)
+        .openLoopInteractiveRow()
     }
 
     private var editor: some View {
@@ -2300,7 +2317,8 @@ private struct WorkingMemoryRow: View {
                 .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 7)
+        .padding(.vertical, 6)
+        .openLoopInteractiveRow()
         .accessibilityElement(children: .combine)
     }
 
@@ -2532,9 +2550,13 @@ private struct ContextSuggestionView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            Color.accentColor.opacity(0.08),
+            OpenLoopVisualSystem.raised,
             in: RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius)
         )
+        .overlay {
+            RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius)
+                .stroke(OpenLoopVisualSystem.hairline, lineWidth: 0.65)
+        }
     }
 }
 

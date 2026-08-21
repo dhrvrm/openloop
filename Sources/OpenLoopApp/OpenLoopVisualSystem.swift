@@ -189,17 +189,74 @@ struct OpenLoopAccessoryButtonStyle: ButtonStyle {
     var tint: Color = OpenLoopVisualSystem.accent
 
     func makeBody(configuration: Configuration) -> some View {
+        OpenLoopAccessoryButtonBody(configuration: configuration, tint: tint)
+    }
+}
+
+private struct OpenLoopAccessoryButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    let tint: Color
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovered = false
+
+    var body: some View {
         configuration.label
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(tint)
+            .foregroundStyle(isEnabled ? tint : OpenLoopVisualSystem.tertiaryText)
             .padding(.horizontal, 9)
             .frame(minHeight: 28)
             .background(
-                configuration.isPressed ? tint.opacity(0.13) : Color.clear,
-                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                backgroundColor,
+                in: RoundedRectangle(
+                    cornerRadius: OpenLoopVisualSystem.sidebarSelectionRadius,
+                    style: .continuous
+                )
             )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.spring(response: 0.22, dampingFraction: 0.82), value: configuration.isPressed)
+            .opacity(isEnabled ? 1 : 0.72)
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .animation(
+                reduceMotion ? nil : .spring(response: 0.2, dampingFraction: 0.86),
+                value: configuration.isPressed
+            )
+            .onHover { isHovered = $0 }
+    }
+
+    private var backgroundColor: Color {
+        if configuration.isPressed { return OpenLoopVisualSystem.pressed }
+        if isHovered && isEnabled { return tint.opacity(0.09) }
+        return .clear
+    }
+}
+
+struct OpenLoopNavigationButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.78 : 1)
+            .scaleEffect(configuration.isPressed ? 0.992 : 1)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+private struct OpenLoopInteractiveRowModifier: ViewModifier {
+    let isSelected: Bool
+    @State private var isHovered = false
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .background(
+                isSelected
+                    ? OpenLoopVisualSystem.selection
+                    : (isHovered ? OpenLoopVisualSystem.selectionInactive : .clear),
+                in: RoundedRectangle(
+                    cornerRadius: OpenLoopVisualSystem.sidebarSelectionRadius,
+                    style: .continuous
+                )
+            )
+            .onHover { hovered in
+                withAnimation(.easeOut(duration: 0.12)) { isHovered = hovered }
+            }
     }
 }
 
@@ -233,5 +290,9 @@ private struct OpenLoopPanelModifier: ViewModifier {
 extension View {
     func openLoopPanel(emphasized: Bool = false) -> some View {
         modifier(OpenLoopPanelModifier(emphasized: emphasized))
+    }
+
+    func openLoopInteractiveRow(isSelected: Bool = false) -> some View {
+        modifier(OpenLoopInteractiveRowModifier(isSelected: isSelected))
     }
 }
