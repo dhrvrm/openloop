@@ -44,6 +44,13 @@ final class AppModel: ObservableObject {
     @Published var recordingDecibels: Float?
     @Published var isAdvancedModeEnabled: Bool
     @Published var meetingLanguagePreference: MeetingLanguagePreference
+    @Published var semanticNodes: [SemanticNode] = []
+    @Published var emergingThreads: [SemanticThread] = []
+    @Published var unresolvedSemanticNodes: [SemanticNode] = []
+    @Published var semanticQuery = ""
+    @Published var semanticAnswers: [SemanticNode] = []
+    @Published var isRefreshingSemanticGraph = false
+    @Published var semanticError: String?
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -53,6 +60,7 @@ final class AppModel: ObservableObject {
     private let workingMemory: (any WorkingMemoryCompiling)?
     private let contextTrail: (any ContextTrailProviding)?
     private let privacyManager: (any PrivacyManaging)?
+    private let semanticGraph: SemanticGraphLoop?
     private let defaults: UserDefaults
     private let advancedModeKey: String
     private var recallGeneration = 0
@@ -74,6 +82,7 @@ final class AppModel: ObservableObject {
         workingMemory: (any WorkingMemoryCompiling)? = nil,
         contextTrail: (any ContextTrailProviding)? = nil,
         privacyManager: (any PrivacyManaging)? = nil,
+        semanticGraph: SemanticGraphLoop? = nil,
         defaults: UserDefaults = .standard,
         advancedModeKey: String = "OpenLoopAdvancedMode"
     ) {
@@ -85,6 +94,7 @@ final class AppModel: ObservableObject {
         self.workingMemory = workingMemory
         self.contextTrail = contextTrail
         self.privacyManager = privacyManager
+        self.semanticGraph = semanticGraph
         self.defaults = defaults
         self.advancedModeKey = advancedModeKey
         isAdvancedModeEnabled = defaults.bool(forKey: advancedModeKey)
@@ -286,6 +296,45 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func refreshSemanticGraph() async {
+        guard let semanticGraph, !isRefreshingSemanticGraph else { return }
+        isRefreshingSemanticGraph = true
+        defer { isRefreshingSemanticGraph = false }
+        do {
+            let graph = try await semanticGraph.graph()
+            semanticNodes = graph.nodes.values.sorted {
+                if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
+                return $0.id.uuidString < $1.id.uuidString
+            }
+            emergingThreads = try await semanticGraph.emerging()
+            unresolvedSemanticNodes = try await semanticGraph.unresolved()
+            semanticError = nil
+        } catch {
+            semanticError = "Semantic context is temporarily unavailable. Original evidence is unchanged."
+        }
+    }
+
+    func askSemanticContext(_ text: String) async {
+        let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        semanticQuery = query
+        semanticError = nil
+        guard !query.isEmpty else {
+            semanticAnswers = []
+            return
+        }
+        guard let semanticGraph else {
+            semanticAnswers = []
+            semanticError = "Semantic context is unavailable in this build."
+            return
+        }
+        do {
+            semanticAnswers = try await semanticGraph.ask(query)
+        } catch {
+            semanticAnswers = []
+            semanticError = "Semantic context could not be searched. Original evidence is unchanged."
+        }
+    }
+
     func refreshContext(_ application: ApplicationContext?, at date: Date = .now) async {
         guard let resurfacingLoop else { return }
         if application == currentApplication, suggestions.isEmpty == false { return }
@@ -413,6 +462,14 @@ final class AppModel: ObservableObject {
         do {
             let capture = try await loop.accept(text: text, at: .now)
             isSaving = false
+            if let semanticGraph {
+                do {
+                    _ = try await semanticGraph.recordObservation(capture: capture)
+                    await refreshSemanticGraph()
+                } catch {
+                    semanticError = "Captured safely, but semantic context is waiting to refresh."
+                }
+            }
             Task {
                 do {
                     _ = try await loop.clarify(capture)
@@ -491,6 +548,7 @@ final class AppModel: ObservableObject {
             openLoops = projections.3
             reviewItems = projections.4
             commandError = nil
+            await refreshSemanticGraph()
             return true
         } catch {
             commandError = "Saved locally, but the view could not refresh. Try reopening it."

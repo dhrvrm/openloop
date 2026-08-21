@@ -157,7 +157,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 privacyManager: LocalPrivacyManager(
                     repository: repository,
                     recallIndex: recallIndex
-                )
+                ),
+                semanticGraph: SemanticGraphLoop(repository: repository)
             )
             model.recoveryNotice = recoveredAfterUnexpectedExit
                 ? "OpenLoop recovered your saved work after an unexpected exit."
@@ -252,7 +253,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                     self?.mainWindow?.show(tab: 3)
                 }
             } catch {
-                model.recallError = "Recall shortcut is unavailable. Use Recall in the menu."
+                model.recallError = "Ask shortcut is unavailable. Use Ask in the menu."
             }
         } catch {
             NSApp.presentError(error)
@@ -694,10 +695,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
 
     @objc private func showCapture() { quickCapture?.show() }
     @objc private func toggleVoiceCapture() { model?.toggleVoiceCapture() }
-    @objc private func showNow() { presentWorkspace(tab: 0) }
-    @objc private func showReturn() { mainWindow?.show(tab: 1) }
-    @objc private func showLater() { mainWindow?.show(tab: 2) }
-    @objc private func showRecall() { mainWindow?.show(tab: 3) }
+    @objc private func showLive() { presentWorkspace(tab: 0) }
+    @objc private func showContext() { mainWindow?.show(tab: 1) }
+    @objc private func showEmerging() { mainWindow?.show(tab: 2) }
+    @objc private func showAsk() { mainWindow?.show(tab: 3) }
+    @objc private func showAct() { mainWindow?.show(tab: 4) }
     @objc private func pauseOrContinue() {
         guard let model, let item = model.now, let focus = item.focus else { return }
         Task {
@@ -751,7 +753,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             keyEquivalent: "r"
         )
         voiceItem.keyEquivalentModifierMask = [.command, .shift]
-        menu.addItem(withTitle: "Now", action: #selector(showNow), keyEquivalent: "")
+        menu.addItem(withTitle: "Live", action: #selector(showLive), keyEquivalent: "")
         let pauseItem = menu.addItem(
             withTitle: "Pause",
             action: #selector(pauseOrContinue),
@@ -759,14 +761,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         )
         pauseItem.isEnabled = false
         pauseMenuItem = pauseItem
-        menu.addItem(withTitle: "Return", action: #selector(showReturn), keyEquivalent: "")
-        menu.addItem(withTitle: "Later", action: #selector(showLater), keyEquivalent: "")
+        menu.addItem(withTitle: "Context", action: #selector(showContext), keyEquivalent: "")
+        menu.addItem(withTitle: "Emerging", action: #selector(showEmerging), keyEquivalent: "")
         let recallItem = menu.addItem(
-            withTitle: "Recall",
-            action: #selector(showRecall),
+            withTitle: "Ask",
+            action: #selector(showAsk),
             keyEquivalent: "f"
         )
         recallItem.keyEquivalentModifierMask = [.command, .shift]
+        menu.addItem(withTitle: "Act", action: #selector(showAct), keyEquivalent: "")
         menu.addItem(.separator())
         let privateMode = NSMenuItem(
             title: ContextTrailMenuPresentation.title(for: .privateMode),

@@ -10,10 +10,11 @@ struct WorkspaceDestination: Equatable, Sendable {
 
 enum WorkspaceOrientation {
     static let destinations = [
-        WorkspaceDestination(title: "Now", icon: "scope"),
-        WorkspaceDestination(title: "Return", icon: "arrow.uturn.backward"),
-        WorkspaceDestination(title: "Later", icon: "tray"),
-        WorkspaceDestination(title: "Recall", icon: "text.magnifyingglass"),
+        WorkspaceDestination(title: "Live", icon: "waveform.circle"),
+        WorkspaceDestination(title: "Context", icon: "point.3.connected.trianglepath.dotted"),
+        WorkspaceDestination(title: "Emerging", icon: "sparkles"),
+        WorkspaceDestination(title: "Ask", icon: "text.magnifyingglass"),
+        WorkspaceDestination(title: "Act", icon: "bolt.circle"),
     ]
     static let quickCaptureShortcut = "⌘⇧Space  Quick Capture"
     static let voiceCaptureShortcut = "⌘⇧R  Record & transcribe"
@@ -28,6 +29,7 @@ private struct MainView: View {
     @State private var quickAddText = ""
     @State private var privacyExpanded = false
     @State private var confirmingReset = false
+    @State private var actSection = 0
     @FocusState private var recallFieldFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -62,7 +64,10 @@ private struct MainView: View {
         .onChange(of: selection) { _, tab in
             if tab == 3 {
                 recallFieldFocused = true
-                Task { await model.refreshMemory() }
+            }
+            if tab == 1 { Task { await model.refreshMemory() } }
+            if tab == 1 || tab == 2 || tab == 3 {
+                Task { await model.refreshSemanticGraph() }
             }
         }
         .sheet(isPresented: interruptionPresented) {
@@ -84,9 +89,10 @@ private struct MainView: View {
 
     @ViewBuilder private var selectedSurface: some View {
         switch selection {
-        case 1: returnView
-        case 2: laterView
-        case 3: recallView
+        case 1: contextView
+        case 2: emergingView
+        case 3: askView
+        case 4: actView
         default: nowView
         }
     }
@@ -112,10 +118,14 @@ private struct MainView: View {
             }
 
             VStack(spacing: 5) {
-                WorkspaceSidebarButton(title: WorkspaceOrientation.destinations[0].title, icon: WorkspaceOrientation.destinations[0].icon, count: nil, isSelected: selection == 0) { selection = 0 }
-                WorkspaceSidebarButton(title: WorkspaceOrientation.destinations[1].title, icon: WorkspaceOrientation.destinations[1].icon, count: model.returns.isEmpty ? nil : model.returns.count, isSelected: selection == 1) { selection = 1 }
-                WorkspaceSidebarButton(title: WorkspaceOrientation.destinations[2].title, icon: WorkspaceOrientation.destinations[2].icon, count: model.reviewItems.isEmpty ? nil : model.reviewItems.count, isSelected: selection == 2) { selection = 2 }
-                WorkspaceSidebarButton(title: WorkspaceOrientation.destinations[3].title, icon: WorkspaceOrientation.destinations[3].icon, count: nil, isSelected: selection == 3) { selection = 3 }
+                ForEach(Array(WorkspaceOrientation.destinations.enumerated()), id: \.offset) { index, destination in
+                    WorkspaceSidebarButton(
+                        title: destination.title,
+                        icon: destination.icon,
+                        count: sidebarCount(for: index),
+                        isSelected: selection == index
+                    ) { selection = index }
+                }
             }
 
             Spacer()
@@ -147,6 +157,16 @@ private struct MainView: View {
         .background(OpenLoopVisualSystem.sidebar)
     }
 
+    private func sidebarCount(for destination: Int) -> Int? {
+        let count = switch destination {
+        case 1: model.semanticNodes.count
+        case 2: model.emergingThreads.count + model.unresolvedSemanticNodes.count
+        case 4: model.openLoops.count + model.returns.count + model.reviewItems.count
+        default: 0
+        }
+        return count == 0 ? nil : count
+    }
+
     private var interruptionPresented: Binding<Bool> {
         Binding(
             get: { interruptionItem != nil },
@@ -158,9 +178,9 @@ private struct MainView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
                 ScreenHeader(
-                    eyebrow: "FOCUS",
-                    title: "Now",
-                    detail: "Choose one visible next move. Everything else can wait safely."
+                    eyebrow: "VOICE + CAPTURE",
+                    title: "Live",
+                    detail: "Speak, import a meeting, or capture a thought. Processing stays visible and local."
                 )
 
                 if let notice = model.recoveryNotice {
@@ -476,15 +496,17 @@ private struct MainView: View {
         }
     }
 
-    private var recallView: some View {
+    private var askView: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
                 ScreenHeader(
-                    eyebrow: "EVIDENCE",
-                    title: "Recall",
-                    detail: "Find what you captured and control what stays on this Mac."
+                    eyebrow: "QUERY",
+                    title: "Ask your context",
+                    detail: "Search what OpenLoop understands, then inspect the original evidence."
                 )
+
+                semanticAskPanel
 
                 meetingTranscriptSection { evidenceID in
                     withAnimation(.easeOut(duration: 0.2)) {
@@ -508,7 +530,7 @@ private struct MainView: View {
                 }
 
                 HStack {
-                    Text("⌘⇧F opens Recall")
+                    Text("⌘⇧F opens Ask")
                     Spacer()
                     Text("Exact + local semantic evidence")
                 }
@@ -558,6 +580,164 @@ private struct MainView: View {
                 Task {
                     await model.refreshPrivacy()
                     _ = await model.refresh()
+                }
+            }
+        }
+    }
+
+    private var semanticAskPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("SEMANTIC GRAPH")
+                .font(.caption.monospaced().weight(.semibold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                TextField("What have I been thinking about?", text: $model.semanticQuery)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { Task { await model.askSemanticContext(model.semanticQuery) } }
+                Button("Ask locally") {
+                    Task { await model.askSemanticContext(model.semanticQuery) }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.semanticQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            if let error = model.semanticError {
+                Label(error, systemImage: "info.circle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else if model.semanticQuery.isEmpty {
+                Text("Answers are matched locally and always keep their evidence attached.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else if model.semanticAnswers.isEmpty {
+                Text("No grounded answer found. OpenLoop will not invent one.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(model.semanticAnswers) { node in
+                    SemanticNodeRow(node: node, showEvidence: true)
+                }
+            }
+        }
+        .padding(14)
+        .openLoopPanel(emphasized: !model.semanticAnswers.isEmpty)
+    }
+
+    private var contextView: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                ScreenHeader(
+                    eyebrow: "UNDERSTANDING",
+                    title: "Context",
+                    detail: "Evidence-grounded observations, concepts, people, projects, and decisions."
+                )
+                if model.isRefreshingSemanticGraph {
+                    ProgressView("Rebuilding context locally…")
+                        .frame(maxWidth: .infinity, minHeight: 180)
+                } else if let error = model.semanticError {
+                    ContentUnavailableView(
+                        "Context paused",
+                        systemImage: "point.3.connected.trianglepath.dotted",
+                        description: Text(error)
+                    )
+                } else if model.semanticNodes.isEmpty {
+                    ContentUnavailableView(
+                        "No semantic context yet",
+                        systemImage: "point.3.connected.trianglepath.dotted",
+                        description: Text("Capture naturally in Live. OpenLoop will preserve the evidence before deriving meaning.")
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 260)
+                } else {
+                    LazyVStack(spacing: 0) {
+                        ForEach(model.semanticNodes) { node in
+                            SemanticNodeRow(node: node, showEvidence: true)
+                            Divider()
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .openLoopPanel()
+                }
+                workingMemorySection
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 16)
+        }
+        .task {
+            await model.refreshSemanticGraph()
+            await model.refreshMemory()
+        }
+    }
+
+    private var emergingView: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                ScreenHeader(
+                    eyebrow: "PATTERNS",
+                    title: "Emerging",
+                    detail: "Repeated themes and unresolved thinking surface quietly. Nothing becomes a task automatically."
+                )
+                if model.emergingThreads.isEmpty && model.unresolvedSemanticNodes.isEmpty {
+                    ContentUnavailableView(
+                        "No pattern is strong enough yet",
+                        systemImage: "sparkles",
+                        description: Text("OpenLoop waits for grounded recurrence instead of generating productivity noise.")
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 300)
+                } else {
+                    if !model.unresolvedSemanticNodes.isEmpty {
+                        SemanticSectionTitle(
+                            title: "Unresolved",
+                            detail: "Active questions and problems with no confirmed resolution."
+                        )
+                        ForEach(model.unresolvedSemanticNodes) { node in
+                            SemanticNodeRow(node: node, showEvidence: true)
+                        }
+                    }
+                    if !model.emergingThreads.isEmpty {
+                        SemanticSectionTitle(
+                            title: "Threads",
+                            detail: "Connected ideas ranked by evidence and relationships."
+                        )
+                        ForEach(model.emergingThreads) { thread in
+                            SemanticThreadRow(thread: thread)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 16)
+        }
+        .task { await model.refreshSemanticGraph() }
+    }
+
+    private var actView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ScreenHeader(
+                eyebrow: "EXECUTION",
+                title: "Act",
+                detail: "Choose an explicit next move. Suggestions remain reviewable until you approve them."
+            )
+            Picker("Action workspace", selection: $actSection) {
+                Text("Ready").tag(0)
+                Text("Return").tag(1)
+                Text("Review").tag(2)
+            }
+            .pickerStyle(.segmented)
+
+            switch actSection {
+            case 1: returnView
+            case 2: laterView
+            default:
+                if let item = model.now, item.focus != nil {
+                    currentIntention(item)
+                } else if model.openLoops.contains(where: { $0.state == .open }) {
+                    readyQueue
+                } else {
+                    ContentUnavailableView(
+                        "Nothing ready to act on",
+                        systemImage: "bolt.circle",
+                        description: Text("Potential actions stay in Emerging until you deliberately promote them.")
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }
@@ -1856,6 +2036,97 @@ private struct WorkingMemoryRow: View {
     }
 }
 
+private struct SemanticSectionTitle: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.title3.weight(.semibold))
+            Text(detail)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 4)
+    }
+}
+
+private struct SemanticNodeRow: View {
+    let node: SemanticNode
+    let showEvidence: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(node.kind.rawValue.uppercased())
+                    .font(.caption2.monospaced().weight(.semibold))
+                    .foregroundStyle(node.status == .speculative ? .orange : OpenLoopVisualSystem.accent)
+                Spacer()
+                Text("\(Int((node.confidence * 100).rounded()))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+            Text(node.claim)
+                .font(.body.weight(.medium))
+                .textSelection(.enabled)
+            if showEvidence, let evidence = node.evidence.first {
+                Label(evidence.excerpt, systemImage: "quote.opening")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .textSelection(.enabled)
+            }
+            HStack(spacing: 7) {
+                Text(node.status.rawValue.capitalized)
+                Text("·")
+                Text(node.createdAt, style: .relative)
+            }
+            .font(.caption2.monospaced())
+            .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct SemanticThreadRow: View {
+    let thread: SemanticThread
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(thread.node.claim)
+                    .font(.title3.weight(.semibold))
+                Spacer()
+                Text("STRENGTH \(thread.strength)")
+                    .font(.caption2.monospaced().weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            if thread.related.isEmpty {
+                Text("Grounded by \(thread.node.evidence.count) evidence item(s)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ScrollView(.horizontal) {
+                    LazyHStack(spacing: 6) {
+                        ForEach(thread.related) { related in
+                            Text(related.claim)
+                                .font(.caption)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 5)
+                                .background(OpenLoopVisualSystem.accentSoft, in: Capsule())
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+            }
+        }
+        .padding(14)
+        .openLoopPanel()
+    }
+}
+
 private struct RecallEvidenceRow: View {
     let hit: RecallHit
 
@@ -2148,9 +2419,13 @@ final class MainWindowController {
     }
 
     func show(tab: Int) {
-        selectedTabForTesting = tab
-        hostingController.rootView = MainView(model: model, selection: tab)
-        if tab == 3 { Task { await model.refreshMemory() } }
+        let selectedTab = WorkspaceOrientation.destinations.indices.contains(tab) ? tab : 0
+        selectedTabForTesting = selectedTab
+        hostingController.rootView = MainView(model: model, selection: selectedTab)
+        if selectedTab == 1 || selectedTab == 3 { Task { await model.refreshMemory() } }
+        if selectedTab == 1 || selectedTab == 2 || selectedTab == 3 {
+            Task { await model.refreshSemanticGraph() }
+        }
         window.center()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)

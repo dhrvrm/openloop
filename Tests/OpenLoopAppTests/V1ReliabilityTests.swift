@@ -30,9 +30,9 @@ struct V1ReliabilityTests {
 
     @Test func workspaceOrientationMakesNavigationAndCaptureShortcutsExplicit() {
         #expect(WorkspaceOrientation.destinations.map(\.title) == [
-            "Now", "Return", "Later", "Recall",
+            "Live", "Context", "Emerging", "Ask", "Act",
         ])
-        #expect(Set(WorkspaceOrientation.destinations.map(\.icon)).count == 4)
+        #expect(Set(WorkspaceOrientation.destinations.map(\.icon)).count == 5)
         #expect(WorkspaceOrientation.quickCaptureShortcut.contains("Space"))
         #expect(WorkspaceOrientation.voiceCaptureShortcut.contains("Record"))
         #expect(WorkspaceOrientation.emptyCaptureGuidance.contains("Command-Shift-Space"))
