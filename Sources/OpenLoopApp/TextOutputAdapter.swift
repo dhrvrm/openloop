@@ -1,3 +1,4 @@
+import ADHDCore
 import AppKit
 import ApplicationServices
 import Foundation
@@ -24,6 +25,11 @@ struct TextOutputResult: Equatable, Sendable {
 
 @MainActor protocol KeyboardTextTyping: AnyObject {
     func type(_ text: String) -> Bool
+    func perform(_ command: VoiceCommand) -> Bool
+}
+
+extension KeyboardTextTyping {
+    @MainActor func perform(_ command: VoiceCommand) -> Bool { false }
 }
 
 @MainActor
@@ -54,6 +60,21 @@ final class TextOutputAdapter {
             return TextOutputResult(route: .simulatedKeyboard, inserted: true)
         }
         return TextOutputResult(route: .unavailable, inserted: false)
+    }
+
+    func perform(_ command: VoiceCommand) -> TextOutputResult {
+        switch command {
+        case .newLine:
+            return insert("\n")
+        case .newParagraph:
+            return insert("\n\n")
+        case .undo, .deleteSelection, .submit:
+            let performed = keyboard.perform(command)
+            return TextOutputResult(
+                route: performed ? .simulatedKeyboard : .unavailable,
+                inserted: performed
+            )
+        }
     }
 }
 
@@ -144,13 +165,33 @@ final class SystemKeyboardTyper: KeyboardTextTyping {
         return true
     }
 
+    func perform(_ command: VoiceCommand) -> Bool {
+        guard AXIsProcessTrusted() else { return false }
+        switch command {
+        case .undo:
+            return Self.postKey(keyCode: 6, flags: .maskCommand)
+        case .deleteSelection:
+            return Self.postKey(keyCode: 51)
+        case .submit:
+            return Self.postKey(keyCode: 36)
+        case .newLine:
+            return Self.postKey(keyCode: 36)
+        case .newParagraph:
+            return Self.postKey(keyCode: 36) && Self.postKey(keyCode: 36)
+        }
+    }
+
     static func postPasteShortcut() -> Bool {
-        guard AXIsProcessTrusted(),
-              let down = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: true),
-              let up = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: false)
+        guard AXIsProcessTrusted() else { return false }
+        return postKey(keyCode: 9, flags: .maskCommand)
+    }
+
+    private static func postKey(keyCode: CGKeyCode, flags: CGEventFlags = []) -> Bool {
+        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
+              let up = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false)
         else { return false }
-        down.flags = .maskCommand
-        up.flags = .maskCommand
+        down.flags = flags
+        up.flags = flags
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
         return true

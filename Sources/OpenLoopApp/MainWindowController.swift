@@ -191,7 +191,9 @@ private struct MainView: View {
                     let captured = await model.submitCapture(quickAddText)
                     if captured { quickAddText = "" }
                 }
-                if model.isDeliveringDictation || model.lastDictationDelivery != nil {
+                if model.isDeliveringDictation
+                    || model.lastDictationDelivery != nil
+                    || model.dictationActionNotice != nil {
                     DictationDeliveryPanel(model: model)
                 }
                 if model.meetingJob.stage != nil {
@@ -1155,7 +1157,7 @@ private struct DictationDeliveryPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label(
-                    model.isDeliveringDictation ? "Processing dictation" : "Dictation delivered",
+                    panelTitle,
                     systemImage: model.isDeliveringDictation
                         ? "sparkles"
                         : "text.cursor"
@@ -1197,10 +1199,33 @@ private struct DictationDeliveryPanel: View {
                         .padding(.top, 6)
                     }
                 }
+                HStack(spacing: 9) {
+                    if delivery.state == .awaitingConfirmation {
+                        Button("Confirm \(delivery.command?.displayName ?? "command")") {
+                            model.confirmPendingVoiceCommand()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Button("Cancel") { model.discardPendingVoiceCommand() }
+                    } else if delivery.state == .inserted, delivery.command != .undo {
+                        Button("Undo output") { model.undoLastDictationOutput() }
+                    }
+                }
+            } else if let notice = model.dictationActionNotice {
+                Text(notice)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(13)
         .openLoopPanel(emphasized: model.isDeliveringDictation)
+    }
+
+    private var panelTitle: String {
+        if model.isDeliveringDictation { return "Processing dictation" }
+        if model.lastDictationDelivery?.state == .awaitingConfirmation {
+            return "Confirm voice command"
+        }
+        return "Dictation output"
     }
 }
 

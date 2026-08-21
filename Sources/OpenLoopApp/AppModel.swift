@@ -58,6 +58,7 @@ final class AppModel: ObservableObject {
     @Published var lastDictationDelivery: VoiceDictationDelivery?
     @Published var isDeliveringDictation = false
     @Published var dictationProcessingMessage: String?
+    @Published var dictationActionNotice: String?
     @Published var isVoiceContextEnabled: Bool
 
     private let loop: ThoughtLoop
@@ -183,6 +184,7 @@ final class AppModel: ObservableObject {
         shouldDeliverCurrentRecording = true
         deliveredTranscriptID = nil
         lastDictationDelivery = nil
+        dictationActionNotice = nil
         dictationProcessingMessage = "Listening for system-wide dictation"
         commandError = nil
         Task { await meetingController.toggleRecording() }
@@ -262,6 +264,31 @@ final class AppModel: ObservableObject {
         defaults.set(enabled, forKey: voiceContextKey)
     }
 
+    func confirmPendingVoiceCommand() {
+        guard let delivery = dictationCoordinator?.confirmPendingCommand() else { return }
+        lastDictationDelivery = delivery
+        dictationActionNotice = delivery.statusMessage
+        commandError = delivery.state == .failed ? delivery.statusMessage : nil
+    }
+
+    func discardPendingVoiceCommand() {
+        dictationCoordinator?.discardPendingCommand()
+        lastDictationDelivery = nil
+        dictationActionNotice = "Voice command cancelled."
+    }
+
+    func undoLastDictationOutput() {
+        guard let result = dictationCoordinator?.undoLastOutput() else { return }
+        if result.inserted {
+            lastDictationDelivery = nil
+            dictationActionNotice = "Undid the last output in the active app."
+            commandError = nil
+        } else {
+            dictationActionNotice = "Undo needs Accessibility access and an active editable field."
+            commandError = dictationActionNotice
+        }
+    }
+
     private func handleDictationJob(_ job: MeetingJobPresentation) {
         guard shouldDeliverCurrentRecording else { return }
         if job.stage == .failed || job.stage == .cancelled {
@@ -286,6 +313,7 @@ final class AppModel: ObservableObject {
             let delivery = await dictationCoordinator.deliver(rawText: text, mode: mode)
             guard let self else { return }
             lastDictationDelivery = delivery
+            dictationActionNotice = nil
             isDeliveringDictation = false
             dictationProcessingMessage = delivery.statusMessage
             commandError = delivery.state == .failed ? delivery.statusMessage : nil

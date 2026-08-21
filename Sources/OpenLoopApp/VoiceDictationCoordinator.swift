@@ -21,6 +21,9 @@ struct VoiceDictationDelivery: Equatable, Sendable {
     var statusMessage: String {
         switch state {
         case .inserted:
+            if let command {
+                return "Executed \(command.displayName) in \(applicationName ?? "the active app")."
+            }
             let destination = applicationName.map { " into \($0)" } ?? ""
             let route = outputRoute?.displayName ?? "local output"
             return "Inserted\(destination) using \(route)."
@@ -43,9 +46,24 @@ extension TextOutputRoute {
     }
 }
 
+extension VoiceCommand {
+    var displayName: String {
+        switch self {
+        case .newLine: "new line"
+        case .newParagraph: "new paragraph"
+        case .undo: "undo"
+        case .deleteSelection: "delete selection"
+        case .submit: "submit"
+        }
+    }
+}
+
 @MainActor
 protocol VoiceDictationCoordinating: AnyObject {
     func deliver(rawText: String, mode: VoiceMode) async -> VoiceDictationDelivery
+    func confirmPendingCommand() -> VoiceDictationDelivery?
+    func discardPendingCommand()
+    func undoLastOutput() -> TextOutputResult
 }
 
 @MainActor
@@ -53,6 +71,7 @@ final class VoiceDictationCoordinator: VoiceDictationCoordinating {
     private let processor: LocalSpeechProcessor
     private let contextEngine: VoiceContextEngine
     private let output: TextOutputAdapter
+    private var pendingCommand: (VoiceProcessingResult, VoiceContextSnapshot?)?
 
     init(
         processor: LocalSpeechProcessor,
@@ -76,6 +95,7 @@ final class VoiceDictationCoordinator: VoiceDictationCoordinating {
         let processed = await processor.process(request)
 
         if processed.command?.requiresConfirmation == true {
+            pendingCommand = (processed, context)
             return delivery(
                 processed,
                 context: context,
@@ -84,13 +104,41 @@ final class VoiceDictationCoordinator: VoiceDictationCoordinating {
             )
         }
 
-        let outputResult = output.insert(processed.outputText)
+        pendingCommand = nil
+        let outputResult = if let command = processed.command {
+            output.perform(command)
+        } else {
+            output.insert(processed.outputText)
+        }
         return delivery(
             processed,
             context: context,
             outputRoute: outputResult.route,
             state: outputResult.inserted ? .inserted : .failed
         )
+    }
+
+    func confirmPendingCommand() -> VoiceDictationDelivery? {
+        guard let (processed, context) = pendingCommand,
+              let command = processed.command,
+              command.requiresConfirmation
+        else { return nil }
+        pendingCommand = nil
+        let result = output.perform(command)
+        return delivery(
+            processed,
+            context: context,
+            outputRoute: result.route,
+            state: result.inserted ? .inserted : .failed
+        )
+    }
+
+    func discardPendingCommand() {
+        pendingCommand = nil
+    }
+
+    func undoLastOutput() -> TextOutputResult {
+        output.perform(.undo)
     }
 
     private func delivery(

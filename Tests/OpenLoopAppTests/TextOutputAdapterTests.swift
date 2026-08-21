@@ -1,3 +1,4 @@
+import ADHDCore
 import Foundation
 import Testing
 @testable import OpenLoopApp
@@ -22,7 +23,23 @@ private final class OutputProbe: AccessibilityTextInserting, ClipboardTextPastin
         calls.append("keyboard")
         return keyboard
     }
+    func perform(_ command: VoiceCommand) -> Bool {
+        calls.append("command:\(command.displayName)")
+        return keyboard
+    }
     func resetCalls() { calls = [] }
+}
+
+@MainActor
+@Test func outputAdapterRoutesEditingCommandsOnlyThroughKeyboardControl() {
+    let probe = OutputProbe()
+    probe.keyboard = true
+    let adapter = TextOutputAdapter(accessibility: probe, clipboard: probe, keyboard: probe)
+
+    let result = adapter.perform(.submit)
+
+    #expect(result == TextOutputResult(route: .simulatedKeyboard, inserted: true))
+    #expect(probe.calls == ["command:submit"])
 }
 
 @MainActor

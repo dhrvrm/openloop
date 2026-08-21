@@ -43,7 +43,12 @@ private final class RejectingClipboardPaster: ClipboardTextPasting {
 
 @MainActor
 private final class RejectingKeyboardTyper: KeyboardTextTyping {
+    var commands: [VoiceCommand] = []
     func type(_ text: String) -> Bool { false }
+    func perform(_ command: VoiceCommand) -> Bool {
+        commands.append(command)
+        return true
+    }
 }
 
 @MainActor
@@ -97,4 +102,29 @@ private final class RejectingKeyboardTyper: KeyboardTextTyping {
     #expect(delivery.command == .deleteSelection)
     #expect(delivery.outputRoute == nil)
     #expect(inserter.inserted.isEmpty)
+
+    let confirmed = coordinator.confirmPendingCommand()
+    #expect(confirmed?.state == .inserted)
+    #expect(confirmed?.outputRoute == .simulatedKeyboard)
+}
+
+@MainActor
+@Test func dictationCoordinatorExecutesUndoDeterministicallyWithoutSemanticEditing() async {
+    let keyboard = RejectingKeyboardTyper()
+    let coordinator = VoiceDictationCoordinator(
+        processor: LocalSpeechProcessor(),
+        contextEngine: VoiceContextEngine(reader: DictationContextReader(), isConsented: { true }),
+        output: TextOutputAdapter(
+            accessibility: DictationAccessibilityInserter(),
+            clipboard: RejectingClipboardPaster(),
+            keyboard: keyboard
+        )
+    )
+
+    let delivery = await coordinator.deliver(rawText: "voice command undo", mode: .raw)
+
+    #expect(delivery.state == .inserted)
+    #expect(delivery.command == .undo)
+    #expect(delivery.outputRoute == .simulatedKeyboard)
+    #expect(keyboard.commands == [.undo])
 }
