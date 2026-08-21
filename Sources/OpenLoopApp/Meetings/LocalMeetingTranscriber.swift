@@ -61,6 +61,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
     nonisolated let modelIdentifier: String
     private let modelStorageURL: URL
     private let speakerDiarizationEnabled: Bool
+    private let audioConditioner = SpeechAudioConditioner()
     private var whisperKit: WhisperKit?
     private var speakerKit: SpeakerKit?
 
@@ -117,7 +118,11 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         let options = Self.decodingOptions(languageCode: languageCode)
         let windows: [TranscriptionResult]
         if languageCode == nil, duration > 0, duration <= 45 {
-            let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path)
+            audioConditioner.reset()
+            let audio = audioConditioner.process(
+                try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path),
+                sampleRate: WhisperKit.sampleRate
+            )
             let ranges = UtteranceAudioChunker.ranges(in: audio)
             let chunks = try await plannedAutomaticChunks(
                 audio: audio,

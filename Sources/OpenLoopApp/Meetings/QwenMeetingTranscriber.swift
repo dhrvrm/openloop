@@ -36,6 +36,7 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
     private let contextProvider: @Sendable () async -> [String]
     private let modelLoader: ModelLoader
     private let segmenter: LongFormAudioSegmenter
+    private let audioConditioner = SpeechAudioConditioner()
     private var model: (any QwenSpeechRecognizing)?
 
     init(
@@ -136,7 +137,11 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
             fraction: 1,
             message: "Preparing 16 kHz speech for Qwen"
         ))
-        let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path)
+        audioConditioner.reset()
+        let audio = audioConditioner.process(
+            try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path),
+            sampleRate: WhisperKit.sampleRate
+        )
         guard !audio.isEmpty else { throw MeetingTranscriptionError.emptyTranscript }
         let duration = Double(audio.count) / Double(WhisperKit.sampleRate)
         let vocabulary = await contextProvider()

@@ -91,6 +91,7 @@ final class StreamingPCMFrameConverter: @unchecked Sendable {
 enum MeetingPCMCallbackBridge {
     nonisolated static func make(
         converter: StreamingPCMFrameConverter,
+        conditioner: SpeechAudioConditioner,
         deliver: @escaping @MainActor @Sendable (StreamingVoiceFrame) -> Void
     ) -> AVAudioNodeTapBlock {
         { buffer, _ in
@@ -105,11 +106,12 @@ enum MeetingPCMCallbackBridge {
                 }
             }
             let sourceRate = Int(buffer.format.sampleRate.rounded())
-            for samples in converter.process(mono, sourceSampleRate: sourceRate) {
+            for rawSamples in converter.process(mono, sourceSampleRate: sourceRate) {
+                let samples = conditioner.process(rawSamples, sampleRate: 16_000)
                 let frame = StreamingVoiceFrame(
                     samples: samples,
                     capturedAt: .now,
-                    decibels: StreamingPCMFrameConverter.decibels(for: samples)
+                    decibels: StreamingPCMFrameConverter.decibels(for: rawSamples)
                 )
                 Task { @MainActor in deliver(frame) }
             }
@@ -124,6 +126,7 @@ final class MeetingAudioRecorder: NSObject, MeetingAudioRecording, AVAudioRecord
     private var meterTimer: Timer?
     private var pcmEngine: AVAudioEngine?
     private let pcmConverter = StreamingPCMFrameConverter()
+    private let pcmConditioner = SpeechAudioConditioner()
 
     var onDecibelUpdate: ((Float?) -> Void)?
     var onPCMFrame: (@MainActor @Sendable (StreamingVoiceFrame) -> Void)?
@@ -221,12 +224,14 @@ final class MeetingAudioRecorder: NSObject, MeetingAudioRecording, AVAudioRecord
             throw MeetingAudioRecorderError.invalidInputFormat
         }
         pcmConverter.reset()
+        pcmConditioner.reset()
         input.installTap(
             onBus: 0,
             bufferSize: 1_024,
             format: format,
             block: MeetingPCMCallbackBridge.make(
                 converter: pcmConverter,
+                conditioner: pcmConditioner,
                 deliver: onPCMFrame
             )
         )
@@ -243,12 +248,14 @@ final class MeetingAudioRecorder: NSObject, MeetingAudioRecording, AVAudioRecord
     private func stopPCMStreaming() {
         guard let pcmEngine else {
             pcmConverter.reset()
+            pcmConditioner.reset()
             return
         }
         pcmEngine.inputNode.removeTap(onBus: 0)
         pcmEngine.stop()
         self.pcmEngine = nil
         pcmConverter.reset()
+        pcmConditioner.reset()
     }
 
     private func publishMeterLevel() {
