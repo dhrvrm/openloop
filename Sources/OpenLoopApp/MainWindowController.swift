@@ -31,7 +31,7 @@ private struct MainView: View {
                     .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .topLeading)
                     .padding(.horizontal, OpenLoopVisualSystem.contentHorizontalPadding)
                     .padding(.top, OpenLoopVisualSystem.contentTopPadding)
-                    .padding(.bottom, 28)
+                    .padding(.bottom, OpenLoopVisualSystem.space4)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
@@ -99,16 +99,16 @@ private struct MainView: View {
 
     private var workspaceSidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Spacer().frame(height: 42)
-            VStack(alignment: .leading, spacing: 22) {
+            Spacer().frame(height: OpenLoopVisualSystem.space5)
+            VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space4) {
                 ForEach(WorkspaceOrientation.sections) { section in
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 1) {
                         if section.id != .focus {
                             Text(section.title)
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(OpenLoopVisualSystem.tertiaryText)
-                                .padding(.horizontal, 9)
-                                .padding(.bottom, 3)
+                                .padding(.horizontal, OpenLoopVisualSystem.space2)
+                                .padding(.bottom, OpenLoopVisualSystem.space1)
                         }
                         ForEach(section.destinations) { destination in
                             WorkspaceSidebarButton(
@@ -130,7 +130,7 @@ private struct MainView: View {
                 Button {
                     model.setAdvancedModeEnabled(!model.isAdvancedModeEnabled)
                 } label: {
-                    HStack(spacing: 9) {
+                    HStack(spacing: OpenLoopVisualSystem.space2) {
                         Image(systemName: "slider.horizontal.3")
                             .font(.system(size: 13, weight: .medium))
                         Text("Advanced")
@@ -141,8 +141,8 @@ private struct MainView: View {
                                 : Color.secondary.opacity(0.35))
                             .frame(width: 6, height: 6)
                     }
-                    .padding(.horizontal, 9)
-                    .frame(height: 41)
+                    .padding(.horizontal, OpenLoopVisualSystem.space2)
+                    .frame(height: 38)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -152,7 +152,7 @@ private struct MainView: View {
                 .accessibilityValue(model.isAdvancedModeEnabled ? "Shown" : "Hidden")
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, OpenLoopVisualSystem.space2)
         .frame(width: OpenLoopVisualSystem.sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(OpenLoopVisualSystem.sidebar)
@@ -181,7 +181,7 @@ private struct MainView: View {
 
     private var nowView: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
+            LazyVStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(
                     eyebrow: "Focus",
                     title: "Now",
@@ -222,7 +222,7 @@ private struct MainView: View {
                                 : "Open Return when you are ready to continue."
                         )
                     )
-                    .frame(maxWidth: .infinity, minHeight: 330)
+                    .frame(maxWidth: .infinity, minHeight: 240)
                 }
 
                 if model.now?.focus != nil { contextTrailPanel }
@@ -260,25 +260,25 @@ private struct MainView: View {
                 title: "Next",
                 detail: "Drag to reorder. Start only what deserves your attention now."
             )
-            .padding(.bottom, 5)
+            .padding(.bottom, OpenLoopVisualSystem.space1)
 
             ForEach(model.openLoops.filter { $0.state == .open }) { item in
                 ReadyTaskRow(model: model, item: item)
                 Divider()
-                    .padding(.leading, OpenLoopVisualSystem.checkboxHitSize + 8)
+                    .padding(.leading, OpenLoopVisualSystem.checkboxHitSize + OpenLoopVisualSystem.space2)
             }
         }
         .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
     }
 
     private func currentIntention(_ item: NowItem) -> some View {
-        VStack(alignment: .leading, spacing: 13) {
+        VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space3) {
             OpenLoopSectionHeading(title: "In focus")
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: OpenLoopVisualSystem.space2) {
                 OpenLoopCheckbox(isCompleted: false, tint: OpenLoopVisualSystem.accent) {
                     Task { await model.finishFocus(item.intentionID) }
                 }
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space1) {
                     Text(item.desiredOutcome)
                         .font(OpenLoopVisualSystem.projectTitle)
                         .tracking(-0.5)
@@ -293,19 +293,19 @@ private struct MainView: View {
                     Text(ElapsedCue.text(seconds: item.elapsed(at: context.date)))
                         .font(OpenLoopVisualSystem.metadata.monospacedDigit())
                         .foregroundStyle(.secondary)
-                        .padding(.leading, OpenLoopVisualSystem.checkboxHitSize + 8)
+                        .padding(.leading, OpenLoopVisualSystem.checkboxHitSize + OpenLoopVisualSystem.space2)
                 }
             }
             focusControls(item)
-                .padding(.leading, OpenLoopVisualSystem.checkboxHitSize + 8)
+                .padding(.leading, OpenLoopVisualSystem.checkboxHitSize + OpenLoopVisualSystem.space2)
         }
         .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
     }
 
     private var contextTrailPanel: some View {
-        VStack(alignment: .leading, spacing: 13) {
+        VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space3) {
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space1) {
                     Text("Context trail")
                         .font(.title3.weight(.semibold))
                     Text("Application names only · active focus only · 8-hour maximum")
@@ -336,7 +336,7 @@ private struct MainView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, OpenLoopVisualSystem.space1)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -359,7 +359,7 @@ private struct MainView: View {
                 .foregroundStyle(.secondary)
         } else {
             ScrollView(.horizontal) {
-                LazyHStack(spacing: 9) {
+                LazyHStack(spacing: OpenLoopVisualSystem.space2) {
                     ForEach(Array(model.contextEpisodes.enumerated()), id: \.element.id) { index, episode in
                         if index > 0 {
                             Image(systemName: "arrow.right")
@@ -370,14 +370,14 @@ private struct MainView: View {
                         ContextEpisodeNode(episode: episode)
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, OpenLoopVisualSystem.space1)
             }
             .scrollIndicators(.hidden)
         }
     }
 
     @ViewBuilder private func focusControls(_ item: NowItem) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 0) {
             if let focus = item.focus {
                 if focus.state == .active {
                     Button("Pause") { Task { await model.pauseFocus(item.intentionID) } }
@@ -398,7 +398,7 @@ private struct MainView: View {
     }
 
     private var returnView: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space3) {
             ScreenHeader(
                 eyebrow: "RECOVERY",
                 title: "Return",
@@ -414,7 +414,7 @@ private struct MainView: View {
                 )
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 14) {
+                    LazyVStack(spacing: OpenLoopVisualSystem.space3) {
                         ForEach(model.returns) { item in
                             ReturnPacketView(model: model, item: item)
                         }
@@ -427,7 +427,7 @@ private struct MainView: View {
     private var inboxView: some View {
         let needsDecision = model.reviewItems.filter(\.needsDecision)
         return ScrollView {
-            LazyVStack(alignment: .leading, spacing: 28) {
+            LazyVStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(
                     eyebrow: "Capture",
                     title: "Inbox",
@@ -443,7 +443,7 @@ private struct MainView: View {
                         systemImage: "tray",
                         description: Text("New captures appear here before you place or release them.")
                     )
-                    .frame(maxWidth: .infinity, minHeight: 280)
+                    .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
                     reviewSection(
                         title: "Needs a decision",
@@ -453,14 +453,14 @@ private struct MainView: View {
                 }
             }
             .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
-            .padding(.bottom, 20)
+            .padding(.bottom, OpenLoopVisualSystem.space4)
         }
     }
 
     private var laterView: some View {
         let heldSafely = model.reviewItems.filter { $0.needsDecision == false }
         return ScrollView {
-            LazyVStack(alignment: .leading, spacing: 26) {
+            LazyVStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(
                     eyebrow: "Focus",
                     title: "Later",
@@ -479,7 +479,7 @@ private struct MainView: View {
                     systemImage: "archivebox",
                         description: Text("Move work here when it matters, but not right now.")
                 )
-                    .frame(maxWidth: .infinity, minHeight: 300)
+                    .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
                     reviewSection(
                         title: "Held safely",
@@ -489,7 +489,7 @@ private struct MainView: View {
                 }
             }
             .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
-            .padding(.bottom, 16)
+            .padding(.bottom, OpenLoopVisualSystem.space4)
         }
     }
 
@@ -499,14 +499,8 @@ private struct MainView: View {
         items: [ClarificationReviewItem]
     ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.title3.weight(.semibold))
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.bottom, 10)
+            OpenLoopSectionHeading(title: title, detail: detail)
+                .padding(.bottom, OpenLoopVisualSystem.space2)
 
             Divider()
             ForEach(items) { item in
@@ -523,7 +517,7 @@ private struct MainView: View {
     private var askView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
+                LazyVStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(
                     eyebrow: "QUERY",
                     title: "Ask your context",
@@ -540,7 +534,7 @@ private struct MainView: View {
                 workingMemorySection
                 privacySection
 
-                HStack(spacing: 10) {
+                HStack(spacing: OpenLoopVisualSystem.space2) {
                     TextField("Search captures, decisions, return points, and corrections", text: $model.recallQuery)
                         .textFieldStyle(.roundedBorder)
                         .font(OpenLoopVisualSystem.rowTitle)
@@ -563,7 +557,7 @@ private struct MainView: View {
 
                 if model.isRecalling {
                     ProgressView("Searching on this Mac…")
-                        .frame(maxWidth: .infinity, minHeight: 240)
+                        .frame(maxWidth: .infinity, minHeight: 200)
                 } else if let error = model.recallError {
                     ContentUnavailableView(
                         "Recall paused",
@@ -589,14 +583,10 @@ private struct MainView: View {
                             Divider()
                         }
                     }
-                    .background(
-                        OpenLoopVisualSystem.raised.opacity(0.42),
-                            in: RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius)
-                        )
                 }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 16)
+                .padding(.bottom, OpenLoopVisualSystem.space4)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .onAppear {
@@ -610,13 +600,13 @@ private struct MainView: View {
     }
 
     private var semanticAskPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space3) {
             OpenLoopSectionHeading(
                 title: "Ask",
                 tint: OpenLoopVisualSystem.ask,
                 detail: "Grounded answers from your local semantic graph"
             )
-            HStack(spacing: 10) {
+            HStack(spacing: OpenLoopVisualSystem.space2) {
                 TextField("What have I been thinking about?", text: $model.semanticQuery)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { Task { await model.askSemanticContext(model.semanticQuery) } }
@@ -644,12 +634,12 @@ private struct MainView: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, OpenLoopVisualSystem.space1)
     }
 
     private var contextView: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
+            LazyVStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(
                     eyebrow: "Understanding",
                     title: "Context",
@@ -677,7 +667,7 @@ private struct MainView: View {
                         systemImage: "point.3.connected.trianglepath.dotted",
                         description: Text("Capture naturally in Now or Inbox. OpenLoop preserves evidence before deriving meaning.")
                     )
-                    .frame(maxWidth: .infinity, minHeight: 260)
+                    .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
                     if contextPresentation == .space {
                         SemanticGraph3DView(
@@ -692,13 +682,13 @@ private struct MainView: View {
                                 Divider()
                             }
                         }
-                        .padding(.horizontal, 14)
+                        .padding(.horizontal, OpenLoopVisualSystem.space2)
                     }
                 }
                 workingMemorySection
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 16)
+            .padding(.bottom, OpenLoopVisualSystem.space4)
         }
         .task {
             await model.refreshSemanticGraph()
@@ -708,7 +698,7 @@ private struct MainView: View {
 
     private var emergingView: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
+            LazyVStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(
                     eyebrow: "PATTERNS",
                     title: "Emerging",
@@ -720,7 +710,7 @@ private struct MainView: View {
                         systemImage: "sparkles",
                         description: Text("OpenLoop waits for grounded recurrence instead of generating productivity noise.")
                     )
-                    .frame(maxWidth: .infinity, minHeight: 300)
+                    .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
                     if !model.unresolvedSemanticNodes.isEmpty {
                         SemanticSectionTitle(
@@ -743,7 +733,7 @@ private struct MainView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 16)
+            .padding(.bottom, OpenLoopVisualSystem.space4)
         }
         .task { await model.refreshSemanticGraph() }
     }
@@ -985,20 +975,20 @@ private struct ScreenHeader: View {
 
     var body: some View {
         let tint = OpenLoopVisualSystem.tint(forSurfaceTitle: title)
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .center, spacing: OpenLoopVisualSystem.space2) {
                 Image(systemName: OpenLoopVisualSystem.icon(forSurfaceTitle: title))
-                    .font(.system(size: 25, weight: .semibold))
+                    .font(.system(size: 23, weight: .semibold))
                     .foregroundStyle(tint)
-                    .frame(width: 30)
+                    .frame(width: 27)
                 Text(title)
                     .font(OpenLoopVisualSystem.listTitle)
-                    .tracking(-1.05)
+                    .tracking(-0.8)
             }
             Text(detail)
-                .font(OpenLoopVisualSystem.metadata)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: 610, alignment: .leading)
+                .font(.system(size: 12.5))
+                .foregroundStyle(OpenLoopVisualSystem.muted)
+                .frame(maxWidth: 560, alignment: .leading)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(eyebrow), \(title). \(detail)")
@@ -1017,11 +1007,11 @@ private struct WorkspaceSidebarButton: View {
     var body: some View {
         let tint = OpenLoopVisualSystem.tint(for: destinationID)
         Button(action: action) {
-            HStack(spacing: 9) {
+            HStack(spacing: OpenLoopVisualSystem.space2) {
                 Image(systemName: icon)
-                    .font(.system(size: 15, weight: .medium))
-                    .frame(width: 18)
-                    .foregroundStyle(tint.opacity(isSelected ? 1 : 0.86))
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 17)
+                    .foregroundStyle(tint.opacity(isSelected ? 1 : 0.78))
                 Text(title)
                     .font(isSelected
                         ? OpenLoopVisualSystem.sidebarLabelSelected
@@ -1033,7 +1023,7 @@ private struct WorkspaceSidebarButton: View {
                         .foregroundStyle(OpenLoopVisualSystem.muted)
                 }
             }
-            .padding(.horizontal, 9)
+            .padding(.horizontal, OpenLoopVisualSystem.space2)
             .frame(minHeight: OpenLoopVisualSystem.compactRowMinimumHeight)
             .contentShape(Rectangle())
             .background(
@@ -1059,10 +1049,10 @@ private struct QuickAddComposer: View {
     let submit: () async -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: OpenLoopVisualSystem.space2) {
                 Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 19, weight: .medium))
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(OpenLoopVisualSystem.accent)
                     .frame(width: OpenLoopVisualSystem.checkboxHitSize)
                 TextField("New thought, task, or note", text: $text)
@@ -1083,8 +1073,8 @@ private struct QuickAddComposer: View {
                 .help("Capture · Return")
                 .disabled(isSaving || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .padding(.horizontal, 9)
-            .frame(height: 46)
+            .padding(.horizontal, OpenLoopVisualSystem.space2)
+            .frame(height: 42)
             .background(
                 OpenLoopVisualSystem.raised,
                 in: RoundedRectangle(
@@ -1097,10 +1087,10 @@ private struct QuickAddComposer: View {
                     cornerRadius: OpenLoopVisualSystem.editorRadius,
                     style: .continuous
                 )
-                .stroke(OpenLoopVisualSystem.hairline, lineWidth: 0.75)
+                .stroke(OpenLoopVisualSystem.hairline, lineWidth: 0.65)
             }
 
-            HStack(alignment: .center, spacing: 3) {
+            HStack(alignment: .center, spacing: 0) {
                 Button {
                     model.toggleVoiceCapture()
                 } label: {
@@ -1165,7 +1155,7 @@ private struct QuickAddComposer: View {
                 .controlSize(.small)
                 .help("Voice output style")
             }
-            .padding(.horizontal, 1)
+            .padding(.horizontal, 0)
             if model.meetingJob.stage == .recording {
                 RecordingLevelMeter(decibels: model.recordingDecibels)
                 if let snapshot = model.streamingVoiceSession,
@@ -1182,14 +1172,14 @@ private struct QuickAddComposer: View {
                     }
                     .font(OpenLoopVisualSystem.rowTitle)
                     .textSelection(.enabled)
-                    .padding(.leading, 37)
-                    .padding(.vertical, 7)
+                    .padding(.leading, OpenLoopVisualSystem.checkboxHitSize + OpenLoopVisualSystem.space2)
+                    .padding(.vertical, OpenLoopVisualSystem.space2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityLabel("Live transcription")
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, OpenLoopVisualSystem.space1)
         .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
     }
 

@@ -16,12 +16,12 @@ struct SemanticGraph3DView: View {
 
     var body: some View {
         let scene = layout.scene(nodes: nodes, relations: relations, vectors: vectors)
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space3) {
             GeometryReader { geometry in
                 let projected = layout.project(scene, size: geometry.size, camera: camera)
                 let projectionByID = Dictionary(uniqueKeysWithValues: projected.map { ($0.id, $0) })
                 ZStack {
-                    OpenLoopVisualSystem.raised.opacity(0.34)
+                    OpenLoopVisualSystem.raised.opacity(0.48)
                     Canvas { context, _ in
                         drawRelations(
                             scene: scene,
@@ -82,20 +82,20 @@ struct SemanticGraph3DView: View {
                             Spacer()
                         }
                     }
-                    .padding(14)
+                    .padding(OpenLoopVisualSystem.space3)
                     .allowsHitTesting(false)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius, style: .continuous)
-                        .stroke(OpenLoopVisualSystem.hairline, lineWidth: 0.75)
+                        .stroke(OpenLoopVisualSystem.hairline, lineWidth: 0.65)
                 }
                 .contentShape(Rectangle())
                 .gesture(orbitGesture)
                 .simultaneousGesture(zoomGesture)
                 .onExitCommand { selectedID = nil }
             }
-            .frame(minHeight: 430)
+            .frame(minHeight: 380)
 
             if let selected = scene.nodes.first(where: { $0.id == selectedID }) {
                 selectedNodeDetail(selected, scene: scene)
@@ -149,14 +149,15 @@ struct SemanticGraph3DView: View {
             var path = Path()
             path.move(to: source.point)
             path.addLine(to: target.point)
+            let relationColor = selectedID == nil
+                ? OpenLoopVisualSystem.muted.opacity(belongsToNeighborhood ? 0.24 : 0.10)
+                : OpenLoopVisualSystem.accent.opacity(touchesSelection ? 0.58 : 0.10)
             context.stroke(
                 path,
-                with: .color(
-                    OpenLoopVisualSystem.accent.opacity(
-                        touchesSelection ? 0.62 : (belongsToNeighborhood ? 0.28 : 0.10)
-                    )
-                ),
-                lineWidth: touchesSelection ? 1.6 : 0.8 + relation.confidence * 0.5
+                with: .color(relationColor),
+                lineWidth: touchesSelection && selectedID != nil
+                    ? 1.35
+                    : 0.65 + relation.confidence * 0.35
             )
         }
     }

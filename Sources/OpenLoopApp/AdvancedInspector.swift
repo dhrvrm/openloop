@@ -11,7 +11,7 @@ struct AdvancedInspector: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 18) {
                 inspectorHeader
                 liveStatus
                 runtimeTrace
@@ -20,11 +20,11 @@ struct AdvancedInspector: View {
                 qualityEvidence
                 recentEvents
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 24)
+            .padding(.horizontal, 16)
+            .padding(.vertical, OpenLoopVisualSystem.space4)
         }
         .scrollIndicators(.hidden)
-        .background(.ultraThinMaterial)
+        .background(OpenLoopVisualSystem.sidebar)
         .accessibilityLabel("Advanced system inspector")
     }
 
@@ -38,7 +38,7 @@ struct AdvancedInspector: View {
     }
 
     private var runtimeTrace: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space2) {
             sectionLabel("Live decision trace", icon: "waveform.path.ecg")
             VStack(spacing: 0) {
                 InspectorFact(label: "Audio signal", value: liveAudioSignal)
@@ -65,7 +65,7 @@ struct AdvancedInspector: View {
                         .lineLimit(5)
                         .textSelection(.enabled)
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, OpenLoopVisualSystem.space1)
             }
             if let stable = model.streamingVoiceSession?.transcript.stableText,
                !stable.isEmpty {
@@ -78,7 +78,7 @@ struct AdvancedInspector: View {
                         .lineLimit(8)
                         .textSelection(.enabled)
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, OpenLoopVisualSystem.space1)
             }
         }
     }
@@ -130,7 +130,7 @@ struct AdvancedInspector: View {
             Image(systemName: "slider.horizontal.3")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(OpenLoopVisualSystem.accent)
-                .frame(width: 24, height: 28)
+            .frame(width: 22, height: 26)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Advanced")
@@ -149,7 +149,7 @@ struct AdvancedInspector: View {
     }
 
     private var liveStatus: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space2) {
             HStack {
                 Text("Current surface")
                     .foregroundStyle(.secondary)
@@ -178,7 +178,7 @@ struct AdvancedInspector: View {
     }
 
     private var pipeline: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space2) {
             sectionLabel("Transcription pipeline", icon: "point.3.connected.trianglepath.dotted")
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(nodes.enumerated()), id: \.element.id) { index, node in
@@ -186,7 +186,7 @@ struct AdvancedInspector: View {
                     if index < nodes.count - 1 {
                         Rectangle()
                             .fill(connectorColor(after: node))
-                            .frame(width: 1, height: 11)
+                            .frame(width: 1, height: OpenLoopVisualSystem.space2)
                             .padding(.leading, 7)
                     }
                 }
@@ -195,7 +195,7 @@ struct AdvancedInspector: View {
     }
 
     private var engineFacts: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space2) {
             sectionLabel("Local engine", icon: "cpu")
             VStack(spacing: 0) {
                 InspectorFact(
@@ -256,18 +256,18 @@ struct AdvancedInspector: View {
                     .foregroundStyle(.tertiary)
                     .textSelection(.enabled)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, OpenLoopVisualSystem.space2)
         }
     }
 
     private var qualityEvidence: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space2) {
             sectionLabel("Quality evidence", icon: "checkmark.seal")
             if let error = model.voiceQualityAuditError {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, OpenLoopVisualSystem.space2)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if let audit = model.voiceQualityAudit {
                 VStack(spacing: 0) {
@@ -304,7 +304,7 @@ struct AdvancedInspector: View {
             } else {
                 ProgressView("Auditing corrected local evidence…")
                     .font(.caption)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, OpenLoopVisualSystem.space2)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -340,17 +340,17 @@ struct AdvancedInspector: View {
     }
 
     @ViewBuilder private var recentEvents: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space2) {
             sectionLabel("Recent activity", icon: "clock.arrow.circlepath")
             if model.meetingPipelineEvents.isEmpty {
                 Text("Pipeline events appear here while an import or recording is processed.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, OpenLoopVisualSystem.space2)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space2) {
                     ForEach(Array(model.meetingPipelineEvents.suffix(10).reversed())) { event in
                         HStack(alignment: .top, spacing: 9) {
                             Text(event.occurredAt.formatted(date: .omitted, time: .shortened))
@@ -368,7 +368,7 @@ struct AdvancedInspector: View {
                         }
                     }
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, OpenLoopVisualSystem.space1)
             }
         }
     }
@@ -377,7 +377,7 @@ struct AdvancedInspector: View {
         HStack(spacing: 7) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(OpenLoopVisualSystem.accent)
+                .foregroundStyle(OpenLoopVisualSystem.muted)
             Text(title)
                 .font(.system(size: 13, weight: .semibold))
             Rectangle()
@@ -484,7 +484,7 @@ private struct InspectorFact: View {
                 .multilineTextAlignment(.trailing)
         }
         .font(.caption)
-        .padding(.vertical, 9)
+        .padding(.vertical, 7)
     }
 }
 
