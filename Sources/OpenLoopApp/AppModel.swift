@@ -54,6 +54,11 @@ final class AppModel: ObservableObject {
     @Published var semanticError: String?
     @Published var voiceQualityAudit: VoiceQualityCorpusAudit?
     @Published var voiceQualityAuditError: String?
+    @Published var voiceMode: VoiceMode
+    @Published var lastDictationDelivery: VoiceDictationDelivery?
+    @Published var isDeliveringDictation = false
+    @Published var dictationProcessingMessage: String?
+    @Published var isVoiceContextEnabled: Bool
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -68,6 +73,8 @@ final class AppModel: ObservableObject {
     private var voiceQualityEngineIdentifier: String?
     private let defaults: UserDefaults
     private let advancedModeKey: String
+    private let voiceModeKey: String
+    private let voiceContextKey: String
     private var recallGeneration = 0
     private var voiceController: VoiceTranscriptionController?
     private var voiceObservation: AnyCancellable?
@@ -78,6 +85,9 @@ final class AppModel: ObservableObject {
     private var meetingEventsObservation: AnyCancellable?
     private var meetingMeterObservation: AnyCancellable?
     private var meetingStreamingObservation: AnyCancellable?
+    private var dictationCoordinator: (any VoiceDictationCoordinating)?
+    private var shouldDeliverCurrentRecording = false
+    private var deliveredTranscriptID: UUID?
 
     init(
         loop: ThoughtLoop,
@@ -90,7 +100,9 @@ final class AppModel: ObservableObject {
         privacyManager: (any PrivacyManaging)? = nil,
         semanticGraph: SemanticGraphLoop? = nil,
         defaults: UserDefaults = .standard,
-        advancedModeKey: String = "OpenLoopAdvancedMode"
+        advancedModeKey: String = "OpenLoopAdvancedMode",
+        voiceModeKey: String = "OpenLoopVoiceMode",
+        voiceContextKey: String = "OpenLoopVoiceContextEnabled"
     ) {
         self.loop = loop
         self.readModels = readModels
@@ -103,8 +115,15 @@ final class AppModel: ObservableObject {
         self.semanticGraph = semanticGraph
         self.defaults = defaults
         self.advancedModeKey = advancedModeKey
+        self.voiceModeKey = voiceModeKey
+        self.voiceContextKey = voiceContextKey
         isAdvancedModeEnabled = defaults.bool(forKey: advancedModeKey)
         meetingLanguagePreference = .automatic
+        voiceMode = defaults.string(forKey: voiceModeKey)
+            .flatMap(VoiceMode.init(rawValue:)) ?? .polished
+        isVoiceContextEnabled = defaults.object(forKey: voiceContextKey) == nil
+            ? true
+            : defaults.bool(forKey: voiceContextKey)
     }
 
     func attachVoiceCapture(_ controller: VoiceTranscriptionController) {
@@ -136,6 +155,43 @@ final class AppModel: ObservableObject {
         Task { await voiceController.toggle() }
     }
 
+    func attachVoiceDictation(_ coordinator: any VoiceDictationCoordinating) {
+        dictationCoordinator = coordinator
+    }
+
+    func toggleSystemDictation() {
+        guard let meetingController else {
+            commandError = "Local dictation is unavailable."
+            return
+        }
+        if meetingJob.stage == .recording {
+            if shouldDeliverCurrentRecording {
+                Task { await meetingController.toggleRecording() }
+            } else {
+                commandError = "A meeting recording is already active. Stop it from Live before dictating."
+            }
+            return
+        }
+        guard !meetingJob.isActive else {
+            commandError = "Wait for the current local transcription to finish."
+            return
+        }
+        guard dictationCoordinator != nil else {
+            commandError = "System-wide text output is unavailable."
+            return
+        }
+        shouldDeliverCurrentRecording = true
+        deliveredTranscriptID = nil
+        lastDictationDelivery = nil
+        dictationProcessingMessage = "Listening for system-wide dictation"
+        commandError = nil
+        Task { await meetingController.toggleRecording() }
+    }
+
+    var isSystemDictationActive: Bool {
+        shouldDeliverCurrentRecording
+    }
+
     func cancelVoiceCapture() {
         if meetingController != nil {
             meetingController?.cancel()
@@ -147,7 +203,11 @@ final class AppModel: ObservableObject {
     func attachMeetingTranscription(_ controller: MeetingTranscriptionController) {
         meetingController = controller
         controller.setLanguagePreference(meetingLanguagePreference)
-        meetingJobObservation = controller.$job.sink { [weak self] in self?.meetingJob = $0 }
+        meetingJobObservation = controller.$job.sink { [weak self] job in
+            guard let self else { return }
+            meetingJob = job
+            handleDictationJob(job)
+        }
         meetingTranscriptObservation = controller.$transcripts.sink { [weak self] in
             self?.meetingTranscripts = $0
         }
@@ -190,6 +250,46 @@ final class AppModel: ObservableObject {
     func setAdvancedModeEnabled(_ enabled: Bool) {
         isAdvancedModeEnabled = enabled
         defaults.set(enabled, forKey: advancedModeKey)
+    }
+
+    func setVoiceMode(_ mode: VoiceMode) {
+        voiceMode = mode
+        defaults.set(mode.rawValue, forKey: voiceModeKey)
+    }
+
+    func setVoiceContextEnabled(_ enabled: Bool) {
+        isVoiceContextEnabled = enabled
+        defaults.set(enabled, forKey: voiceContextKey)
+    }
+
+    private func handleDictationJob(_ job: MeetingJobPresentation) {
+        guard shouldDeliverCurrentRecording else { return }
+        if job.stage == .failed || job.stage == .cancelled {
+            shouldDeliverCurrentRecording = false
+            isDeliveringDictation = false
+            commandError = job.message
+            return
+        }
+        guard job.stage == .ready,
+              let transcriptID = job.completedTranscriptID,
+              deliveredTranscriptID != transcriptID,
+              let text = job.previewText?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty,
+              let dictationCoordinator
+        else { return }
+        deliveredTranscriptID = transcriptID
+        shouldDeliverCurrentRecording = false
+        isDeliveringDictation = true
+        dictationProcessingMessage = "Processing transcript locally"
+        let mode = voiceMode
+        Task { [weak self] in
+            let delivery = await dictationCoordinator.deliver(rawText: text, mode: mode)
+            guard let self else { return }
+            lastDictationDelivery = delivery
+            isDeliveringDictation = false
+            dictationProcessingMessage = delivery.statusMessage
+            commandError = delivery.state == .failed ? delivery.statusMessage : nil
+        }
     }
 
     func setMeetingLanguagePreference(_ preference: MeetingLanguagePreference) {

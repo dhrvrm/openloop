@@ -185,6 +185,31 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 modelStorageURL: directory.appendingPathComponent("Models/WhisperKit", isDirectory: true)
             )
             let voiceLearning = VoiceLearningLoop(repository: repository)
+            let textEditor = QwenLocalTextEditor { [weak model] message in
+                Task { @MainActor in
+                    guard model?.isDeliveringDictation == true else { return }
+                    model?.dictationProcessingMessage = message
+                }
+            }
+            let dictationCoordinator = VoiceDictationCoordinator(
+                processor: LocalSpeechProcessor(
+                    compactEditor: textEditor,
+                    largeEditor: textEditor,
+                    normalizationRules: {
+                        (try? await voiceLearning.normalizationRules()) ?? []
+                    }
+                ),
+                contextEngine: VoiceContextEngine(
+                    reader: AccessibilityVoiceContextReader(),
+                    isConsented: { [weak model] in model?.isVoiceContextEnabled ?? false }
+                ),
+                output: TextOutputAdapter(
+                    accessibility: SystemAccessibilityTextInserter(),
+                    clipboard: RestoringClipboardPaster(),
+                    keyboard: SystemKeyboardTyper()
+                )
+            )
+            model.attachVoiceDictation(dictationCoordinator)
             let qwenTranscriber = QwenMeetingTranscriber(
                 modelStorageURL: directory.appendingPathComponent("Models/Qwen3-ASR", isDirectory: true),
                 fallback: whisperTranscriber,
@@ -249,10 +274,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                     modifiers: binding.modifiers,
                     id: binding.id
                 ) { [weak model] _ in
-                    model?.toggleVoiceCapture()
+                    model?.toggleSystemDictation()
                 }
             } catch {
-                model.resurfacingError = "Voice shortcut is unavailable. Use Record & Transcribe in the menu."
+                model.resurfacingError = "Voice shortcut is unavailable. Use Dictate & Insert in the menu."
             }
             do {
                 let binding = GlobalHotKeyBinding.recall
@@ -705,7 +730,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     }
 
     @objc private func showCapture() { quickCapture?.show() }
-    @objc private func toggleVoiceCapture() { model?.toggleVoiceCapture() }
+    @objc private func toggleVoiceCapture() { model?.toggleSystemDictation() }
     @objc private func showLive() { presentWorkspace(tab: 0) }
     @objc private func showContext() { mainWindow?.show(tab: 1) }
     @objc private func showEmerging() { mainWindow?.show(tab: 2) }
@@ -759,7 +784,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         menu.delegate = self
         menu.addItem(withTitle: "Capture", action: #selector(showCapture), keyEquivalent: "")
         let voiceItem = menu.addItem(
-            withTitle: "Record & Transcribe",
+            withTitle: "Dictate & Insert",
             action: #selector(toggleVoiceCapture),
             keyEquivalent: "r"
         )

@@ -20,7 +20,7 @@ protocol VoiceContextReading: AnyObject {
 @MainActor
 final class VoiceContextEngine {
     private let reader: any VoiceContextReading
-    private let isConsented: @Sendable () -> Bool
+    private let isConsented: @MainActor () -> Bool
     private let maximumContextCharacters: Int
     private let excludedBundleIdentifiers: Set<String>
 
@@ -31,7 +31,7 @@ final class VoiceContextEngine {
             "com.apple.keychainaccess",
             "com.1password.1password",
         ],
-        isConsented: @escaping @Sendable () -> Bool
+        isConsented: @escaping @MainActor () -> Bool
     ) {
         self.reader = reader
         self.maximumContextCharacters = max(0, maximumContextCharacters)

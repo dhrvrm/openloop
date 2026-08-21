@@ -96,6 +96,20 @@ private actor EditorProbe: LocalTextEditing {
     #expect(!result.meaningPreserved)
 }
 
+@Test func rewriteThatDropsHindiWordsFallsBackToRawCodeSwitchedText() async {
+    let unsafeEditor = EditorProbe(output: "Can we reduce the release time for SGLC releases?")
+    let processor = LocalSpeechProcessor(compactEditor: unsafeEditor)
+
+    let result = await processor.process(VoiceProcessingRequest(
+        rawText: "वो क्या हम काम कर सकते हैं? Can we reduce the release time for SGLC releases?",
+        mode: .polished
+    ))
+
+    #expect(result.route == .rawFallback)
+    #expect(result.outputText == "वो क्या हम काम कर सकते हैं? Can we reduce the release time for SGLC releases?")
+    #expect(!result.meaningPreserved)
+}
+
 @Test func allProductModesHaveAnExplicitNonRawEditorRoute() {
     let router = LocalIntentRouter()
     for mode in VoiceMode.allCases where mode != .raw {

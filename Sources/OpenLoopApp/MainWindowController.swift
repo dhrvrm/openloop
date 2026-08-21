@@ -17,7 +17,7 @@ enum WorkspaceOrientation {
         WorkspaceDestination(title: "Act", icon: "bolt.circle"),
     ]
     static let quickCaptureShortcut = "⌘⇧Space  Quick Capture"
-    static let voiceCaptureShortcut = "⌘⇧R  Record & transcribe"
+    static let voiceCaptureShortcut = "⌘⇧R  Dictate & insert"
     static let emptyCaptureGuidance = "Type above or press Command-Shift-Space from anywhere."
 }
 
@@ -190,6 +190,9 @@ private struct MainView: View {
                 QuickAddComposer(model: model, text: $quickAddText) {
                     let captured = await model.submitCapture(quickAddText)
                     if captured { quickAddText = "" }
+                }
+                if model.isDeliveringDictation || model.lastDictationDelivery != nil {
+                    DictationDeliveryPanel(model: model)
                 }
                 if model.meetingJob.stage != nil {
                     MeetingJobPanel(model: model)
@@ -1021,6 +1024,20 @@ private struct QuickAddComposer: View {
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(OpenLoopVisualSystem.accent)
                 Spacer()
+                Picker(
+                    "Voice mode",
+                    selection: Binding(
+                        get: { model.voiceMode },
+                        set: { model.setVoiceMode($0) }
+                    )
+                ) {
+                    ForEach(VoiceMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .help("How system-wide dictation is formatted")
                 Text("TEXT · AUDIO · MEETING")
                     .font(.caption2.monospaced().weight(.medium))
                     .foregroundStyle(.tertiary)
@@ -1054,7 +1071,28 @@ private struct QuickAddComposer: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(model.meetingJob.stage == .recording ? .red : OpenLoopVisualSystem.accent)
-                .disabled(model.meetingJob.isActive && model.meetingJob.stage != .recording)
+                .disabled(
+                    model.isSystemDictationActive
+                        || (model.meetingJob.isActive && model.meetingJob.stage != .recording)
+                )
+                Button {
+                    model.toggleSystemDictation()
+                } label: {
+                    Label(
+                        model.isSystemDictationActive && model.meetingJob.stage == .recording
+                            ? "Stop & insert"
+                            : "Dictate",
+                        systemImage: model.isSystemDictationActive && model.meetingJob.stage == .recording
+                            ? "stop.circle.fill"
+                            : "text.cursor"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(model.isSystemDictationActive ? .red : OpenLoopVisualSystem.accent)
+                .disabled(
+                    model.meetingJob.isActive
+                        && !(model.isSystemDictationActive && model.meetingJob.stage == .recording)
+                )
             }
             if model.meetingJob.stage == .recording {
                 RecordingLevelMeter(decibels: model.recordingDecibels)
@@ -1106,6 +1144,74 @@ private struct QuickAddComposer: View {
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             model.importMeetingAudio(url)
+        }
+    }
+}
+
+private struct DictationDeliveryPanel: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label(
+                    model.isDeliveringDictation ? "Processing dictation" : "Dictation delivered",
+                    systemImage: model.isDeliveringDictation
+                        ? "sparkles"
+                        : "text.cursor"
+                )
+                .font(.callout.weight(.semibold))
+                Spacer()
+                Text(model.voiceMode.displayName.uppercased())
+                    .font(.caption2.monospaced().weight(.semibold))
+                    .foregroundStyle(OpenLoopVisualSystem.accent)
+            }
+            if model.isDeliveringDictation {
+                ProgressView()
+                    .controlSize(.small)
+                Text(model.dictationProcessingMessage ?? "Processing locally")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if let delivery = model.lastDictationDelivery {
+                Text(delivery.statusMessage)
+                    .font(.callout)
+                    .foregroundStyle(delivery.state == .failed ? .orange : .secondary)
+                HStack(spacing: 8) {
+                    Text(delivery.processingRoute.displayName)
+                    if let outputRoute = delivery.outputRoute {
+                        Text("→")
+                        Text(outputRoute.displayName)
+                    }
+                }
+                .font(.caption2.monospaced())
+                .foregroundStyle(.tertiary)
+                if delivery.rawText != delivery.processedText {
+                    DisclosureGroup("Raw and processed text") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("RAW").font(.caption2.monospaced()).foregroundStyle(.tertiary)
+                            Text(delivery.rawText).textSelection(.enabled)
+                            Text("PROCESSED").font(.caption2.monospaced()).foregroundStyle(.tertiary)
+                            Text(delivery.processedText).textSelection(.enabled)
+                        }
+                        .font(.caption)
+                        .padding(.top, 6)
+                    }
+                }
+            }
+        }
+        .padding(13)
+        .openLoopPanel(emphasized: model.isDeliveringDictation)
+    }
+}
+
+private extension VoiceProcessingRoute {
+    var displayName: String {
+        switch self {
+        case .direct: "Raw · deterministic"
+        case .deterministicCommand: "Voice command"
+        case .compactLocalEditor: "Local semantic edit"
+        case .largeLocalEditor: "Deep local semantic edit"
+        case .rawFallback: "Raw safety fallback"
         }
     }
 }

@@ -18,6 +18,7 @@ struct MeaningPreservationValidator {
             token.contains(where: \.isNumber)
                 || token.count >= 2 && token.allSatisfy { $0.isUppercase || $0.isNumber }
                 || token.first?.isUppercase == true && token.dropFirst().contains(where: \.isLowercase)
+                || token.unicodeScalars.contains(where: { (0x0900...0x097F).contains($0.value) })
         }
     }
 

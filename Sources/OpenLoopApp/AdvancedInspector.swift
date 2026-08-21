@@ -48,9 +48,9 @@ struct AdvancedInspector: View {
                 Divider()
                 InspectorFact(label: "Fusion", value: runtime.fusionStatus)
                 Divider()
-                InspectorFact(label: "Editor", value: runtime.editorRoute)
+                InspectorFact(label: "Editor", value: editorRoute)
                 Divider()
-                InspectorFact(label: "Output", value: runtime.outputRoute)
+                InspectorFact(label: "Output", value: outputRoute)
             }
             .padding(.horizontal, 12)
             .openLoopPanel(emphasized: model.meetingJob.isActive)
@@ -99,6 +99,25 @@ struct AdvancedInspector: View {
 
     private var liveRecognizer: String {
         model.streamingVoiceSession?.activeRecognizer ?? runtime.activeRecognizer
+    }
+
+    private var editorRoute: String {
+        if model.isDeliveringDictation {
+            return model.dictationProcessingMessage ?? "Processing locally"
+        }
+        guard let delivery = model.lastDictationDelivery else { return runtime.editorRoute }
+        switch delivery.processingRoute {
+        case .direct: return "Raw · deterministic"
+        case .deterministicCommand: return "Voice command"
+        case .compactLocalEditor: return "Qwen local semantic edit"
+        case .largeLocalEditor: return "Qwen deep local edit"
+        case .rawFallback: return "Raw safety fallback"
+        }
+    }
+
+    private var outputRoute: String {
+        guard let delivery = model.lastDictationDelivery else { return runtime.outputRoute }
+        return delivery.outputRoute?.displayName ?? delivery.state.rawValue
     }
 
     private var liveUnstableText: String {
@@ -206,6 +225,16 @@ struct AdvancedInspector: View {
                     label: "Compute",
                     value: model.meetingEngineDiagnostics.processingLocation
                 )
+                Divider()
+                Toggle(
+                    "Use active-app context",
+                    isOn: Binding(
+                        get: { model.isVoiceContextEnabled },
+                        set: { model.setVoiceContextEnabled($0) }
+                    )
+                )
+                .font(.caption)
+                .padding(.vertical, 9)
                 Divider()
                 InspectorFact(label: "Microphone", value: availability(model.capabilitySummary.microphone))
             }
