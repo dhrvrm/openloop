@@ -238,7 +238,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 repository: repository,
                 transcriber: AccuracyFirstTranscriber(
                     primary: qwenTranscriber,
-                    witness: whisperTranscriber
+                    witness: whisperTranscriber,
+                    expectedDomainTerms: {
+                        (try? await voiceLearning.vocabulary(limit: 80)) ?? []
+                    }
                 ),
                 stagingDirectory: directory.appendingPathComponent("Meeting Staging", isDirectory: true),
                 recorder: MeetingAudioRecorder(),

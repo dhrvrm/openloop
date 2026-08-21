@@ -1599,6 +1599,11 @@ private struct MeetingTranscriptRow: View {
                         onEvidence(insight.evidence.segmentID)
                     }
 
+                    if let fusion = transcript.fusionEvidence,
+                       !fusion.reviewSpans.isEmpty {
+                        fusionReview(fusion)
+                    }
+
                     VStack(alignment: .leading, spacing: 11) {
                         HStack {
                             Text("Transcript")
@@ -1707,6 +1712,53 @@ private struct MeetingTranscriptRow: View {
         .padding(.vertical, OpenLoopVisualSystem.space2)
         .openLoopInteractiveRow()
         .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private func fusionReview(_ fusion: TranscriptFusionResult) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Check uncertain words", systemImage: "text.badge.checkmark")
+                .font(.headline)
+            Text("Two local recognizers heard these parts differently. The current wording is kept until you choose.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            ForEach(fusion.reviewSpans) { span in
+                VStack(alignment: .leading, spacing: 7) {
+                    candidate("Current", span.selectedText)
+                    if let secondary = span.secondary {
+                        let alternative = span.selectedText == secondary.text
+                            ? span.primary.text
+                            : secondary.text
+                        candidate("Alternative", alternative)
+                        Button("Use alternative") {
+                            Task {
+                                _ = await model.correctMeetingSegment(
+                                    transcriptID: transcript.id,
+                                    segmentID: span.primary.id,
+                                    correctedText: alternative
+                                )
+                            }
+                        }
+                        .buttonStyle(.link)
+                    }
+                }
+                .padding(10)
+                .background(
+                    OpenLoopVisualSystem.accentSoft,
+                    in: RoundedRectangle(cornerRadius: OpenLoopVisualSystem.inputRadius)
+                )
+            }
+        }
+    }
+
+    private func candidate(_ label: String, _ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.callout)
+                .textSelection(.enabled)
+        }
     }
 
     private var intelligence: MeetingIntelligence {

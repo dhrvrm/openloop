@@ -1,9 +1,7 @@
 import ADHDCore
 import Foundation
 
-/// Runs the second recognizer only when the primary evidence indicates risk.
-/// The returned transcript remains primary text; disagreements are attached as
-/// reviewable evidence instead of being silently rewritten.
+/// Cross-checks local recognizers and preserves disagreements as reviewable evidence.
 actor AccuracyFirstTranscriber: MeetingTranscribing {
     nonisolated let modelIdentifier: String
 
@@ -11,17 +9,20 @@ actor AccuracyFirstTranscriber: MeetingTranscribing {
     private let witness: any MeetingTranscribing
     private let expectedDomainTerms: @Sendable () async -> [String]
     private let policy: TranscriptFusionPolicy
+    private let crossCheckAllPrimarySpans: Bool
 
     init(
         primary: any MeetingTranscribing,
         witness: any MeetingTranscribing,
         expectedDomainTerms: @escaping @Sendable () async -> [String] = { [] },
-        policy: TranscriptFusionPolicy = TranscriptFusionPolicy()
+        policy: TranscriptFusionPolicy = TranscriptFusionPolicy(),
+        crossCheckAllPrimarySpans: Bool = true
     ) {
         self.primary = primary
         self.witness = witness
         self.expectedDomainTerms = expectedDomainTerms
         self.policy = policy
+        self.crossCheckAllPrimarySpans = crossCheckAllPrimarySpans
         modelIdentifier = "Accuracy-first · \(primary.modelIdentifier) + selective \(witness.modelIdentifier)"
     }
 
@@ -68,7 +69,7 @@ actor AccuracyFirstTranscriber: MeetingTranscribing {
             output: primaryOutput,
             engineIdentifier: primary.modelIdentifier
         )
-        let requiresWitness = primaryEvidence.contains {
+        let requiresWitness = crossCheckAllPrimarySpans || primaryEvidence.contains {
             !policy.reasonsToRequestSecondary(for: $0, expectedDomainTerms: terms).isEmpty
         }
         guard requiresWitness else {
@@ -136,11 +137,25 @@ actor AccuracyFirstTranscriber: MeetingTranscribing {
         fusion: TranscriptFusionResult,
         modelIdentifier: String
     ) -> LocalTranscriptionOutput {
-        LocalTranscriptionOutput(
+        let selected = Dictionary(uniqueKeysWithValues: fusion.spans.map {
+            ($0.primary.id, $0.selectedText)
+        })
+        let segments = primary.segments.map { segment in
+            guard let text = selected[segment.id], text != segment.text,
+                  let replacement = try? TranscriptSegment(
+                    id: segment.id,
+                    start: segment.start,
+                    end: segment.end,
+                    text: text,
+                    speaker: segment.speaker
+                  ) else { return segment }
+            return replacement
+        }
+        return LocalTranscriptionOutput(
             duration: primary.duration,
             detectedLanguage: primary.detectedLanguage,
             modelIdentifier: modelIdentifier,
-            segments: primary.segments,
+            segments: segments,
             fusionEvidence: fusion
         )
     }

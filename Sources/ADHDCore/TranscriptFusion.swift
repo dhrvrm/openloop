@@ -153,10 +153,20 @@ public struct TranscriptFusionPolicy: Equatable, Sendable {
                     reasons: [.exactAgreement]
                 )
             }
+            let primaryCoverage = Self.domainTermCoverage(
+                in: primaryEvidence.text,
+                expectedDomainTerms: expectedDomainTerms
+            )
+            let secondaryCoverage = Self.domainTermCoverage(
+                in: secondaryEvidence.text,
+                expectedDomainTerms: expectedDomainTerms
+            )
             return FusedTranscriptSpan(
                 primary: primaryEvidence,
                 secondary: secondaryEvidence,
-                selectedText: primaryEvidence.text,
+                selectedText: secondaryCoverage > primaryCoverage
+                    ? secondaryEvidence.text
+                    : primaryEvidence.text,
                 resolution: .reviewRequired,
                 reasons: escalationReasons + [.recognizerDisagreement]
             )
@@ -196,6 +206,15 @@ public struct TranscriptFusionPolicy: Equatable, Sendable {
         let phrase = normalized(phrase)
         guard !phrase.isEmpty else { return true }
         return normalized(text).contains(phrase)
+    }
+
+    private static func domainTermCoverage(
+        in text: String,
+        expectedDomainTerms: [String]
+    ) -> Int {
+        expectedDomainTerms.reduce(0) { count, term in
+            count + (containsPhrase(term, in: text) ? 1 : 0)
+        }
     }
 
     private static func containsLatin(_ text: String) -> Bool {

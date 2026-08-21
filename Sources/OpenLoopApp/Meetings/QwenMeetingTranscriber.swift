@@ -35,6 +35,7 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
     private let fallbackEnabled: Bool
     private let contextProvider: @Sendable () async -> [String]
     private let modelLoader: ModelLoader
+    private let segmenter: LongFormAudioSegmenter
     private var model: (any QwenSpeechRecognizing)?
 
     init(
@@ -43,7 +44,8 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
         fallback: any MeetingTranscribing,
         fallbackEnabled: Bool = true,
         contextProvider: @escaping @Sendable () async -> [String] = { [] },
-        modelLoader: ModelLoader? = nil
+        modelLoader: ModelLoader? = nil,
+        segmenter: LongFormAudioSegmenter = LongFormAudioSegmenter()
     ) {
         self.qwenModelID = qwenModelID
         self.modelIdentifier = "\(qwenModelID.split(separator: "/").last.map(String.init) ?? qwenModelID) · Whisper fallback"
@@ -52,6 +54,7 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
         self.fallbackEnabled = fallbackEnabled
         self.contextProvider = contextProvider
         self.modelLoader = modelLoader ?? Self.loadModel
+        self.segmenter = segmenter
     }
 
     func diagnostics() async -> MeetingEngineDiagnostics {
@@ -144,29 +147,45 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
             fraction: 0.08,
             message: "Recognizing Hindi and English with Qwen"
         ))
-        let text = model.transcribe(
-            audio: audio,
-            sampleRate: WhisperKit.sampleRate,
-            language: languageCode,
-            maxTokens: Self.maximumTokens(for: duration),
-            context: context
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        let windows = segmenter.windows(samples: audio, sampleRate: WhisperKit.sampleRate)
+        var segments: [TranscriptSegment] = []
+        for (index, window) in windows.enumerated() {
+            try Task.checkCancellation()
+            let windowAudio = Array(audio[window.startSample..<window.endSample])
+            let windowDuration = Double(window.sampleCount) / Double(WhisperKit.sampleRate)
+            let text = model.transcribe(
+                audio: windowAudio,
+                sampleRate: WhisperKit.sampleRate,
+                language: languageCode,
+                maxTokens: Self.maximumTokens(for: windowDuration),
+                context: context
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                segments.append(try TranscriptSegment(
+                    start: Double(window.startSample) / Double(WhisperKit.sampleRate),
+                    end: Double(window.endSample) / Double(WhisperKit.sampleRate),
+                    text: text
+                ))
+            }
+            await progress(.init(
+                stage: .transcribing,
+                fraction: Double(index + 1) / Double(max(1, windows.count)),
+                message: windows.count == 1
+                    ? "Qwen transcription complete"
+                    : "Transcribing speech part \(index + 1) of \(windows.count)",
+                previewText: segments.map(\.text).joined(separator: "\n")
+            ))
+        }
         try Task.checkCancellation()
-        guard !text.isEmpty else { throw MeetingTranscriptionError.emptyTranscript }
+        guard !segments.isEmpty else { throw MeetingTranscriptionError.emptyTranscript }
 
-        let segment = try TranscriptSegment(start: 0, end: duration, text: text)
-        let language = Self.spokenLanguageSummary(text: text, requested: languageCode)
-        await progress(.init(
-            stage: .transcribing,
-            fraction: 1,
-            message: "Qwen transcription complete",
-            previewText: text
-        ))
+        let combinedText = segments.map(\.text).joined(separator: "\n")
+        let language = Self.spokenLanguageSummary(text: combinedText, requested: languageCode)
         return LocalTranscriptionOutput(
             duration: duration,
             detectedLanguage: language,
             modelIdentifier: qwenModelID,
-            segments: [segment]
+            segments: segments
         )
     }
 
