@@ -52,6 +52,8 @@ final class AppModel: ObservableObject {
     @Published var semanticAnswers: [SemanticNode] = []
     @Published var isRefreshingSemanticGraph = false
     @Published var semanticError: String?
+    @Published var voiceQualityAudit: VoiceQualityCorpusAudit?
+    @Published var voiceQualityAuditError: String?
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -62,6 +64,8 @@ final class AppModel: ObservableObject {
     private let contextTrail: (any ContextTrailProviding)?
     private let privacyManager: (any PrivacyManaging)?
     private let semanticGraph: SemanticGraphLoop?
+    private var voiceQualityAuditor: (any VoiceQualityAuditing)?
+    private var voiceQualityEngineIdentifier: String?
     private let defaults: UserDefaults
     private let advancedModeKey: String
     private var recallGeneration = 0
@@ -160,6 +164,27 @@ final class AppModel: ObservableObject {
             self?.streamingVoiceSession = $0
         }
         Task { await controller.refresh() }
+    }
+
+    func attachVoiceQualityAudit(
+        _ auditor: any VoiceQualityAuditing,
+        engineIdentifier: String
+    ) {
+        voiceQualityAuditor = auditor
+        voiceQualityEngineIdentifier = engineIdentifier
+        Task { await refreshVoiceQualityAudit() }
+    }
+
+    func refreshVoiceQualityAudit() async {
+        guard let voiceQualityAuditor, let voiceQualityEngineIdentifier else { return }
+        do {
+            voiceQualityAudit = try await voiceQualityAuditor.audit(
+                engineIdentifier: voiceQualityEngineIdentifier
+            )
+            voiceQualityAuditError = nil
+        } catch {
+            voiceQualityAuditError = "Quality evidence could not be audited. No release claim was enabled."
+        }
     }
 
     func setAdvancedModeEnabled(_ enabled: Bool) {
@@ -554,6 +579,7 @@ final class AppModel: ObservableObject {
             reviewItems = projections.4
             commandError = nil
             await refreshSemanticGraph()
+            await refreshVoiceQualityAudit()
             return true
         } catch {
             commandError = "Saved locally, but the view could not refresh. Try reopening it."

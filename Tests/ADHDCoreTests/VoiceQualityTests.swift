@@ -126,3 +126,88 @@ import Testing
         attempt: emptyAttempt
     ).wordErrorRate == 1)
 }
+
+@Test func releaseAuditRemainsUnprovenWithoutRepresentativeCorrectedEvidence() async throws {
+    let repository = VoiceQualityAuditRepository()
+    let auditor = VoiceQualityCorpusAuditor(repository: repository, minimumCaseCount: 3)
+
+    let audit = try await auditor.audit(engineIdentifier: "qwen-local")
+
+    #expect(audit.status == .unproven)
+    #expect(audit.report.attemptCount == 0)
+    #expect(audit.coverageGaps.contains(.minimumCases(actual: 0, required: 3)))
+    #expect(audit.coverageGaps.contains(.missingEnglish))
+    #expect(audit.coverageGaps.contains(.missingHindi))
+    #expect(audit.coverageGaps.contains(.missingCodeSwitch))
+}
+
+@Test func releaseAuditUsesLatestAttemptAndOnlyBecomesComparisonReadyAfterCoveragePasses() async throws {
+    let repository = VoiceQualityAuditRepository()
+    let english = try VoiceQualityCase(
+        sourceAudioIdentifier: "sha256:english",
+        referenceTranscript: "Ship the SGLC release",
+        languageSequence: ["en"],
+        domainTerms: ["SGLC"],
+        createdAt: Date(timeIntervalSince1970: 1)
+    )
+    let mixed = try VoiceQualityCase(
+        sourceAudioIdentifier: "sha256:mixed",
+        referenceTranscript: "release time कम करें",
+        languageSequence: ["en", "hi"],
+        domainTerms: ["release time"],
+        createdAt: Date(timeIntervalSince1970: 2)
+    )
+    try await repository.save(voiceQualityCase: english)
+    try await repository.save(voiceQualityCase: mixed)
+    try await repository.save(voiceQualityAttempt: VoiceQualityAttempt(
+        caseID: english.id,
+        engineIdentifier: "qwen-local",
+        hypothesis: "wrong",
+        stopToFinalMilliseconds: 3_000,
+        createdAt: Date(timeIntervalSince1970: 3)
+    ))
+    try await repository.save(voiceQualityAttempt: VoiceQualityAttempt(
+        caseID: english.id,
+        engineIdentifier: "qwen-local",
+        hypothesis: english.referenceTranscript,
+        firstPartialMilliseconds: 300,
+        stopToFinalMilliseconds: 700,
+        createdAt: Date(timeIntervalSince1970: 4)
+    ))
+    try await repository.save(voiceQualityAttempt: VoiceQualityAttempt(
+        caseID: mixed.id,
+        engineIdentifier: "qwen-local",
+        hypothesis: mixed.referenceTranscript,
+        firstPartialMilliseconds: 350,
+        stopToFinalMilliseconds: 800,
+        createdAt: Date(timeIntervalSince1970: 5)
+    ))
+    let auditor = VoiceQualityCorpusAuditor(repository: repository, minimumCaseCount: 2)
+
+    let audit = try await auditor.audit(engineIdentifier: "qwen-local")
+
+    #expect(audit.status == .readyForComparativeBenchmark)
+    #expect(audit.report.attemptCount == 2)
+    #expect(audit.report.wordErrorRate == 0)
+    #expect(audit.coverageGaps.isEmpty)
+    #expect(audit.thresholdViolations.isEmpty)
+}
+
+private actor VoiceQualityAuditRepository: ThoughtRepository {
+    private var cases: [VoiceQualityCase] = []
+    private var attempts: [VoiceQualityAttempt] = []
+
+    func save(capture: RawCapture) async throws {}
+    func save(proposal: ClarificationProposal) async throws {}
+    func save(intention: Intention) async throws {}
+    func proposal(captureID: UUID) async throws -> ClarificationProposal? { nil }
+    func captures(disposition: Disposition) async throws -> [RawCapture] { [] }
+    func intention(id: UUID) async throws -> Intention? { nil }
+    func openIntentions() async throws -> [Intention] { [] }
+    func save(voiceQualityCase: VoiceQualityCase) async throws { cases.append(voiceQualityCase) }
+    func voiceQualityCases() async throws -> [VoiceQualityCase] { cases }
+    func save(voiceQualityAttempt: VoiceQualityAttempt) async throws { attempts.append(voiceQualityAttempt) }
+    func voiceQualityAttempts(caseID: UUID?) async throws -> [VoiceQualityAttempt] {
+        attempts.filter { caseID == nil || $0.caseID == caseID }
+    }
+}

@@ -17,6 +17,7 @@ struct AdvancedInspector: View {
                 runtimeTrace
                 pipeline
                 engineFacts
+                qualityEvidence
                 recentEvents
             }
             .padding(18)
@@ -226,6 +227,88 @@ struct AdvancedInspector: View {
             .padding(12)
             .openLoopPanel()
         }
+    }
+
+    private var qualityEvidence: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            sectionLabel("QUALITY EVIDENCE", icon: "checkmark.seal")
+            if let error = model.voiceQualityAuditError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .openLoopPanel()
+            } else if let audit = model.voiceQualityAudit {
+                VStack(spacing: 0) {
+                    InspectorFact(label: "Claim status", value: qualityStatus(audit.status))
+                    Divider()
+                    InspectorFact(
+                        label: "Corrected cases",
+                        value: "\(audit.evaluatedCaseCount) / \(audit.totalCaseCount)"
+                    )
+                    Divider()
+                    InspectorFact(label: "Word error", value: percentage(audit.report.wordErrorRate))
+                    Divider()
+                    InspectorFact(
+                        label: "Hindi character error",
+                        value: percentage(audit.report.devanagariCharacterErrorRate)
+                    )
+                    Divider()
+                    InspectorFact(
+                        label: "Term recall",
+                        value: percentage(audit.report.domainTermRecall)
+                    )
+                    Divider()
+                    InspectorFact(
+                        label: "Stop → final p95",
+                        value: milliseconds(audit.report.stopToFinalP95Milliseconds)
+                    )
+                }
+                .padding(.horizontal, 12)
+                .openLoopPanel(emphasized: audit.status == .readyForComparativeBenchmark)
+
+                Text(qualityExplanation(audit))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ProgressView("Auditing corrected local evidence…")
+                    .font(.caption)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .openLoopPanel()
+            }
+        }
+    }
+
+    private func qualityStatus(_ status: VoiceQualityClaimStatus) -> String {
+        switch status {
+        case .unproven: "Unproven"
+        case .thresholdsBlocked: "Blocked by evidence"
+        case .readyForComparativeBenchmark: "Ready to benchmark"
+        }
+    }
+
+    private func qualityExplanation(_ audit: VoiceQualityCorpusAudit) -> String {
+        switch audit.status {
+        case .unproven:
+            "Representative corrected English, Hindi, and code-switched cases are still missing. No superiority claim is permitted."
+        case .thresholdsBlocked:
+            "The corrected corpus is representative, but \(audit.thresholdViolations.count) internal threshold(s) still fail."
+        case .readyForComparativeBenchmark:
+            "Internal thresholds pass. A controlled comparison against external products is still required before any superiority claim."
+        }
+    }
+
+    private func percentage(_ value: Double?) -> String {
+        guard let value else { return "—" }
+        return value.formatted(.percent.precision(.fractionLength(1)))
+    }
+
+    private func milliseconds(_ value: Double?) -> String {
+        guard let value else { return "—" }
+        return "\(Int(value.rounded())) ms"
     }
 
     @ViewBuilder private var recentEvents: some View {

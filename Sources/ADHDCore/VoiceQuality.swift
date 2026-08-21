@@ -297,6 +297,120 @@ public struct VoiceQualityGate: Equatable, Sendable {
     }
 }
 
+public enum VoiceQualityCoverageGap: Equatable, Sendable {
+    case minimumCases(actual: Int, required: Int)
+    case missingAttempts(count: Int)
+    case missingEnglish
+    case missingHindi
+    case missingCodeSwitch
+}
+
+public enum VoiceQualityClaimStatus: String, Codable, Equatable, Sendable {
+    /// The corrected corpus is absent or not representative enough.
+    case unproven
+    /// The corpus is representative, but one or more internal quality thresholds fail.
+    case thresholdsBlocked
+    /// Internal thresholds pass; a controlled competitor comparison is still required.
+    case readyForComparativeBenchmark
+}
+
+public struct VoiceQualityCorpusAudit: Equatable, Sendable {
+    public let engineIdentifier: String
+    public let totalCaseCount: Int
+    public let evaluatedCaseCount: Int
+    public let report: VoiceQualityReport
+    public let coverageGaps: [VoiceQualityCoverageGap]
+    public let thresholdViolations: [VoiceQualityGateViolation]
+    public let status: VoiceQualityClaimStatus
+}
+
+public protocol VoiceQualityAuditing: Sendable {
+    func audit(engineIdentifier: String) async throws -> VoiceQualityCorpusAudit
+}
+
+public actor VoiceQualityCorpusAuditor: VoiceQualityAuditing {
+    private let repository: any ThoughtRepository
+    private let gate: VoiceQualityGate
+    private let minimumCaseCount: Int
+
+    public init(
+        repository: any ThoughtRepository,
+        gate: VoiceQualityGate = VoiceQualityGate(),
+        minimumCaseCount: Int = 20
+    ) {
+        self.repository = repository
+        self.gate = gate
+        self.minimumCaseCount = max(1, minimumCaseCount)
+    }
+
+    public func audit(engineIdentifier: String) async throws -> VoiceQualityCorpusAudit {
+        let engine = engineIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !engine.isEmpty else { throw VoiceQualityEvidenceError.emptyEngineIdentifier }
+        let cases = try await repository.voiceQualityCases()
+        let attempts = try await repository.voiceQualityAttempts(caseID: nil)
+            .filter { $0.engineIdentifier == engine }
+        let latestByCase = Dictionary(grouping: attempts, by: \.caseID).compactMapValues {
+            $0.max {
+                if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
+                return $0.id.uuidString < $1.id.uuidString
+            }
+        }
+        let evaluations = cases.compactMap { qualityCase in
+            latestByCase[qualityCase.id].map {
+                VoiceQualityEvaluation(qualityCase: qualityCase, attempt: $0)
+            }
+        }
+        let report = VoiceQualityReport(evaluations: evaluations)
+        let coverageGaps = Self.coverageGaps(
+            cases: cases,
+            evaluatedCaseCount: evaluations.count,
+            minimumCaseCount: minimumCaseCount
+        )
+        let violations = gate.violations(in: report)
+        let status: VoiceQualityClaimStatus
+        if !coverageGaps.isEmpty {
+            status = .unproven
+        } else if !violations.isEmpty {
+            status = .thresholdsBlocked
+        } else {
+            status = .readyForComparativeBenchmark
+        }
+        return VoiceQualityCorpusAudit(
+            engineIdentifier: engine,
+            totalCaseCount: cases.count,
+            evaluatedCaseCount: evaluations.count,
+            report: report,
+            coverageGaps: coverageGaps,
+            thresholdViolations: violations,
+            status: status
+        )
+    }
+
+    private static func coverageGaps(
+        cases: [VoiceQualityCase],
+        evaluatedCaseCount: Int,
+        minimumCaseCount: Int
+    ) -> [VoiceQualityCoverageGap] {
+        var gaps: [VoiceQualityCoverageGap] = []
+        if cases.count < minimumCaseCount {
+            gaps.append(.minimumCases(actual: cases.count, required: minimumCaseCount))
+        }
+        let missingAttempts = max(0, cases.count - evaluatedCaseCount)
+        if missingAttempts > 0 { gaps.append(.missingAttempts(count: missingAttempts)) }
+        let languages = cases.flatMap(\.languageSequence)
+        if !languages.contains(where: { $0 == "en" || $0.hasPrefix("en-") }) {
+            gaps.append(.missingEnglish)
+        }
+        if !languages.contains(where: { $0 == "hi" || $0.hasPrefix("hi-") }) {
+            gaps.append(.missingHindi)
+        }
+        if !cases.contains(where: { Set($0.languageSequence).count > 1 }) {
+            gaps.append(.missingCodeSwitch)
+        }
+        return gaps
+    }
+}
+
 private enum VoiceQualityText {
     static func tokens(in text: String) -> [String] {
         var result: [String] = []

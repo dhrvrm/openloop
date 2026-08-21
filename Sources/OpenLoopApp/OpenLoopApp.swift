@@ -193,6 +193,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                     (try? await voiceLearning.vocabulary(limit: 80)) ?? []
                 }
             )
+            model.attachVoiceQualityAudit(
+                VoiceQualityCorpusAuditor(repository: repository),
+                engineIdentifier: qwenTranscriber.modelIdentifier
+            )
             let meetingController = MeetingTranscriptionController(
                 repository: repository,
                 transcriber: AccuracyFirstTranscriber(
