@@ -67,3 +67,56 @@ private struct SemanticUnusedClarifier: ClarificationProvider {
     #expect(model.semanticAnswers.isEmpty)
     #expect(model.semanticError == nil)
 }
+
+@MainActor
+@Test func appModelPublishesStoredRelationsAndVectorsWithoutSynthesizingThem() async throws {
+    let repository = SemanticAppRepository()
+    let first = try SemanticNode(
+        kind: .project,
+        claim: "OpenLoop",
+        confidence: 1,
+        status: .active,
+        evidence: [try SemanticEvidence(
+            id: RecallEvidenceID(kind: .capture, id: UUID()),
+            excerpt: "OpenLoop",
+            occurredAt: .now
+        )]
+    )
+    let second = try SemanticNode(
+        kind: .problem,
+        claim: "Release reliability",
+        confidence: 0.8,
+        status: .active,
+        evidence: [try SemanticEvidence(
+            id: RecallEvidenceID(kind: .capture, id: UUID()),
+            excerpt: "Release reliability",
+            occurredAt: .now
+        )]
+    )
+    let relation = try SemanticRelation(
+        sourceID: second.id,
+        targetID: first.id,
+        kind: .partOf,
+        confidence: 0.9
+    )
+    let vector = try SemanticVector(
+        providerIdentifier: "fixture-v1",
+        values: [0.1, 0.2, 0.3]
+    )
+    try await repository.append(semanticGraphEvents: [
+        .node(id: UUID(), occurredAt: .now, value: first),
+        .node(id: UUID(), occurredAt: .now, value: second),
+        .relation(id: UUID(), occurredAt: .now, value: relation),
+        .vector(id: UUID(), occurredAt: .now, nodeID: second.id, value: vector),
+    ])
+    let model = AppModel(
+        loop: ThoughtLoop(repository: repository, clarifier: SemanticUnusedClarifier()),
+        readModels: ThoughtReadModels(repository: repository),
+        semanticGraph: SemanticGraphLoop(repository: repository)
+    )
+
+    await model.refreshSemanticGraph()
+
+    #expect(model.semanticRelations == [relation])
+    #expect(model.semanticVectors == [second.id: vector])
+}

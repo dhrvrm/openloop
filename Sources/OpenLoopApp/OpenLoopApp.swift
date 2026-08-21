@@ -136,10 +136,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 directory: directory,
                 rootKeyData: rootKeyData
             )
+            let embeddingProvider = NaturalLanguageEmbeddingProvider()
             let recallLoop = RecallLoop(
                 source: recallSource,
                 indexStore: recallIndex,
-                embeddingProvider: NaturalLanguageEmbeddingProvider()
+                embeddingProvider: embeddingProvider
             )
             let workingMemory = WorkingMemoryCompiler(
                 source: recallSource,
@@ -158,7 +159,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                     repository: repository,
                     recallIndex: recallIndex
                 ),
-                semanticGraph: SemanticGraphLoop(repository: repository)
+                semanticGraph: SemanticGraphLoop(
+                    repository: repository,
+                    embeddingProvider: embeddingProvider
+                )
             )
             model.recoveryNotice = recoveredAfterUnexpectedExit
                 ? "OpenLoop recovered your saved work after an unexpected exit."
@@ -789,7 +793,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             keyEquivalent: " "
         )
         voiceItem.keyEquivalentModifierMask = [.control, .option]
-        menu.addItem(withTitle: "Live", action: #selector(showLive), keyEquivalent: "")
+        menu.addItem(withTitle: "Now", action: #selector(showLive), keyEquivalent: "")
         let pauseItem = menu.addItem(
             withTitle: "Pause",
             action: #selector(pauseOrContinue),

@@ -28,6 +28,46 @@ private func semanticEvidence(_ text: String, id: UUID = UUID()) throws -> Seman
     #expect(graph.nodes[node.id]?.evidence == [evidence])
 }
 
+@Test func semanticGraphPersistsValidatedVectorsThroughEventReplay() throws {
+    let node = try SemanticNode(
+        kind: .concept,
+        claim: "Local semantic memory",
+        confidence: 0.9,
+        status: .active,
+        evidence: [try semanticEvidence("Local semantic memory")]
+    )
+    let vector = try SemanticVector(
+        providerIdentifier: "fixture-v1",
+        values: [0.25, -0.5, 0.75],
+        createdAt: Date(timeIntervalSince1970: 20)
+    )
+    let events: [SemanticGraphEvent] = [
+        .node(id: UUID(), occurredAt: .now, value: node),
+        .vector(id: UUID(), occurredAt: .now, nodeID: node.id, value: vector),
+    ]
+
+    let graph = try SemanticGraph(events: events)
+
+    #expect(graph.vectors[node.id] == vector)
+    #expect(graph.history(for: node.id).count == 2)
+}
+
+@Test func semanticGraphRejectsInvalidOrUngroundedVectors() throws {
+    #expect(throws: SemanticGraphError.invalidVectorDimensions(2)) {
+        try SemanticVector(providerIdentifier: "fixture", values: [0, 1])
+    }
+    #expect(throws: SemanticGraphError.invalidVectorValue) {
+        try SemanticVector(providerIdentifier: "fixture", values: [0, .nan, 1])
+    }
+
+    let vector = try SemanticVector(providerIdentifier: "fixture", values: [0, 1, 2])
+    #expect(throws: SemanticGraphError.missingNode(UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)) {
+        var graph = try SemanticGraph()
+        let missingID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        try graph.apply(.vector(id: UUID(), occurredAt: .now, nodeID: missingID, value: vector))
+    }
+}
+
 @Test func supersessionKeepsOldBeliefAndQueryableHistory() throws {
     let old = try SemanticNode(
         kind: .decision,

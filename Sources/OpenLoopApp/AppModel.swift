@@ -46,6 +46,8 @@ final class AppModel: ObservableObject {
     @Published var isAdvancedModeEnabled: Bool
     @Published var meetingLanguagePreference: MeetingLanguagePreference
     @Published var semanticNodes: [SemanticNode] = []
+    @Published var semanticRelations: [SemanticRelation] = []
+    @Published var semanticVectors: [UUID: SemanticVector] = [:]
     @Published var emergingThreads: [SemanticThread] = []
     @Published var unresolvedSemanticNodes: [SemanticNode] = []
     @Published var semanticQuery = ""
@@ -169,7 +171,7 @@ final class AppModel: ObservableObject {
             if shouldDeliverCurrentRecording {
                 Task { await meetingController.toggleRecording() }
             } else {
-                commandError = "A meeting recording is already active. Stop it from Live before dictating."
+                commandError = "A meeting recording is already active. Stop it from Now before dictating."
             }
             return
         }
@@ -421,6 +423,16 @@ final class AppModel: ObservableObject {
             memoryRecords = try await workingMemory.compile()
         } catch {
             memoryError = "Working memory could not refresh. Existing evidence is unchanged."
+            return
+        }
+        if let semanticGraph {
+            do {
+                _ = try await semanticGraph.synchronize(memoryRecords: memoryRecords)
+                _ = try? await semanticGraph.enrichMissingVectors()
+                await refreshSemanticGraph()
+            } catch {
+                semanticError = "Memory is safe, but its graph projection is waiting to refresh."
+            }
         }
     }
 
@@ -464,6 +476,11 @@ final class AppModel: ObservableObject {
                 if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
                 return $0.id.uuidString < $1.id.uuidString
             }
+            semanticRelations = graph.relations.values.sorted {
+                if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
+                return $0.id.uuidString < $1.id.uuidString
+            }
+            semanticVectors = graph.vectors
             emergingThreads = try await semanticGraph.emerging()
             unresolvedSemanticNodes = try await semanticGraph.unresolved()
             semanticError = nil
@@ -622,8 +639,16 @@ final class AppModel: ObservableObject {
             isSaving = false
             if let semanticGraph {
                 do {
-                    _ = try await semanticGraph.recordObservation(capture: capture)
+                    let node = try await semanticGraph.recordObservation(capture: capture)
                     await refreshSemanticGraph()
+                    Task { [weak self] in
+                        guard let self else { return }
+                        _ = try? await semanticGraph.enrichVector(
+                            nodeID: node.id,
+                            text: node.claim
+                        )
+                        await self.refreshSemanticGraph()
+                    }
                 } catch {
                     semanticError = "Captured safely, but semantic context is waiting to refresh."
                 }
@@ -781,6 +806,20 @@ final class AppModel: ObservableObject {
         guard destination != index else { return true }
         var ids = openLoops.map(\.id)
         ids.swapAt(index, destination)
+        return await runThoughtCommand {
+            try await self.loop.reorderOpenIntentions(ids)
+        }
+    }
+
+    @discardableResult
+    func moveOpenLoop(_ intentionID: UUID, before targetID: UUID) async -> Bool {
+        guard intentionID != targetID,
+              let sourceIndex = openLoops.firstIndex(where: { $0.id == intentionID }),
+              openLoops.contains(where: { $0.id == targetID }) else { return false }
+        var ids = openLoops.map(\.id)
+        let movedID = ids.remove(at: sourceIndex)
+        guard let targetIndex = ids.firstIndex(of: targetID) else { return false }
+        ids.insert(movedID, at: targetIndex)
         return await runThoughtCommand {
             try await self.loop.reorderOpenIntentions(ids)
         }

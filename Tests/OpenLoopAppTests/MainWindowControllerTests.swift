@@ -131,6 +131,7 @@ private actor EnabledWindowContextTrail: ContextTrailProviding {
     )
     await model.refreshContextTrail()
     let controller = MainWindowController(model: model)
+    #expect(controller.contentSizeForTesting.width == 980)
 
     controller.show(tab: 0)
     await Task.yield()

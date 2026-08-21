@@ -20,6 +20,34 @@ public enum SemanticGraphError: Error, Equatable {
     case missingNode(UUID)
     case selfRelation
     case duplicateEvent(UUID)
+    case invalidVectorDimensions(Int)
+    case invalidVectorValue
+}
+
+public struct SemanticVector: Codable, Equatable, Sendable {
+    public static let minimumDimensions = 3
+    public static let maximumDimensions = 4_096
+
+    public let providerIdentifier: String
+    public let values: [Double]
+    public let createdAt: Date
+
+    public init(
+        providerIdentifier: String,
+        values: [Double],
+        createdAt: Date = .now
+    ) throws {
+        let identifier = providerIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !identifier.isEmpty, values.allSatisfy(\.isFinite) else {
+            throw SemanticGraphError.invalidVectorValue
+        }
+        guard (Self.minimumDimensions...Self.maximumDimensions).contains(values.count) else {
+            throw SemanticGraphError.invalidVectorDimensions(values.count)
+        }
+        self.providerIdentifier = identifier
+        self.values = values
+        self.createdAt = createdAt
+    }
 }
 
 public struct SemanticEvidence: Codable, Equatable, Sendable {
@@ -119,10 +147,15 @@ public enum SemanticGraphEvent: Codable, Equatable, Identifiable, Sendable {
     case node(id: UUID, occurredAt: Date, value: SemanticNode)
     case relation(id: UUID, occurredAt: Date, value: SemanticRelation)
     case supersession(id: UUID, occurredAt: Date, oldID: UUID, newID: UUID)
+    case vector(id: UUID, occurredAt: Date, nodeID: UUID, value: SemanticVector)
 
     public var id: UUID {
         switch self {
-        case .node(let id, _, _), .relation(let id, _, _), .supersession(let id, _, _, _): id
+        case .node(let id, _, _),
+             .relation(let id, _, _),
+             .supersession(let id, _, _, _),
+             .vector(let id, _, _, _):
+            id
         }
     }
 
@@ -130,7 +163,8 @@ public enum SemanticGraphEvent: Codable, Equatable, Identifiable, Sendable {
         switch self {
         case .node(_, let occurredAt, _),
              .relation(_, let occurredAt, _),
-             .supersession(_, let occurredAt, _, _):
+             .supersession(_, let occurredAt, _, _),
+             .vector(_, let occurredAt, _, _):
             occurredAt
         }
     }
@@ -140,11 +174,13 @@ public struct SemanticGraph: Codable, Equatable, Sendable {
     public private(set) var events: [SemanticGraphEvent]
     public private(set) var nodes: [UUID: SemanticNode]
     public private(set) var relations: [UUID: SemanticRelation]
+    public private(set) var vectors: [UUID: SemanticVector]
 
     public init(events: [SemanticGraphEvent] = []) throws {
         self.events = []
         nodes = [:]
         relations = [:]
+        vectors = [:]
         for event in events { try apply(event) }
     }
 
@@ -170,6 +206,9 @@ public struct SemanticGraph: Codable, Equatable, Sendable {
                 confidence: 1
             )
             relations[relation.id] = relation
+        case .vector(_, _, let nodeID, let value):
+            guard nodes[nodeID] != nil else { throw SemanticGraphError.missingNode(nodeID) }
+            vectors[nodeID] = value
         }
         events.append(event)
     }
@@ -182,6 +221,8 @@ public struct SemanticGraph: Codable, Equatable, Sendable {
                 relation.sourceID == nodeID || relation.targetID == nodeID
             case .supersession(_, _, let oldID, let newID):
                 oldID == nodeID || newID == nodeID
+            case .vector(_, _, let vectorNodeID, _):
+                vectorNodeID == nodeID
             }
         }
     }

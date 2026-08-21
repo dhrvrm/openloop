@@ -19,6 +19,18 @@ private actor SemanticLoopRepository: ThoughtRepository {
     func semanticGraphEvents() async throws -> [SemanticGraphEvent] { events }
 }
 
+private struct SemanticFixtureEmbeddings: EmbeddingProvider {
+    let values: [String: [Double]]
+    var identifier: String { get async { "semantic-fixture-v1" } }
+
+    func vectors(for texts: [String]) async throws -> [[Double]] {
+        try texts.map { text in
+            guard let vector = values[text] else { throw RecallError.embeddingUnavailable }
+            return vector
+        }
+    }
+}
+
 @Test func semanticGraphLoopRecordsGroundedObservationWithoutInventingAnAction() async throws {
     let repository = SemanticLoopRepository()
     let loop = SemanticGraphLoop(repository: repository)
@@ -60,4 +72,29 @@ private actor SemanticLoopRepository: ThoughtRepository {
 
     #expect(try await loop.unresolved() == [problem])
     #expect(try await loop.ask("checkout performance") == [problem])
+}
+
+@Test func semanticGraphLoopStoresVectorsAndGroundedSimilarityRelations() async throws {
+    let repository = SemanticLoopRepository()
+    let firstText = "Checkout performance after PostHog"
+    let secondText = "Investigate checkout performance"
+    let loop = SemanticGraphLoop(
+        repository: repository,
+        embeddingProvider: SemanticFixtureEmbeddings(values: [
+            firstText: [1, 0, 0],
+            secondText: [0.9, 0.1, 0],
+        ])
+    )
+    let first = try await loop.recordObservation(capture: RawCapture(text: firstText))
+    let second = try await loop.recordObservation(capture: RawCapture(text: secondText))
+
+    _ = try await loop.enrichVector(nodeID: first.id, text: first.claim)
+    _ = try await loop.enrichVector(nodeID: second.id, text: second.claim)
+    let graph = try await loop.graph()
+
+    #expect(graph.vectors.count == 2)
+    #expect(graph.relations.values.contains {
+        $0.kind == .relatesTo
+            && Set([$0.sourceID, $0.targetID]) == Set([first.id, second.id])
+    })
 }

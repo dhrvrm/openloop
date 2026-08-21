@@ -3,33 +3,21 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct WorkspaceDestination: Equatable, Sendable {
-    let title: String
-    let icon: String
-}
-
-enum WorkspaceOrientation {
-    static let destinations = [
-        WorkspaceDestination(title: "Live", icon: "waveform.circle"),
-        WorkspaceDestination(title: "Context", icon: "point.3.connected.trianglepath.dotted"),
-        WorkspaceDestination(title: "Emerging", icon: "sparkles"),
-        WorkspaceDestination(title: "Ask", icon: "text.magnifyingglass"),
-        WorkspaceDestination(title: "Act", icon: "bolt.circle"),
-    ]
-    static let quickCaptureShortcut = "⌘⇧Space  Quick Capture"
-    static let voiceCaptureShortcut = "⌃⌥Space  Dictate & insert"
-    static let emptyCaptureGuidance = "Type above or press Command-Shift-Space from anywhere."
+private enum ContextPresentation: String, CaseIterable {
+    case list = "List"
+    case space = "Space"
 }
 
 private struct MainView: View {
     @ObservedObject var model: AppModel
-    @State var selection = 0
+    @State var selection: WorkspaceDestination.ID = .now
     @State private var interruptionItem: NowItem?
     @State private var memoryHistoryExpanded = false
     @State private var quickAddText = ""
     @State private var privacyExpanded = false
     @State private var confirmingReset = false
     @State private var actSection = 0
+    @State private var contextPresentation = ContextPresentation.space
     @FocusState private var recallFieldFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -40,33 +28,40 @@ private struct MainView: View {
                 workspaceSidebar
                 Divider().opacity(0.55)
                 selectedSurface
-                    .padding(.horizontal, 30)
-                    .padding(.vertical, 27)
+                    .padding(.horizontal, 38)
+                    .padding(.vertical, 32)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                if model.isAdvancedModeEnabled {
-                    Divider().opacity(0.55)
-                    AdvancedInspector(
-                        model: model,
-                        selectedDestination: WorkspaceOrientation.destinations[selection]
-                    )
-                    .frame(width: 310)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-                }
             }
         }
-        .frame(minWidth: model.isAdvancedModeEnabled ? 1120 : 820, minHeight: 600)
+        .frame(minWidth: 760, minHeight: 560)
         .tint(OpenLoopVisualSystem.accent)
+        .inspector(
+            isPresented: Binding(
+                get: { model.isAdvancedModeEnabled },
+                set: { model.setAdvancedModeEnabled($0) }
+            )
+        ) {
+            AdvancedInspector(
+                model: model,
+                selectedDestination: WorkspaceOrientation.destination(selection)
+            )
+            .inspectorColumnWidth(
+                min: 310,
+                ideal: OpenLoopVisualSystem.inspectorIdealWidth,
+                max: 410
+            )
+        }
         .animation(
             reduceMotion ? nil : .easeInOut(duration: 0.22),
             value: model.isAdvancedModeEnabled
         )
         .task { await model.refresh() }
         .onChange(of: selection) { _, tab in
-            if tab == 3 {
+            if tab == .ask {
                 recallFieldFocused = true
             }
-            if tab == 1 { Task { await model.refreshMemory() } }
-            if tab == 1 || tab == 2 || tab == 3 {
+            if tab == .context { Task { await model.refreshMemory() } }
+            if tab == .context || tab == .emerging || tab == .ask {
                 Task { await model.refreshSemanticGraph() }
             }
         }
@@ -89,16 +84,19 @@ private struct MainView: View {
 
     @ViewBuilder private var selectedSurface: some View {
         switch selection {
-        case 1: contextView
-        case 2: emergingView
-        case 3: askView
-        case 4: actView
-        default: nowView
+        case .context: contextView
+        case .emerging: emergingView
+        case .ask: askView
+        case .act: actView
+        case .inbox: inboxView
+        case .later: laterView
+        case .return: returnView
+        case .now: nowView
         }
     }
 
     private var workspaceSidebar: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 26) {
             HStack(spacing: 11) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -117,32 +115,40 @@ private struct MainView: View {
                 }
             }
 
-            VStack(spacing: 5) {
-                ForEach(Array(WorkspaceOrientation.destinations.enumerated()), id: \.offset) { index, destination in
-                    WorkspaceSidebarButton(
-                        title: destination.title,
-                        icon: destination.icon,
-                        count: sidebarCount(for: index),
-                        isSelected: selection == index
-                    ) { selection = index }
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(WorkspaceOrientation.sections) { section in
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(section.title)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 10)
+                        ForEach(section.destinations) { destination in
+                            WorkspaceSidebarButton(
+                                title: destination.title,
+                                icon: destination.icon,
+                                count: sidebarCount(for: destination.id),
+                                isSelected: selection == destination.id
+                            ) { selection = destination.id }
+                        }
+                    }
                 }
             }
 
             Spacer()
 
-            VStack(alignment: .leading, spacing: 12) {
-                Toggle(
-                    isOn: Binding(
-                        get: { model.isAdvancedModeEnabled },
-                        set: { model.setAdvancedModeEnabled($0) }
-                    )
-                ) {
+            VStack(alignment: .leading, spacing: 11) {
+                Button {
+                    model.setAdvancedModeEnabled(!model.isAdvancedModeEnabled)
+                } label: {
                     Label("Advanced", systemImage: "slider.horizontal.3")
-                        .font(.callout.weight(.medium))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
-                .toggleStyle(.switch)
-                .controlSize(.mini)
+                .buttonStyle(.plain)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(model.isAdvancedModeEnabled ? OpenLoopVisualSystem.accent : .secondary)
                 .help("Show the local engine, pipeline, storage, and recent activity")
+                .accessibilityValue(model.isAdvancedModeEnabled ? "Shown" : "Hidden")
 
                 Divider()
                 Label(WorkspaceOrientation.quickCaptureShortcut, systemImage: "keyboard")
@@ -151,18 +157,23 @@ private struct MainView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
         }
-        .padding(20)
-        .frame(width: 218)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 20)
+        .frame(width: OpenLoopVisualSystem.sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(OpenLoopVisualSystem.sidebar)
     }
 
-    private func sidebarCount(for destination: Int) -> Int? {
+    private func sidebarCount(for destination: WorkspaceDestination.ID) -> Int? {
         let count = switch destination {
-        case 1: model.semanticNodes.count
-        case 2: model.emergingThreads.count + model.unresolvedSemanticNodes.count
-        case 4: model.openLoops.count + model.returns.count + model.reviewItems.count
-        default: 0
+        case .now: model.openLoops.filter { $0.state == .open }.count
+        case .inbox: model.reviewItems.filter(\.needsDecision).count
+        case .later: model.reviewItems.filter { !$0.needsDecision }.count
+        case .return: model.returns.count
+        case .context: model.semanticNodes.count
+        case .emerging: model.emergingThreads.count + model.unresolvedSemanticNodes.count
+        case .act: model.openLoops.count + model.returns.count
+        case .ask: 0
         }
         return count == 0 ? nil : count
     }
@@ -178,9 +189,9 @@ private struct MainView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
                 ScreenHeader(
-                    eyebrow: "VOICE + CAPTURE",
-                    title: "Live",
-                    detail: "Speak, import a meeting, or capture a thought. Processing stays visible and local."
+                    eyebrow: "Focus",
+                    title: "Now",
+                    detail: "Choose one visible next move. Everything else can wait safely."
                 )
 
                 if let notice = model.recoveryNotice {
@@ -267,8 +278,7 @@ private struct MainView: View {
                 Divider()
             }
         }
-        .padding(18)
-        .openLoopPanel()
+        .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
     }
 
     private func currentIntention(_ item: NowItem) -> some View {
@@ -428,15 +438,47 @@ private struct MainView: View {
         }
     }
 
-    private var laterView: some View {
+    private var inboxView: some View {
         let needsDecision = model.reviewItems.filter(\.needsDecision)
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: 28) {
+                ScreenHeader(
+                    eyebrow: "Capture",
+                    title: "Inbox",
+                    detail: "Unsorted thoughts and recordings wait here until their meaning is clear."
+                )
+                QuickAddComposer(model: model, text: $quickAddText) {
+                    let captured = await model.submitCapture(quickAddText)
+                    if captured { quickAddText = "" }
+                }
+                if needsDecision.isEmpty {
+                    ContentUnavailableView(
+                        "Inbox is clear",
+                        systemImage: "tray",
+                        description: Text("New captures appear here before you place or release them.")
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 280)
+                } else {
+                    reviewSection(
+                        title: "Needs a decision",
+                        detail: "Nothing is promoted into your work without your choice.",
+                        items: needsDecision
+                    )
+                }
+            }
+            .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
+            .padding(.bottom, 20)
+        }
+    }
+
+    private var laterView: some View {
         let heldSafely = model.reviewItems.filter { $0.needsDecision == false }
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 26) {
                 ScreenHeader(
-                    eyebrow: "DECIDE",
+                    eyebrow: "Focus",
                     title: "Later",
-                    detail: "Clarify, edit, order, finish, or release. Nothing here is overdue."
+                    detail: "Available work and retained thoughts with no current commitment."
                 )
 
                 if let error = model.reviewError {
@@ -445,31 +487,22 @@ private struct MainView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                if model.reviewItems.isEmpty {
+                if heldSafely.isEmpty {
                 ContentUnavailableView(
-                    "Nothing stored yet",
-                    systemImage: "tray",
-                        description: Text("Captures you want to decide on or hold safely will appear here.")
+                    "Nothing waiting",
+                    systemImage: "archivebox",
+                        description: Text("Move work here when it matters, but not right now.")
                 )
                     .frame(maxWidth: .infinity, minHeight: 300)
                 } else {
-                    if needsDecision.isEmpty == false {
-                        reviewSection(
-                            title: "Needs a decision",
-                            detail: "OpenLoop left these unforced. Choose only when the meaning is clear.",
-                            items: needsDecision
-                        )
-                    }
-                    if heldSafely.isEmpty == false {
-                        reviewSection(
-                            title: "Held safely",
-                            detail: "Actions, memories, and later thoughts stay editable until work begins.",
-                            items: heldSafely
-                        )
-                    }
+                    reviewSection(
+                        title: "Held safely",
+                        detail: "These remain editable until you bring them into Now.",
+                        items: heldSafely
+                    )
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
             .padding(.bottom, 16)
         }
     }
@@ -631,10 +664,17 @@ private struct MainView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
                 ScreenHeader(
-                    eyebrow: "UNDERSTANDING",
+                    eyebrow: "Understanding",
                     title: "Context",
                     detail: "Evidence-grounded observations, concepts, people, projects, and decisions."
                 )
+                Picker("Context presentation", selection: $contextPresentation) {
+                    ForEach(ContextPresentation.allCases, id: \.self) { presentation in
+                        Text(presentation.rawValue).tag(presentation)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 168)
                 if model.isRefreshingSemanticGraph {
                     ProgressView("Rebuilding context locally…")
                         .frame(maxWidth: .infinity, minHeight: 180)
@@ -648,18 +688,25 @@ private struct MainView: View {
                     ContentUnavailableView(
                         "No semantic context yet",
                         systemImage: "point.3.connected.trianglepath.dotted",
-                        description: Text("Capture naturally in Live. OpenLoop will preserve the evidence before deriving meaning.")
+                        description: Text("Capture naturally in Now or Inbox. OpenLoop preserves evidence before deriving meaning.")
                     )
                     .frame(maxWidth: .infinity, minHeight: 260)
                 } else {
-                    LazyVStack(spacing: 0) {
-                        ForEach(model.semanticNodes) { node in
-                            SemanticNodeRow(node: node, showEvidence: true)
-                            Divider()
+                    if contextPresentation == .space {
+                        SemanticGraph3DView(
+                            nodes: model.semanticNodes,
+                            relations: model.semanticRelations,
+                            vectors: model.semanticVectors
+                        )
+                    } else {
+                        LazyVStack(spacing: 0) {
+                            ForEach(model.semanticNodes) { node in
+                                SemanticNodeRow(node: node, showEvidence: true)
+                                Divider()
+                            }
                         }
+                        .padding(.horizontal, 14)
                     }
-                    .padding(.horizontal, 14)
-                    .openLoopPanel()
                 }
                 workingMemorySection
             }
@@ -959,11 +1006,11 @@ private struct ScreenHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(eyebrow)
-                .font(.caption2.monospaced().weight(.semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(OpenLoopVisualSystem.accent)
             Text(title)
-                .font(.system(size: 34, weight: .semibold, design: .rounded))
-                .tracking(-0.7)
+                .font(.system(size: 34, weight: .semibold))
+                .tracking(-0.85)
             Text(detail)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -995,20 +1042,12 @@ private struct WorkspaceSidebarButton: View {
                 }
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 9)
+            .frame(minHeight: OpenLoopVisualSystem.compactRowMinimumHeight)
             .contentShape(Rectangle())
             .background(
                 isSelected ? OpenLoopVisualSystem.accentSoft : Color.clear,
                 in: RoundedRectangle(cornerRadius: 9, style: .continuous)
             )
-            .overlay(alignment: .leading) {
-                if isSelected {
-                    Capsule()
-                        .fill(OpenLoopVisualSystem.accent)
-                        .frame(width: 3, height: 18)
-                        .offset(x: -1)
-                }
-            }
         }
         .buttonStyle(.plain)
     }
@@ -1044,18 +1083,18 @@ private struct QuickAddComposer: View {
                     .font(.caption2.monospaced().weight(.medium))
                     .foregroundStyle(.tertiary)
             }
+            TextField("What should OpenLoop hold for you?", text: $text)
+                .textFieldStyle(.plain)
+                .font(.title3.weight(.medium))
+                .padding(.horizontal, 13)
+                .frame(height: 44)
+                .background(.background.opacity(0.72), in: RoundedRectangle(cornerRadius: 9))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 9)
+                        .stroke(OpenLoopVisualSystem.hairline, lineWidth: 1)
+                }
+                .onSubmit { Task { await submit() } }
             HStack(alignment: .center, spacing: 10) {
-                TextField("What should OpenLoop hold for you?", text: $text)
-                    .textFieldStyle(.plain)
-                    .font(.title3.weight(.medium))
-                    .padding(.horizontal, 13)
-                    .frame(height: 42)
-                    .background(.background.opacity(0.72), in: RoundedRectangle(cornerRadius: 10))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(OpenLoopVisualSystem.hairline, lineWidth: 1)
-                    }
-                    .onSubmit { Task { await submit() } }
                 Button(isSaving ? "Saving…" : "Capture") {
                     Task { await submit() }
                 }
@@ -1072,7 +1111,11 @@ private struct QuickAddComposer: View {
                     )
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(model.meetingJob.stage == .recording ? .red : OpenLoopVisualSystem.accent)
+                .tint(
+                    model.meetingJob.stage == .recording
+                        ? OpenLoopVisualSystem.recording
+                        : OpenLoopVisualSystem.accent
+                )
                 .disabled(
                     model.isSystemDictationActive
                         || (model.meetingJob.isActive && model.meetingJob.stage != .recording)
@@ -1090,7 +1133,11 @@ private struct QuickAddComposer: View {
                     )
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(model.isSystemDictationActive ? .red : OpenLoopVisualSystem.accent)
+                .tint(
+                    model.isSystemDictationActive
+                        ? OpenLoopVisualSystem.recording
+                        : OpenLoopVisualSystem.accent
+                )
                 .disabled(
                     model.meetingJob.isActive
                         && !(model.isSystemDictationActive && model.meetingJob.stage == .recording)
@@ -1130,8 +1177,8 @@ private struct QuickAddComposer: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(17)
-        .openLoopPanel(emphasized: model.meetingJob.isActive)
+        .padding(.vertical, 6)
+        .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
     }
 
     private var isSaving: Bool { model.isSaving }
@@ -1866,6 +1913,7 @@ private struct StatusBanner: View {
 private struct ReadyTaskRow: View {
     @ObservedObject var model: AppModel
     let item: OpenLoopItem
+    @State private var isDropTarget = false
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
@@ -1878,7 +1926,8 @@ private struct ReadyTaskRow: View {
             }
             Spacer(minLength: 14)
             Button("Start") { Task { await model.startFocus(item.id) } }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.borderless)
+                .foregroundStyle(OpenLoopVisualSystem.accent)
             Menu {
                 Button("Move up") { Task { await model.moveOpenLoop(item.id, by: -1) } }
                 Button("Move down") { Task { await model.moveOpenLoop(item.id, by: 1) } }
@@ -1892,6 +1941,33 @@ private struct ReadyTaskRow: View {
             .frame(width: 24)
         }
         .padding(.vertical, 13)
+        .padding(.horizontal, 8)
+        .frame(minHeight: OpenLoopVisualSystem.taskRowMinimumHeight)
+        .contentShape(Rectangle())
+        .background(
+            isDropTarget ? OpenLoopVisualSystem.accentSoft : Color.clear,
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .draggable(item.id.uuidString) {
+            Label(item.desiredOutcome, systemImage: "circle")
+                .padding(10)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 9))
+        }
+        .dropDestination(for: String.self) { values, _ in
+            guard let value = values.first,
+                  let sourceID = UUID(uuidString: value),
+                  sourceID != item.id else { return false }
+            Task { await model.moveOpenLoop(sourceID, before: item.id) }
+            return true
+        } isTargeted: { targeted in
+            isDropTarget = targeted
+        }
+        .accessibilityAction(named: "Move up") {
+            Task { await model.moveOpenLoop(item.id, by: -1) }
+        }
+        .accessibilityAction(named: "Move down") {
+            Task { await model.moveOpenLoop(item.id, by: 1) }
+        }
     }
 }
 
@@ -2561,7 +2637,7 @@ final class MainWindowController {
         window = NSWindow(contentViewController: hostingController)
         window.title = "OpenLoop ADHD"
         window.setContentSize(NSSize(
-            width: model.isAdvancedModeEnabled ? 1240 : 980,
+            width: 980,
             height: 720
         ))
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
@@ -2569,11 +2645,15 @@ final class MainWindowController {
     }
 
     func show(tab: Int) {
-        let selectedTab = WorkspaceOrientation.destinations.indices.contains(tab) ? tab : 0
-        selectedTabForTesting = selectedTab
-        hostingController.rootView = MainView(model: model, selection: selectedTab)
-        if selectedTab == 1 || selectedTab == 3 { Task { await model.refreshMemory() } }
-        if selectedTab == 1 || selectedTab == 2 || selectedTab == 3 {
+        let selectedDestination = WorkspaceOrientation.destination(atLegacyTab: tab)
+        selectedTabForTesting = WorkspaceOrientation.legacyTabOrder.firstIndex(of: selectedDestination) ?? 0
+        hostingController.rootView = MainView(model: model, selection: selectedDestination)
+        if selectedDestination == .context || selectedDestination == .ask {
+            Task { await model.refreshMemory() }
+        }
+        if selectedDestination == .context
+            || selectedDestination == .emerging
+            || selectedDestination == .ask {
             Task { await model.refreshSemanticGraph() }
         }
         window.center()
@@ -2583,6 +2663,7 @@ final class MainWindowController {
 
     var isVisibleForTesting: Bool { window.isVisible }
     var windowNumberForTesting: Int { window.windowNumber }
+    var contentSizeForTesting: NSSize { window.contentRect(forFrameRect: window.frame).size }
 
     func closeForTesting() {
         window.close()

@@ -226,6 +226,16 @@ struct AdvancedInspector: View {
                     value: model.meetingEngineDiagnostics.processingLocation
                 )
                 Divider()
+                InspectorFact(
+                    label: "Memory graph",
+                    value: "\(model.semanticNodes.count) nodes · \(model.semanticRelations.count) relations"
+                )
+                Divider()
+                InspectorFact(
+                    label: "Stored vectors",
+                    value: "\(model.semanticVectors.count) local embeddings"
+                )
+                Divider()
                 Toggle(
                     "Use active-app context",
                     isOn: Binding(
