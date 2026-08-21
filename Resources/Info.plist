@@ -27,6 +27,6 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>OpenLoop records audio you start, transcribes it with a local multilingual model, then removes the temporary recording after the encrypted transcript is saved.</string>
+	<string>OpenLoop records audio you start and transcribes it with a local multilingual model. Source audio stays on this Mac for retry until you delete it or remove all OpenLoop data.</string>
 </dict>
 </plist>

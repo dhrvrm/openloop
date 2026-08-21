@@ -100,10 +100,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             let service = ProcessInfo.processInfo.environment["OPENLOOP_KEYCHAIN_SERVICE"]
                 ?? "dev.openloop.adhd.vault"
             let keychainProvider = KeychainVaultKeyProvider(service: service)
+            let localKeyURL = directory.appendingPathComponent("root-key.local")
             let keyProvider: any VaultKeyProvider
             if Bundle.main.object(forInfoDictionaryKey: "OpenLoopLocalDevelopmentBuild") as? Bool
                 == true {
-                let localKeyURL = directory.appendingPathComponent("root-key.local")
                 let vaultURL = directory.appendingPathComponent("openloop.vault")
                 guard FileManager.default.fileExists(atPath: localKeyURL.path)
                         || !FileManager.default.fileExists(atPath: vaultURL.path) else {
@@ -111,7 +111,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 }
                 keyProvider = LocalFileVaultKeyProvider(fileURL: localKeyURL)
             } else {
-                keyProvider = keychainProvider
+                keyProvider = MigratingLocalVaultKeyProvider(
+                    fileURL: localKeyURL,
+                    fallback: keychainProvider
+                )
             }
             let rootKeyData = try keyProvider.loadOrCreateKey()
             let repository = try EncryptedThoughtRepository(
@@ -157,7 +160,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 contextTrail: contextTrailLoop,
                 privacyManager: LocalPrivacyManager(
                     repository: repository,
-                    recallIndex: recallIndex
+                    recallIndex: recallIndex,
+                    managedDirectories: [
+                        directory.appendingPathComponent("Meeting Staging", isDirectory: true),
+                        directory.appendingPathComponent("Models", isDirectory: true),
+                    ]
                 ),
                 semanticGraph: SemanticGraphLoop(
                     repository: repository,

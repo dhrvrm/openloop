@@ -85,6 +85,35 @@ private func encryptedSemanticGraphFixture() throws -> [SemanticGraphEvent] {
     #expect(try reopened.loadOrCreateKey() == fixedKey)
 }
 
+@Test func developmentVaultReopensThroughReleaseMigrationProvider() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let keyFileURL = directory.appendingPathComponent("root-key.local")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try fixedKey.write(to: keyFileURL, options: .atomic)
+    try FileManager.default.setAttributes(
+        [.posixPermissions: NSNumber(value: 0o600)],
+        ofItemAtPath: keyFileURL.path
+    )
+    let capture = try RawCapture(
+        createdAt: Date(timeIntervalSince1970: 100),
+        text: "development vault survives release migration"
+    )
+    let development = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    try await development.save(capture: capture)
+
+    let releaseProvider = MigratingLocalVaultKeyProvider(
+        fileURL: keyFileURL,
+        fallback: FailingTestKeyProvider()
+    )
+    let release = try EncryptedThoughtRepository(
+        directory: directory,
+        keyData: releaseProvider.loadOrCreateKey()
+    )
+
+    #expect(try await release.allCaptures() == [capture])
+}
+
 @Test func localFileKeyCreatesAndReopensWithoutAKeychainFallback() throws {
     let directory = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }

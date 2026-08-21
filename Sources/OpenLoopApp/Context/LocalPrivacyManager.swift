@@ -14,10 +14,16 @@ protocol PrivacyManaging: Sendable {
 actor LocalPrivacyManager: PrivacyManaging {
     private let repository: EncryptedThoughtRepository
     private let recallIndex: EncryptedRecallIndexStore
+    private let managedDirectories: [URL]
 
-    init(repository: EncryptedThoughtRepository, recallIndex: EncryptedRecallIndexStore) {
+    init(
+        repository: EncryptedThoughtRepository,
+        recallIndex: EncryptedRecallIndexStore,
+        managedDirectories: [URL] = []
+    ) {
         self.repository = repository
         self.recallIndex = recallIndex
+        self.managedDirectories = managedDirectories
     }
 
     func summary() async throws -> PrivacyDataSummary {
@@ -44,5 +50,8 @@ actor LocalPrivacyManager: PrivacyManaging {
     func resetAllData() async throws {
         try await repository.resetAllData()
         try await recallIndex.discard()
+        for directory in managedDirectories where FileManager.default.fileExists(atPath: directory.path) {
+            try FileManager.default.removeItem(at: directory)
+        }
     }
 }
