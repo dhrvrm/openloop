@@ -14,6 +14,7 @@ struct AdvancedInspector: View {
             VStack(alignment: .leading, spacing: 20) {
                 inspectorHeader
                 liveStatus
+                runtimeTrace
                 pipeline
                 engineFacts
                 recentEvents
@@ -23,6 +24,50 @@ struct AdvancedInspector: View {
         .scrollIndicators(.hidden)
         .background(.ultraThinMaterial)
         .accessibilityLabel("Advanced system inspector")
+    }
+
+    private var runtime: AdvancedRuntimeProjection {
+        AdvancedRuntimeProjection.project(
+            job: model.meetingJob,
+            recordingDecibels: model.recordingDecibels,
+            transcripts: model.meetingTranscripts,
+            diagnostics: model.meetingEngineDiagnostics
+        )
+    }
+
+    private var runtimeTrace: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            sectionLabel("LIVE DECISION TRACE", icon: "waveform.path.ecg")
+            VStack(spacing: 0) {
+                InspectorFact(label: "Audio signal", value: runtime.audioSignal)
+                Divider()
+                InspectorFact(label: "VAD", value: runtime.vadState)
+                Divider()
+                InspectorFact(label: "Recognizer", value: runtime.activeRecognizer)
+                Divider()
+                InspectorFact(label: "Fusion", value: runtime.fusionStatus)
+                Divider()
+                InspectorFact(label: "Editor", value: runtime.editorRoute)
+                Divider()
+                InspectorFact(label: "Output", value: runtime.outputRoute)
+            }
+            .padding(.horizontal, 12)
+            .openLoopPanel(emphasized: model.meetingJob.isActive)
+
+            if runtime.unstableText != "None" {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("UNSTABLE / LIVE")
+                        .font(.caption2.monospaced().weight(.semibold))
+                        .foregroundStyle(.orange)
+                    Text(runtime.unstableText)
+                        .font(.caption)
+                        .lineLimit(5)
+                        .textSelection(.enabled)
+                }
+                .padding(12)
+                .openLoopPanel()
+            }
+        }
     }
 
     private var inspectorHeader: some View {
@@ -316,7 +361,7 @@ private struct InspectorLanguageControl: View {
                 .disabled(model.meetingJob.isActive)
             }
             Text(model.meetingLanguagePreference == .automatic
-                ? "Whisper detects the spoken language from each recording."
+                ? "The active recognizer detects spoken language from each recording."
                 : "Temporary override for this app session.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)

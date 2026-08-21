@@ -173,6 +173,47 @@ struct MeetingEngineDiagnostics: Equatable, Sendable {
     )
 }
 
+struct AdvancedRuntimeProjection: Equatable, Sendable {
+    let audioSignal: String
+    let vadState: String
+    let stableText: String
+    let unstableText: String
+    let activeRecognizer: String
+    let fusionStatus: String
+    let editorRoute: String
+    let outputRoute: String
+
+    static func project(
+        job: MeetingJobPresentation,
+        recordingDecibels: Float?,
+        transcripts: [MeetingTranscript],
+        diagnostics: MeetingEngineDiagnostics
+    ) -> AdvancedRuntimeProjection {
+        let latest = transcripts.max { $0.createdAt < $1.createdAt }
+        let reviewCount = latest?.fusionEvidence?.reviewSpans.count ?? 0
+        let isRecording = job.stage == .recording
+        let decibelText = recordingDecibels.map { String(format: "%.0f dB", $0) } ?? "No live frame"
+        let vad = if isRecording {
+            if let recordingDecibels, recordingDecibels >= -45 { "Speech" } else { "Listening" }
+        } else {
+            "Idle"
+        }
+        let unstable = job.isActive ? (job.previewText ?? "Waiting for first partial") : "None"
+        return AdvancedRuntimeProjection(
+            audioSignal: decibelText,
+            vadState: vad,
+            stableText: latest?.text ?? "None yet",
+            unstableText: unstable,
+            activeRecognizer: diagnostics.transcriptionModel,
+            fusionStatus: reviewCount == 0
+                ? "No unresolved recognizer disagreement"
+                : "\(reviewCount) span\(reviewCount == 1 ? "" : "s") need review",
+            editorRoute: "Raw evidence preserved",
+            outputRoute: job.stage == .saving ? "Encrypted vault · writing" : "Encrypted vault"
+        )
+    }
+}
+
 struct MeetingPipelineEvent: Identifiable, Equatable, Sendable {
     let id: UUID
     let occurredAt: Date
