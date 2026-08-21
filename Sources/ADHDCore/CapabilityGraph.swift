@@ -21,6 +21,8 @@ public struct ToolCapability: Codable, Equatable, Identifiable, Sendable {
     public let intents: Set<String>
     public let grantedPermission: CapabilityPermission
     public let risk: CapabilityRisk
+    public let inputSchema: [String: String]
+    public let isAvailable: Bool
 
     public init(
         id: String,
@@ -28,7 +30,9 @@ public struct ToolCapability: Codable, Equatable, Identifiable, Sendable {
         tool: String,
         intents: Set<String>,
         grantedPermission: CapabilityPermission,
-        risk: CapabilityRisk
+        risk: CapabilityRisk,
+        inputSchema: [String: String] = [:],
+        isAvailable: Bool = true
     ) {
         self.id = id
         self.server = server
@@ -36,6 +40,73 @@ public struct ToolCapability: Codable, Equatable, Identifiable, Sendable {
         self.intents = Set(intents.map { $0.lowercased() })
         self.grantedPermission = grantedPermission
         self.risk = risk
+        self.inputSchema = inputSchema
+        self.isAvailable = isAvailable
+    }
+
+    public func granting(_ permission: CapabilityPermission) -> ToolCapability {
+        ToolCapability(
+            id: id,
+            server: server,
+            tool: tool,
+            intents: intents,
+            grantedPermission: permission,
+            risk: risk,
+            inputSchema: inputSchema,
+            isAvailable: isAvailable
+        )
+    }
+}
+
+public struct CapabilityGrant: Codable, Equatable, Identifiable, Sendable {
+    public var id: String { capabilityID }
+    public let capabilityID: String
+    public let permission: CapabilityPermission
+    public let updatedAt: Date
+
+    public init(
+        capabilityID: String,
+        permission: CapabilityPermission,
+        updatedAt: Date = .now
+    ) {
+        self.capabilityID = capabilityID
+        self.permission = permission
+        self.updatedAt = updatedAt
+    }
+}
+
+public enum ToolActionStatus: String, Codable, Equatable, Sendable {
+    case proposed, confirmed, executing, succeeded, failed, cancelled
+}
+
+public struct ToolActionAuditRecord: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let actionID: UUID
+    public let capabilityID: String
+    public let intent: String
+    public let parameters: [String: String]
+    public let status: ToolActionStatus
+    public let message: String?
+    public let occurredAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        actionID: UUID,
+        capabilityID: String,
+        intent: String,
+        parameters: [String: String],
+        status: ToolActionStatus,
+        message: String? = nil,
+        occurredAt: Date = .now
+    ) {
+        self.id = id
+        self.actionID = actionID
+        self.capabilityID = capabilityID
+        self.intent = intent
+        self.parameters = parameters
+        self.status = status
+        self.message = message
+        self.occurredAt = occurredAt
     }
 }
 
@@ -59,6 +130,7 @@ public struct CapabilityGraph: Codable, Equatable, Sendable {
     ) -> [CapabilityRoute] {
         let terms = Self.terms(intent)
         return capabilities.compactMap { capability -> CapabilityRoute? in
+            guard capability.isAvailable else { return nil }
             guard capability.grantedPermission >= permission else { return nil }
             let score = terms.intersection(capability.intents).count
             // One generic token (for example only "github") is not enough to

@@ -176,6 +176,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 ? "OpenLoop recovered your saved work after an unexpected exit."
                 : nil
             model.capabilitySummary = .current()
+            let capabilityRegistry = CapabilityRegistry(repository: repository)
+            _ = try await capabilityRegistry.discover([])
+            model.attachCapabilityRuntime(
+                registry: capabilityRegistry,
+                repository: repository
+            )
             _ = try await DevelopmentStoreMigrator().migrateIfNeeded(
                 from: directory,
                 to: repository

@@ -64,6 +64,9 @@ final class AppModel: ObservableObject {
     @Published var isVoiceContextEnabled: Bool
     @Published private(set) var isSystemDictationActive = false
     @Published private(set) var lastIntentionMove: IntentionMove?
+    @Published private(set) var toolCapabilities: [ToolCapability] = []
+    @Published private(set) var toolActionAudit: [ToolActionAuditRecord] = []
+    @Published var capabilityRuntimeError: String?
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -93,6 +96,8 @@ final class AppModel: ObservableObject {
     private var dictationCoordinator: (any VoiceDictationCoordinating)?
     private var deliveredTranscriptID: UUID?
     private var semanticizedMeetingTranscriptIDs: Set<UUID> = []
+    private var capabilityRegistry: CapabilityRegistry?
+    private var actionRepository: (any ThoughtRepository)?
 
     init(
         loop: ThoughtLoop,
@@ -268,6 +273,39 @@ final class AppModel: ObservableObject {
         voiceQualityAuditor = auditor
         voiceQualityEngineIdentifier = engineIdentifier
         Task { await refreshVoiceQualityAudit() }
+    }
+
+    func attachCapabilityRuntime(
+        registry: CapabilityRegistry,
+        repository: any ThoughtRepository
+    ) {
+        capabilityRegistry = registry
+        actionRepository = repository
+        Task { await refreshCapabilityRuntime() }
+    }
+
+    func refreshCapabilityRuntime() async {
+        guard let capabilityRegistry, let actionRepository else { return }
+        toolCapabilities = await capabilityRegistry.values()
+        do {
+            toolActionAudit = try await actionRepository.toolActionAuditRecords().reversed()
+            capabilityRuntimeError = nil
+        } catch {
+            capabilityRuntimeError = "Tool history could not be read. No action was executed."
+        }
+    }
+
+    func grantCapability(
+        _ permission: CapabilityPermission,
+        capabilityID: String
+    ) async {
+        guard let capabilityRegistry else { return }
+        do {
+            _ = try await capabilityRegistry.grant(permission, capabilityID: capabilityID)
+            await refreshCapabilityRuntime()
+        } catch {
+            capabilityRuntimeError = "That permission change could not be saved."
+        }
     }
 
     func refreshVoiceQualityAudit() async {

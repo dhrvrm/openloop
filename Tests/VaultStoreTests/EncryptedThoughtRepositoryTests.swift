@@ -704,6 +704,34 @@ private func encryptedSemanticGraphFixture() throws -> [SemanticGraphEvent] {
     #expect(try await afterDelete.suggestionEvents() == [never, shown])
 }
 
+@Test func capabilityGrantsAndActionAuditSurviveEncryptedRestart() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let repository = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    let grant = CapabilityGrant(
+        capabilityID: "github.create-pr",
+        permission: .act,
+        updatedAt: Date(timeIntervalSince1970: 10)
+    )
+    let actionID = UUID()
+    let record = ToolActionAuditRecord(
+        actionID: actionID,
+        capabilityID: grant.capabilityID,
+        intent: "create github pull request",
+        parameters: ["title": "Private release title"],
+        status: .proposed,
+        occurredAt: Date(timeIntervalSince1970: 11)
+    )
+    try await repository.save(capabilityGrants: [grant])
+    try await repository.append(toolActionAuditRecord: record)
+
+    let reopened = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    #expect(try await reopened.capabilityGrants() == [grant])
+    #expect(try await reopened.toolActionAuditRecords() == [record])
+    let encrypted = try Data(contentsOf: reopened.fileURL)
+    #expect(encrypted.range(of: Data("Private release title".utf8)) == nil)
+}
+
 private func attemptStart(
     _ id: UUID,
     repository: EncryptedThoughtRepository,

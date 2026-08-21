@@ -20,6 +20,8 @@ private struct VaultSnapshot: Codable {
     var contextTrailSettings = ContextTrailSettings()
     var contextTrailEvents: [UUID: ContextTrailEvent] = [:]
     var semanticGraphEvents: [SemanticGraphEvent] = []
+    var capabilityGrants: [String: CapabilityGrant] = [:]
+    var toolActionAuditRecords: [ToolActionAuditRecord] = []
     var retentionPolicy = PrivacyRetentionPolicy.keepForever
 
     private enum CodingKeys: String, CodingKey {
@@ -38,6 +40,8 @@ private struct VaultSnapshot: Codable {
         case contextTrailSettings
         case contextTrailEvents
         case semanticGraphEvents
+        case capabilityGrants
+        case toolActionAuditRecords
         case retentionPolicy
     }
 
@@ -98,6 +102,14 @@ private struct VaultSnapshot: Codable {
         semanticGraphEvents = try container.decodeIfPresent(
             [SemanticGraphEvent].self,
             forKey: .semanticGraphEvents
+        ) ?? []
+        capabilityGrants = try container.decodeIfPresent(
+            [String: CapabilityGrant].self,
+            forKey: .capabilityGrants
+        ) ?? [:]
+        toolActionAuditRecords = try container.decodeIfPresent(
+            [ToolActionAuditRecord].self,
+            forKey: .toolActionAuditRecords
         ) ?? []
         retentionPolicy = try container.decodeIfPresent(
             PrivacyRetentionPolicy.self,
@@ -396,6 +408,31 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         return snapshot.semanticGraphEvents
     }
 
+    public func save(capabilityGrants: [CapabilityGrant]) async throws {
+        try update { snapshot in
+            snapshot.capabilityGrants = Dictionary(
+                uniqueKeysWithValues: capabilityGrants.map { ($0.capabilityID, $0) }
+            )
+        }
+    }
+
+    public func capabilityGrants() async throws -> [CapabilityGrant] {
+        try synchronize()
+        return snapshot.capabilityGrants.values.sorted { $0.capabilityID < $1.capabilityID }
+    }
+
+    public func append(toolActionAuditRecord: ToolActionAuditRecord) async throws {
+        try update { $0.toolActionAuditRecords.append(toolActionAuditRecord) }
+    }
+
+    public func toolActionAuditRecords() async throws -> [ToolActionAuditRecord] {
+        try synchronize()
+        return snapshot.toolActionAuditRecords.sorted {
+            if $0.occurredAt != $1.occurredAt { return $0.occurredAt < $1.occurredAt }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+    }
+
     public func allCaptures() async throws -> [RawCapture] {
         try synchronize()
         return snapshot.captures.values.sorted(by: Self.captureOrder)
@@ -467,6 +504,8 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
             && snapshot.contextTrailSettings == ContextTrailSettings()
             && snapshot.contextTrailEvents.isEmpty
             && snapshot.semanticGraphEvents.isEmpty
+            && snapshot.capabilityGrants.isEmpty
+            && snapshot.toolActionAuditRecords.isEmpty
             && snapshot.retentionPolicy == .keepForever
     }
 
@@ -508,6 +547,8 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
                   candidate.contextTrailSettings == ContextTrailSettings(),
                   candidate.contextTrailEvents.isEmpty,
                   candidate.semanticGraphEvents.isEmpty,
+                  candidate.capabilityGrants.isEmpty,
+                  candidate.toolActionAuditRecords.isEmpty,
                   candidate.retentionPolicy == .keepForever else {
                 throw VaultStoreError.vaultNotEmpty
             }

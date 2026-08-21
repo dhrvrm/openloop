@@ -893,12 +893,14 @@ private struct MainView: View {
                 Text("Ready").tag(0)
                 Text("Return").tag(1)
                 Text("Review").tag(2)
+                Text("Tools").tag(3)
             }
             .pickerStyle(.segmented)
 
             switch actSection {
             case 1: returnView
             case 2: laterView
+            case 3: capabilityRuntimeView
             default:
                 if let item = model.now, item.focus != nil {
                     currentIntention(item)
@@ -913,6 +915,135 @@ private struct MainView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+        }
+    }
+
+    private var capabilityRuntimeView: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: OpenLoopVisualSystem.space5) {
+                VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space1) {
+                    OpenLoopSectionHeading(
+                        title: "Connected tools",
+                        detail: "New tools start at Observe. Suggest and Act always require your choice."
+                    )
+                    if model.toolCapabilities.isEmpty {
+                        ContentUnavailableView(
+                            "No tools connected",
+                            systemImage: "puzzlepiece.extension",
+                            description: Text(
+                                "When an MCP tool is discovered, it appears here before OpenLoop can route anything to it."
+                            )
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 180)
+                    } else {
+                        ForEach(model.toolCapabilities) { capability in
+                            HStack(spacing: OpenLoopVisualSystem.space3) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(capability.server)
+                                        .font(OpenLoopVisualSystem.rowTitleEmphasized)
+                                    Text(capability.tool.replacingOccurrences(of: "_", with: " "))
+                                        .font(OpenLoopVisualSystem.metadata)
+                                        .foregroundStyle(.secondary)
+                                    Text(capability.risk == .readOnly
+                                        ? "Read only"
+                                        : capability.risk == .reversibleWrite
+                                            ? "Can change data · confirmation required"
+                                            : "Destructive · confirmation always required")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                                Spacer()
+                                Picker(
+                                    "Permission",
+                                    selection: Binding(
+                                        get: { capability.grantedPermission },
+                                        set: { permission in
+                                            Task {
+                                                await model.grantCapability(
+                                                    permission,
+                                                    capabilityID: capability.id
+                                                )
+                                            }
+                                        }
+                                    )
+                                ) {
+                                    Text("Observe").tag(CapabilityPermission.observe)
+                                    Text("Suggest").tag(CapabilityPermission.suggest)
+                                    Text("Act").tag(CapabilityPermission.act)
+                                }
+                                .frame(width: 130)
+                            }
+                            .padding(.vertical, OpenLoopVisualSystem.space2)
+                            Divider()
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space2) {
+                    OpenLoopSectionHeading(
+                        title: "Action history",
+                        detail: "Proposals, confirmations, results, failures, and cancellations"
+                    )
+                    if model.toolActionAudit.isEmpty {
+                        Text("No tool action has been proposed or run.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(model.toolActionAudit.prefix(30)) { record in
+                            HStack(alignment: .top, spacing: OpenLoopVisualSystem.space2) {
+                                Image(systemName: actionStatusIcon(record.status))
+                                    .foregroundStyle(actionStatusTint(record.status))
+                                    .frame(width: 18)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(record.intent)
+                                        .font(OpenLoopVisualSystem.rowTitle)
+                                    Text("\(record.capabilityID) · \(record.status.rawValue)")
+                                        .font(OpenLoopVisualSystem.metadata)
+                                        .foregroundStyle(.secondary)
+                                    if let message = record.message {
+                                        Text(message)
+                                            .font(.caption)
+                                            .foregroundStyle(.tertiary)
+                                            .lineLimit(2)
+                                    }
+                                }
+                                Spacer()
+                                Text(record.occurredAt, style: .relative)
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, OpenLoopVisualSystem.space1)
+                        }
+                    }
+                }
+                if let error = model.capabilityRuntimeError {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .task { await model.refreshCapabilityRuntime() }
+    }
+
+    private func actionStatusIcon(_ status: ToolActionStatus) -> String {
+        switch status {
+        case .proposed: "doc.badge.ellipsis"
+        case .confirmed: "checkmark.circle"
+        case .executing: "gearshape.2"
+        case .succeeded: "checkmark.circle.fill"
+        case .failed: "exclamationmark.triangle.fill"
+        case .cancelled: "xmark.circle"
+        }
+    }
+
+    private func actionStatusTint(_ status: ToolActionStatus) -> Color {
+        switch status {
+        case .succeeded: OpenLoopVisualSystem.later
+        case .failed: OpenLoopVisualSystem.recording
+        case .executing: OpenLoopVisualSystem.accent
+        default: OpenLoopVisualSystem.muted
         }
     }
 

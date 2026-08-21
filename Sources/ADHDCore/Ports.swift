@@ -49,6 +49,10 @@ public protocol ThoughtRepository: Sendable {
     func replace(contextTrailEvents: [ContextTrailEvent]) async throws
     func append(semanticGraphEvents: [SemanticGraphEvent]) async throws
     func semanticGraphEvents() async throws -> [SemanticGraphEvent]
+    func save(capabilityGrants: [CapabilityGrant]) async throws
+    func capabilityGrants() async throws -> [CapabilityGrant]
+    func append(toolActionAuditRecord: ToolActionAuditRecord) async throws
+    func toolActionAuditRecords() async throws -> [ToolActionAuditRecord]
     func allCaptures() async throws -> [RawCapture]
     func allIntentions() async throws -> [Intention]
     func privacySummary() async throws -> PrivacyDataSummary
@@ -66,6 +70,7 @@ public enum ThoughtRepositoryCompatibilityError: Error, Equatable {
     case workingMemoryUnsupported
     case contextTrailUnsupported
     case semanticGraphUnsupported
+    case actionsUnsupported
     case privacyUnsupported
 }
 
@@ -192,6 +197,18 @@ public extension ThoughtRepository {
     }
 
     func semanticGraphEvents() async throws -> [SemanticGraphEvent] { [] }
+
+    func save(capabilityGrants: [CapabilityGrant]) async throws {
+        throw ThoughtRepositoryCompatibilityError.actionsUnsupported
+    }
+
+    func capabilityGrants() async throws -> [CapabilityGrant] { [] }
+
+    func append(toolActionAuditRecord: ToolActionAuditRecord) async throws {
+        throw ThoughtRepositoryCompatibilityError.actionsUnsupported
+    }
+
+    func toolActionAuditRecords() async throws -> [ToolActionAuditRecord] { [] }
 
     func allCaptures() async throws -> [RawCapture] { [] }
 

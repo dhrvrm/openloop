@@ -17,6 +17,8 @@ private struct Snapshot: Codable {
     var contextTrailSettings = ContextTrailSettings()
     var contextTrailEvents: [UUID: ContextTrailEvent] = [:]
     var semanticGraphEvents: [SemanticGraphEvent] = []
+    var capabilityGrants: [String: CapabilityGrant] = [:]
+    var toolActionAuditRecords: [ToolActionAuditRecord] = []
     var retentionPolicy = PrivacyRetentionPolicy.keepForever
 
     private enum CodingKeys: String, CodingKey {
@@ -35,6 +37,8 @@ private struct Snapshot: Codable {
         case contextTrailSettings
         case contextTrailEvents
         case semanticGraphEvents
+        case capabilityGrants
+        case toolActionAuditRecords
         case retentionPolicy
     }
 
@@ -95,6 +99,14 @@ private struct Snapshot: Codable {
         semanticGraphEvents = try container.decodeIfPresent(
             [SemanticGraphEvent].self,
             forKey: .semanticGraphEvents
+        ) ?? []
+        capabilityGrants = try container.decodeIfPresent(
+            [String: CapabilityGrant].self,
+            forKey: .capabilityGrants
+        ) ?? [:]
+        toolActionAuditRecords = try container.decodeIfPresent(
+            [ToolActionAuditRecord].self,
+            forKey: .toolActionAuditRecords
         ) ?? []
         retentionPolicy = try container.decodeIfPresent(
             PrivacyRetentionPolicy.self,
@@ -371,6 +383,29 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
 
     public func semanticGraphEvents() async throws -> [SemanticGraphEvent] {
         snapshot.semanticGraphEvents
+    }
+
+    public func save(capabilityGrants: [CapabilityGrant]) async throws {
+        try update { snapshot in
+            snapshot.capabilityGrants = Dictionary(
+                uniqueKeysWithValues: capabilityGrants.map { ($0.capabilityID, $0) }
+            )
+        }
+    }
+
+    public func capabilityGrants() async throws -> [CapabilityGrant] {
+        snapshot.capabilityGrants.values.sorted { $0.capabilityID < $1.capabilityID }
+    }
+
+    public func append(toolActionAuditRecord: ToolActionAuditRecord) async throws {
+        try update { $0.toolActionAuditRecords.append(toolActionAuditRecord) }
+    }
+
+    public func toolActionAuditRecords() async throws -> [ToolActionAuditRecord] {
+        snapshot.toolActionAuditRecords.sorted {
+            if $0.occurredAt != $1.occurredAt { return $0.occurredAt < $1.occurredAt }
+            return $0.id.uuidString < $1.id.uuidString
+        }
     }
 
     public func allCaptures() async throws -> [RawCapture] {
