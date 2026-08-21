@@ -85,10 +85,10 @@ struct SemanticGraph3DView: View {
                     .padding(14)
                     .allowsHitTesting(false)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(OpenLoopVisualSystem.hairline, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius, style: .continuous)
+                        .stroke(OpenLoopVisualSystem.hairline, lineWidth: 0.75)
                 }
                 .contentShape(Rectangle())
                 .gesture(orbitGesture)

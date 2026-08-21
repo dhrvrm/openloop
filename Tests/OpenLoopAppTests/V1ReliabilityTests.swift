@@ -60,4 +60,16 @@ struct V1ReliabilityTests {
         #expect(VoiceRecordButtonPresentation.isDisabled(.saving))
         #expect(VoiceRecordButtonPresentation.isDisabled(.idle) == false)
     }
+
+    @Test func nativeWorkspaceGeometryKeepsOneCompactVisualRhythm() {
+        #expect(OpenLoopVisualSystem.sidebarWidth == 238)
+        #expect(OpenLoopVisualSystem.contentMaximumWidth == 720)
+        #expect(OpenLoopVisualSystem.checkboxSize == 18)
+        #expect(OpenLoopVisualSystem.checkboxHitSize == 28)
+        #expect(OpenLoopVisualSystem.taskRowMinimumHeight == 47)
+        #expect(OpenLoopVisualSystem.sidebarSelectionRadius == 7)
+        #expect(OpenLoopVisualSystem.inputRadius == 9)
+        #expect(OpenLoopVisualSystem.editorRadius == 11)
+        #expect(OpenLoopVisualSystem.panelRadius == 11)
+    }
 }

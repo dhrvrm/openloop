@@ -11,7 +11,7 @@ struct AdvancedInspector: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 22) {
                 inspectorHeader
                 liveStatus
                 runtimeTrace
@@ -20,7 +20,8 @@ struct AdvancedInspector: View {
                 qualityEvidence
                 recentEvents
             }
-            .padding(18)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 24)
         }
         .scrollIndicators(.hidden)
         .background(.ultraThinMaterial)
@@ -38,7 +39,7 @@ struct AdvancedInspector: View {
 
     private var runtimeTrace: some View {
         VStack(alignment: .leading, spacing: 11) {
-            sectionLabel("LIVE DECISION TRACE", icon: "waveform.path.ecg")
+            sectionLabel("Live decision trace", icon: "waveform.path.ecg")
             VStack(spacing: 0) {
                 InspectorFact(label: "Audio signal", value: liveAudioSignal)
                 Divider()
@@ -52,35 +53,32 @@ struct AdvancedInspector: View {
                 Divider()
                 InspectorFact(label: "Output", value: outputRoute)
             }
-            .padding(.horizontal, 12)
-            .openLoopPanel(emphasized: model.meetingJob.isActive)
+            .padding(.horizontal, 2)
 
             if liveUnstableText != "None" {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("UNSTABLE / LIVE")
-                        .font(.caption2.monospaced().weight(.semibold))
+                    Text("Unstable · live")
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.orange)
                     Text(liveUnstableText)
                         .font(.caption)
                         .lineLimit(5)
                         .textSelection(.enabled)
                 }
-                .padding(12)
-                .openLoopPanel()
+                .padding(.vertical, 6)
             }
             if let stable = model.streamingVoiceSession?.transcript.stableText,
                !stable.isEmpty {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("STABLE / COMMITTED")
-                        .font(.caption2.monospaced().weight(.semibold))
+                    Text("Stable · committed")
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(OpenLoopVisualSystem.accent)
                     Text(stable)
                         .font(.caption)
                         .lineLimit(8)
                         .textSelection(.enabled)
                 }
-                .padding(12)
-                .openLoopPanel()
+                .padding(.vertical, 6)
             }
         }
     }
@@ -129,13 +127,10 @@ struct AdvancedInspector: View {
 
     private var inspectorHeader: some View {
         HStack(alignment: .top, spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(OpenLoopVisualSystem.accentSoft)
-                Image(systemName: "slider.horizontal.3")
-                    .foregroundStyle(OpenLoopVisualSystem.accent)
-            }
-            .frame(width: 34, height: 34)
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(OpenLoopVisualSystem.accent)
+                .frame(width: 24, height: 28)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Advanced")
@@ -144,8 +139,8 @@ struct AdvancedInspector: View {
                     Circle()
                         .fill(Color.green)
                         .frame(width: 6, height: 6)
-                    Text("LIVE SYSTEM")
-                        .font(.caption2.monospaced().weight(.semibold))
+                    Text("Live system")
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -179,13 +174,12 @@ struct AdvancedInspector: View {
             }
         }
         .font(.caption)
-        .padding(13)
-        .openLoopPanel(emphasized: model.meetingJob.isActive)
+        .padding(.vertical, 4)
     }
 
     private var pipeline: some View {
         VStack(alignment: .leading, spacing: 11) {
-            sectionLabel("TRANSCRIPTION PIPELINE", icon: "point.3.connected.trianglepath.dotted")
+            sectionLabel("Transcription pipeline", icon: "point.3.connected.trianglepath.dotted")
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(nodes.enumerated()), id: \.element.id) { index, node in
                     PipelineNodeRow(node: node)
@@ -202,7 +196,7 @@ struct AdvancedInspector: View {
 
     private var engineFacts: some View {
         VStack(alignment: .leading, spacing: 11) {
-            sectionLabel("LOCAL ENGINE", icon: "cpu")
+            sectionLabel("Local engine", icon: "cpu")
             VStack(spacing: 0) {
                 InspectorFact(
                     label: "Transcription",
@@ -248,8 +242,7 @@ struct AdvancedInspector: View {
                 Divider()
                 InspectorFact(label: "Microphone", value: availability(model.capabilitySummary.microphone))
             }
-            .padding(.horizontal, 12)
-            .openLoopPanel()
+            .padding(.horizontal, 2)
 
             VStack(alignment: .leading, spacing: 7) {
                 Label("Encrypted vault", systemImage: "lock.fill")
@@ -263,21 +256,19 @@ struct AdvancedInspector: View {
                     .foregroundStyle(.tertiary)
                     .textSelection(.enabled)
             }
-            .padding(12)
-            .openLoopPanel()
+            .padding(.vertical, 8)
         }
     }
 
     private var qualityEvidence: some View {
         VStack(alignment: .leading, spacing: 11) {
-            sectionLabel("QUALITY EVIDENCE", icon: "checkmark.seal")
+            sectionLabel("Quality evidence", icon: "checkmark.seal")
             if let error = model.voiceQualityAuditError {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .padding(12)
+                    .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .openLoopPanel()
             } else if let audit = model.voiceQualityAudit {
                 VStack(spacing: 0) {
                     InspectorFact(label: "Claim status", value: qualityStatus(audit.status))
@@ -304,8 +295,7 @@ struct AdvancedInspector: View {
                         value: milliseconds(audit.report.stopToFinalP95Milliseconds)
                     )
                 }
-                .padding(.horizontal, 12)
-                .openLoopPanel(emphasized: audit.status == .readyForComparativeBenchmark)
+                .padding(.horizontal, 2)
 
                 Text(qualityExplanation(audit))
                     .font(.caption)
@@ -314,9 +304,8 @@ struct AdvancedInspector: View {
             } else {
                 ProgressView("Auditing corrected local evidence…")
                     .font(.caption)
-                    .padding(12)
+                    .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .openLoopPanel()
             }
         }
     }
@@ -352,15 +341,14 @@ struct AdvancedInspector: View {
 
     @ViewBuilder private var recentEvents: some View {
         VStack(alignment: .leading, spacing: 11) {
-            sectionLabel("RECENT ACTIVITY", icon: "clock.arrow.circlepath")
+            sectionLabel("Recent activity", icon: "clock.arrow.circlepath")
             if model.meetingPipelineEvents.isEmpty {
                 Text("Pipeline events appear here while an import or recording is processed.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(12)
+                    .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .openLoopPanel()
             } else {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(Array(model.meetingPipelineEvents.suffix(10).reversed())) { event in
@@ -380,16 +368,22 @@ struct AdvancedInspector: View {
                         }
                     }
                 }
-                .padding(12)
-                .openLoopPanel()
+                .padding(.vertical, 6)
             }
         }
     }
 
     private func sectionLabel(_ title: String, icon: String) -> some View {
-        Label(title, systemImage: icon)
-            .font(.caption2.monospaced().weight(.semibold))
-            .foregroundStyle(.secondary)
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(OpenLoopVisualSystem.accent)
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+            Rectangle()
+                .fill(OpenLoopVisualSystem.separator)
+                .frame(height: 1)
+        }
     }
 
     private var jobStatus: String {
@@ -455,8 +449,8 @@ private struct PipelineNodeRow: View {
                         .font(.caption.weight(node.state == .active ? .semibold : .regular))
                     Spacer()
                     if node.state == .active {
-                        Text("ACTIVE")
-                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        Text("Active")
+                            .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(color)
                     }
                 }

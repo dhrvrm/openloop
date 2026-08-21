@@ -28,9 +28,11 @@ private struct MainView: View {
                 workspaceSidebar
                 Divider().opacity(0.55)
                 selectedSurface
-                    .padding(.horizontal, 38)
-                    .padding(.vertical, 32)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .topLeading)
+                    .padding(.horizontal, OpenLoopVisualSystem.contentHorizontalPadding)
+                    .padding(.top, OpenLoopVisualSystem.contentTopPadding)
+                    .padding(.bottom, 28)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
         .frame(minWidth: 760, minHeight: 560)
@@ -52,7 +54,7 @@ private struct MainView: View {
             )
         }
         .animation(
-            reduceMotion ? nil : .easeInOut(duration: 0.22),
+            reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.88),
             value: model.isAdvancedModeEnabled
         )
         .task { await model.refresh() }
@@ -96,34 +98,21 @@ private struct MainView: View {
     }
 
     private var workspaceSidebar: some View {
-        VStack(alignment: .leading, spacing: 26) {
-            HStack(spacing: 11) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(OpenLoopVisualSystem.accent)
-                    Image(systemName: "circle.hexagongrid.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 38, height: 38)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("OpenLoop")
-                        .font(.headline.weight(.semibold))
-                    Text("Working memory")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 0) {
+            Spacer().frame(height: 42)
+            VStack(alignment: .leading, spacing: 22) {
                 ForEach(WorkspaceOrientation.sections) { section in
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(section.title)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 10)
+                    VStack(alignment: .leading, spacing: 2) {
+                        if section.id != .focus {
+                            Text(section.title)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(OpenLoopVisualSystem.tertiaryText)
+                                .padding(.horizontal, 9)
+                                .padding(.bottom, 3)
+                        }
                         ForEach(section.destinations) { destination in
                             WorkspaceSidebarButton(
+                                destinationID: destination.id,
                                 title: destination.title,
                                 icon: destination.icon,
                                 count: sidebarCount(for: destination.id),
@@ -136,29 +125,34 @@ private struct MainView: View {
 
             Spacer()
 
-            VStack(alignment: .leading, spacing: 11) {
+            VStack(alignment: .leading, spacing: 0) {
+                Divider().opacity(0.65)
                 Button {
                     model.setAdvancedModeEnabled(!model.isAdvancedModeEnabled)
                 } label: {
-                    Label("Advanced", systemImage: "slider.horizontal.3")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
+                    HStack(spacing: 9) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 13, weight: .medium))
+                        Text("Advanced")
+                        Spacer()
+                        Circle()
+                            .fill(model.isAdvancedModeEnabled
+                                ? OpenLoopVisualSystem.accent
+                                : Color.secondary.opacity(0.35))
+                            .frame(width: 6, height: 6)
+                    }
+                    .padding(.horizontal, 9)
+                    .frame(height: 41)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .font(.callout.weight(.medium))
+                .font(OpenLoopVisualSystem.sidebarLabel)
                 .foregroundStyle(model.isAdvancedModeEnabled ? OpenLoopVisualSystem.accent : .secondary)
-                .help("Show the local engine, pipeline, storage, and recent activity")
+                .help("Show system details · ⌥⌘I")
                 .accessibilityValue(model.isAdvancedModeEnabled ? "Shown" : "Hidden")
-
-                Divider()
-                Label(WorkspaceOrientation.quickCaptureShortcut, systemImage: "keyboard")
-                Label(WorkspaceOrientation.voiceCaptureShortcut, systemImage: "waveform")
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 20)
+        .padding(.horizontal, 12)
         .frame(width: OpenLoopVisualSystem.sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(OpenLoopVisualSystem.sidebar)
@@ -235,11 +229,9 @@ private struct MainView: View {
 
                 if model.suggestions.isEmpty == false {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("RELEVANT HERE")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        OpenLoopSectionHeading(title: "Relevant here")
                         Text("A linked open loop, shown without a notification.")
-                            .font(.callout)
+                            .font(OpenLoopVisualSystem.metadata)
                             .foregroundStyle(.secondary)
                     }
                     ForEach(model.suggestions) { suggestion in
@@ -264,59 +256,50 @@ private struct MainView: View {
 
     private var readyQueue: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Choose your next move")
-                    .font(.title2.weight(.semibold))
-                Text("Starting one moves it into focus. The order is yours.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.bottom, 12)
+            OpenLoopSectionHeading(
+                title: "Next",
+                detail: "Drag to reorder. Start only what deserves your attention now."
+            )
+            .padding(.bottom, 5)
 
             ForEach(model.openLoops.filter { $0.state == .open }) { item in
                 ReadyTaskRow(model: model, item: item)
                 Divider()
+                    .padding(.leading, OpenLoopVisualSystem.checkboxHitSize + 8)
             }
         }
         .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
     }
 
     private func currentIntention(_ item: NowItem) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 7) {
-                Text("CURRENT INTENTION")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(item.desiredOutcome)
-                    .font(.title2)
-                    .fontWeight(.semibold)
-            }
-            Divider()
-            VStack(alignment: .leading, spacing: 8) {
-                Text("NEXT ACTION")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(item.nextAction)
-                    .font(.title3)
-                    .textSelection(.enabled)
+        VStack(alignment: .leading, spacing: 13) {
+            OpenLoopSectionHeading(title: "In focus")
+            HStack(alignment: .top, spacing: 8) {
+                OpenLoopCheckbox(isCompleted: false, tint: OpenLoopVisualSystem.accent) {
+                    Task { await model.finishFocus(item.intentionID) }
+                }
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(item.desiredOutcome)
+                        .font(OpenLoopVisualSystem.projectTitle)
+                        .tracking(-0.5)
+                    Text(item.nextAction)
+                        .font(OpenLoopVisualSystem.rowTitle)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
             }
             if item.focus != nil {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     Text(ElapsedCue.text(seconds: item.elapsed(at: context.date)))
-                        .font(.callout.monospacedDigit())
+                        .font(OpenLoopVisualSystem.metadata.monospacedDigit())
                         .foregroundStyle(.secondary)
+                        .padding(.leading, OpenLoopVisualSystem.checkboxHitSize + 8)
                 }
             }
             focusControls(item)
+                .padding(.leading, OpenLoopVisualSystem.checkboxHitSize + 8)
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(OpenLoopVisualSystem.accent.opacity(0.78))
-                .frame(width: 3)
-        }
-        .openLoopPanel(emphasized: true)
+        .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
     }
 
     private var contextTrailPanel: some View {
@@ -394,19 +377,22 @@ private struct MainView: View {
     }
 
     @ViewBuilder private func focusControls(_ item: NowItem) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 4) {
             if let focus = item.focus {
                 if focus.state == .active {
                     Button("Pause") { Task { await model.pauseFocus(item.intentionID) } }
+                        .buttonStyle(OpenLoopAccessoryButtonStyle(tint: .secondary))
                 } else if focus.state == .paused {
                     Button("Continue") { Task { await model.continueFocus(item.intentionID) } }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(OpenLoopAccessoryButtonStyle())
                 }
                 Button("Interrupt") { interruptionItem = item }
+                    .buttonStyle(OpenLoopAccessoryButtonStyle(tint: .secondary))
                 Button("Finish") { Task { await model.finishFocus(item.intentionID) } }
+                    .buttonStyle(OpenLoopAccessoryButtonStyle())
             } else {
                 Button("Start focus") { Task { await model.startFocus(item.intentionID) } }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(OpenLoopAccessoryButtonStyle())
             }
         }
     }
@@ -557,13 +543,13 @@ private struct MainView: View {
                 HStack(spacing: 10) {
                     TextField("Search captures, decisions, return points, and corrections", text: $model.recallQuery)
                         .textFieldStyle(.roundedBorder)
-                        .font(.title3)
+                        .font(OpenLoopVisualSystem.rowTitle)
                         .focused($recallFieldFocused)
                         .onSubmit { Task { await model.searchRecall(model.recallQuery) } }
                     Button("Search") {
                         Task { await model.searchRecall(model.recallQuery) }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(OpenLoopAccessoryButtonStyle())
                     .disabled(model.recallQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
 
@@ -604,8 +590,8 @@ private struct MainView: View {
                         }
                     }
                     .background(
-                        Color(nsColor: .controlBackgroundColor),
-                            in: RoundedRectangle(cornerRadius: 10)
+                        OpenLoopVisualSystem.raised.opacity(0.42),
+                            in: RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius)
                         )
                 }
                 }
@@ -625,9 +611,11 @@ private struct MainView: View {
 
     private var semanticAskPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("SEMANTIC GRAPH")
-                .font(.caption.monospaced().weight(.semibold))
-                .foregroundStyle(.secondary)
+            OpenLoopSectionHeading(
+                title: "Ask",
+                tint: OpenLoopVisualSystem.ask,
+                detail: "Grounded answers from your local semantic graph"
+            )
             HStack(spacing: 10) {
                 TextField("What have I been thinking about?", text: $model.semanticQuery)
                     .textFieldStyle(.roundedBorder)
@@ -635,7 +623,7 @@ private struct MainView: View {
                 Button("Ask locally") {
                     Task { await model.askSemanticContext(model.semanticQuery) }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(OpenLoopAccessoryButtonStyle(tint: OpenLoopVisualSystem.ask))
                 .disabled(model.semanticQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             if let error = model.semanticError {
@@ -656,8 +644,7 @@ private struct MainView: View {
                 }
             }
         }
-        .padding(14)
-        .openLoopPanel(emphasized: !model.semanticAnswers.isEmpty)
+        .padding(.vertical, 4)
     }
 
     private var contextView: some View {
@@ -799,20 +786,16 @@ private struct MainView: View {
         onEvidence: @escaping (UUID) -> Void
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(model.meetingTranscripts.isEmpty
-                        ? "MEETING TRANSCRIPTS"
-                        : "MEETING TRANSCRIPTS · \(model.meetingTranscripts.count)")
-                        .font(.caption.monospaced().weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text("Qwen accuracy · Whisper fallback · processed locally")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                Spacer()
+            HStack(alignment: .center) {
+                OpenLoopSectionHeading(
+                    title: "Meeting transcripts",
+                    tint: OpenLoopVisualSystem.inbox,
+                    detail: model.meetingTranscripts.isEmpty
+                        ? "Qwen accuracy · Whisper fallback · processed locally"
+                        : "\(model.meetingTranscripts.count) stored locally"
+                )
                 Button("Import audio…") { presentMeetingImporter() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(OpenLoopAccessoryButtonStyle(tint: OpenLoopVisualSystem.inbox))
             }
 
             if model.meetingJob.stage != nil {
@@ -837,8 +820,7 @@ private struct MainView: View {
                 }
             }
         }
-        .padding(14)
-        .openLoopPanel(emphasized: true)
+        .padding(.vertical, 4)
     }
 
     private func presentMeetingImporter() {
@@ -858,15 +840,15 @@ private struct MainView: View {
         DisclosureGroup("Privacy & storage", isExpanded: $privacyExpanded) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 20) {
-                    PrivacyMetric(value: "\(model.privacySummary.captureCount)", label: "CAPTURES")
-                    PrivacyMetric(value: "\(model.privacySummary.openIntentionCount)", label: "OPEN")
-                    PrivacyMetric(value: "\(model.privacySummary.memoryCount)", label: "MEMORIES")
+                    PrivacyMetric(value: "\(model.privacySummary.captureCount)", label: "Captures")
+                    PrivacyMetric(value: "\(model.privacySummary.openIntentionCount)", label: "Open")
+                    PrivacyMetric(value: "\(model.privacySummary.memoryCount)", label: "Memories")
                     PrivacyMetric(
                         value: ByteCountFormatter.string(
                             fromByteCount: model.privacySummary.encryptedBytes,
                             countStyle: .file
                         ),
-                        label: "ENCRYPTED"
+                        label: "Encrypted"
                     )
                 }
 
@@ -906,8 +888,7 @@ private struct MainView: View {
             .padding(.top, 12)
         }
         .font(.callout.weight(.medium))
-        .padding(14)
-        .openLoopPanel()
+        .padding(.vertical, 8)
     }
 
     private func saveEncryptedBackup() {
@@ -933,12 +914,11 @@ private struct MainView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("WORKING MEMORY")
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                        Text("Explicit claims linked to stored evidence")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                        OpenLoopSectionHeading(
+                            title: "Working memory",
+                            tint: OpenLoopVisualSystem.context,
+                            detail: "Explicit claims linked to stored evidence"
+                        )
                     }
                     Spacer()
                     Button("Refresh evidence") {
@@ -1004,52 +984,72 @@ private struct ScreenHeader: View {
     let detail: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(eyebrow)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(OpenLoopVisualSystem.accent)
-            Text(title)
-                .font(.system(size: 34, weight: .semibold))
-                .tracking(-0.85)
+        let tint = OpenLoopVisualSystem.tint(forSurfaceTitle: title)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: OpenLoopVisualSystem.icon(forSurfaceTitle: title))
+                    .font(.system(size: 25, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 30)
+                Text(title)
+                    .font(OpenLoopVisualSystem.listTitle)
+                    .tracking(-1.05)
+            }
             Text(detail)
-                .font(.callout)
+                .font(OpenLoopVisualSystem.metadata)
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: 560, alignment: .leading)
+                .frame(maxWidth: 610, alignment: .leading)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(eyebrow), \(title). \(detail)")
     }
 }
 
 private struct WorkspaceSidebarButton: View {
+    let destinationID: WorkspaceDestination.ID
     let title: String
     let icon: String
     let count: Int?
     let isSelected: Bool
     let action: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
+        let tint = OpenLoopVisualSystem.tint(for: destinationID)
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: 9) {
                 Image(systemName: icon)
-                    .frame(width: 17)
-                    .foregroundStyle(isSelected ? OpenLoopVisualSystem.accent : .secondary)
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 18)
+                    .foregroundStyle(tint.opacity(isSelected ? 1 : 0.86))
                 Text(title)
-                    .fontWeight(isSelected ? .semibold : .regular)
+                    .font(isSelected
+                        ? OpenLoopVisualSystem.sidebarLabelSelected
+                        : OpenLoopVisualSystem.sidebarLabel)
                 Spacer()
                 if let count {
                     Text("\(count)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 12, weight: .medium).monospacedDigit())
+                        .foregroundStyle(OpenLoopVisualSystem.muted)
                 }
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 9)
             .frame(minHeight: OpenLoopVisualSystem.compactRowMinimumHeight)
             .contentShape(Rectangle())
             .background(
-                isSelected ? OpenLoopVisualSystem.accentSoft : Color.clear,
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                isSelected
+                    ? OpenLoopVisualSystem.selection
+                    : (isHovered ? OpenLoopVisualSystem.selectionInactive : Color.clear),
+                in: RoundedRectangle(
+                    cornerRadius: OpenLoopVisualSystem.sidebarSelectionRadius,
+                    style: .continuous
+                )
             )
         }
         .buttonStyle(.plain)
+        .onHover { hovered in
+            withAnimation(.easeOut(duration: 0.12)) { isHovered = hovered }
+        }
     }
 }
 
@@ -1059,12 +1059,96 @@ private struct QuickAddComposer: View {
     let submit: () async -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Capture anything", systemImage: "plus.circle.fill")
-                    .font(.callout.weight(.semibold))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 19, weight: .medium))
                     .foregroundStyle(OpenLoopVisualSystem.accent)
-                Spacer()
+                    .frame(width: OpenLoopVisualSystem.checkboxHitSize)
+                TextField("New thought, task, or note", text: $text)
+                    .textFieldStyle(.plain)
+                    .font(OpenLoopVisualSystem.rowTitle)
+                    .onSubmit { Task { await submit() } }
+                Button {
+                    Task { await submit() }
+                } label: {
+                    if isSaving {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.turn.down.left")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                }
+                .buttonStyle(OpenLoopAccessoryButtonStyle())
+                .help("Capture · Return")
+                .disabled(isSaving || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 46)
+            .background(
+                OpenLoopVisualSystem.raised,
+                in: RoundedRectangle(
+                    cornerRadius: OpenLoopVisualSystem.editorRadius,
+                    style: .continuous
+                )
+            )
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: OpenLoopVisualSystem.editorRadius,
+                    style: .continuous
+                )
+                .stroke(OpenLoopVisualSystem.hairline, lineWidth: 0.75)
+            }
+
+            HStack(alignment: .center, spacing: 3) {
+                Button {
+                    model.toggleVoiceCapture()
+                } label: {
+                    Label(
+                        model.meetingJob.stage == .recording ? "Stop & transcribe" : "Record",
+                        systemImage: model.meetingJob.stage == .recording
+                            ? "stop.fill"
+                            : "record.circle.fill"
+                    )
+                }
+                .buttonStyle(OpenLoopAccessoryButtonStyle(tint:
+                    model.meetingJob.stage == .recording
+                        ? OpenLoopVisualSystem.recording
+                        : OpenLoopVisualSystem.recording.opacity(0.88)
+                ))
+                .help("Record and transcribe · ⌃⌥R")
+                .disabled(
+                    model.isSystemDictationActive
+                        || (model.meetingJob.isActive && model.meetingJob.stage != .recording)
+                )
+                Button {
+                    model.toggleSystemDictation()
+                } label: {
+                    Label(
+                        model.isSystemDictationActive && model.meetingJob.stage == .recording
+                            ? "Stop & insert"
+                            : "Dictate",
+                        systemImage: model.isSystemDictationActive && model.meetingJob.stage == .recording
+                            ? "stop.fill"
+                            : "waveform"
+                    )
+                }
+                .buttonStyle(OpenLoopAccessoryButtonStyle(tint:
+                    model.isSystemDictationActive
+                        ? OpenLoopVisualSystem.recording
+                        : OpenLoopVisualSystem.accent
+                ))
+                .help("Dictate into the active app · ⌃⌥Space")
+                .disabled(
+                    model.meetingJob.isActive
+                        && !(model.isSystemDictationActive && model.meetingJob.stage == .recording)
+                )
+                Button("Import audio", systemImage: "waveform.badge.plus") {
+                    presentMeetingImporter()
+                }
+                .buttonStyle(OpenLoopAccessoryButtonStyle(tint: .secondary))
+                .disabled(model.meetingJob.isActive)
+                Spacer(minLength: 8)
                 Picker(
                     "Voice mode",
                     selection: Binding(
@@ -1078,71 +1162,10 @@ private struct QuickAddComposer: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.menu)
-                .help("How system-wide dictation is formatted")
-                Text("TEXT · AUDIO · MEETING")
-                    .font(.caption2.monospaced().weight(.medium))
-                    .foregroundStyle(.tertiary)
+                .controlSize(.small)
+                .help("Voice output style")
             }
-            TextField("What should OpenLoop hold for you?", text: $text)
-                .textFieldStyle(.plain)
-                .font(.title3.weight(.medium))
-                .padding(.horizontal, 13)
-                .frame(height: 44)
-                .background(.background.opacity(0.72), in: RoundedRectangle(cornerRadius: 9))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 9)
-                        .stroke(OpenLoopVisualSystem.hairline, lineWidth: 1)
-                }
-                .onSubmit { Task { await submit() } }
-            HStack(alignment: .center, spacing: 10) {
-                Button(isSaving ? "Saving…" : "Capture") {
-                    Task { await submit() }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isSaving || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                Button {
-                    model.toggleVoiceCapture()
-                } label: {
-                    Label(
-                        model.meetingJob.stage == .recording ? "Stop & transcribe" : "Record",
-                        systemImage: model.meetingJob.stage == .recording
-                            ? "stop.circle.fill"
-                            : "record.circle"
-                    )
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(
-                    model.meetingJob.stage == .recording
-                        ? OpenLoopVisualSystem.recording
-                        : OpenLoopVisualSystem.accent
-                )
-                .disabled(
-                    model.isSystemDictationActive
-                        || (model.meetingJob.isActive && model.meetingJob.stage != .recording)
-                )
-                Button {
-                    model.toggleSystemDictation()
-                } label: {
-                    Label(
-                        model.isSystemDictationActive && model.meetingJob.stage == .recording
-                            ? "Stop & insert"
-                            : "Dictate",
-                        systemImage: model.isSystemDictationActive && model.meetingJob.stage == .recording
-                            ? "stop.circle.fill"
-                            : "text.cursor"
-                    )
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(
-                    model.isSystemDictationActive
-                        ? OpenLoopVisualSystem.recording
-                        : OpenLoopVisualSystem.accent
-                )
-                .disabled(
-                    model.meetingJob.isActive
-                        && !(model.isSystemDictationActive && model.meetingJob.stage == .recording)
-                )
-            }
+            .padding(.horizontal, 1)
             if model.meetingJob.stage == .recording {
                 RecordingLevelMeter(decibels: model.recordingDecibels)
                 if let snapshot = model.streamingVoiceSession,
@@ -1157,27 +1180,16 @@ private struct QuickAddComposer: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .font(.callout)
+                    .font(OpenLoopVisualSystem.rowTitle)
                     .textSelection(.enabled)
-                    .padding(11)
+                    .padding(.leading, 37)
+                    .padding(.vertical, 7)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.background.opacity(0.55), in: RoundedRectangle(cornerRadius: 9))
                     .accessibilityLabel("Live transcription")
                 }
             }
-            HStack(spacing: 10) {
-                Button("Import meeting audio…", systemImage: "waveform.badge.plus") {
-                    presentMeetingImporter()
-                }
-                .buttonStyle(.borderless)
-                .disabled(model.meetingJob.isActive)
-                Spacer()
-                Text("Processed and encrypted on this Mac")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
         .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
     }
 
@@ -1237,9 +1249,9 @@ private struct DictationDeliveryPanel: View {
                 if delivery.rawText != delivery.processedText {
                     DisclosureGroup("Raw and processed text") {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("RAW").font(.caption2.monospaced()).foregroundStyle(.tertiary)
+                            Text("Raw input").font(OpenLoopVisualSystem.metadata.weight(.medium)).foregroundStyle(.secondary)
                             Text(delivery.rawText).textSelection(.enabled)
-                            Text("PROCESSED").font(.caption2.monospaced()).foregroundStyle(.tertiary)
+                            Text("Processed output").font(OpenLoopVisualSystem.metadata.weight(.medium)).foregroundStyle(.secondary)
                             Text(delivery.processedText).textSelection(.enabled)
                         }
                         .font(.caption)
@@ -1251,7 +1263,7 @@ private struct DictationDeliveryPanel: View {
                         Button("Confirm \(delivery.command?.displayName ?? "command")") {
                             model.confirmPendingVoiceCommand()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(OpenLoopAccessoryButtonStyle())
                         Button("Cancel") { model.discardPendingVoiceCommand() }
                     } else if delivery.state == .inserted, delivery.command != .undo {
                         Button("Undo output") { model.undoLastDictationOutput() }
@@ -1299,8 +1311,8 @@ private struct RecordingLevelMeter: View {
                 Circle()
                     .fill(.red)
                     .frame(width: 7, height: 7)
-                Text("MIC INPUT")
-                    .font(.caption2.monospaced().weight(.semibold))
+                Text("Microphone")
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.red)
                 Text(signalStatus)
                     .font(.caption2.weight(.medium))
@@ -1319,14 +1331,14 @@ private struct RecordingLevelMeter: View {
                 }
             }
             .frame(height: 30)
-            .animation(.linear(duration: 0.06), value: decibels)
+            .animation(.spring(response: 0.12, dampingFraction: 0.82), value: decibels)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(.red.opacity(0.065), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(.red.opacity(0.06), in: RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(.red.opacity(0.22), lineWidth: 1)
+            RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius, style: .continuous)
+                .stroke(.red.opacity(0.20), lineWidth: 0.75)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Microphone input")
@@ -1344,10 +1356,10 @@ private struct RecordingLevelMeter: View {
     }
 
     private var signalStatus: String {
-        guard let decibels else { return "LISTENING" }
-        if decibels < -45 { return "SIGNAL LOW" }
-        if decibels < -28 { return "HEARING YOU" }
-        return "STRONG SIGNAL"
+        guard let decibels else { return "Listening" }
+        if decibels < -45 { return "Signal low" }
+        if decibels < -28 { return "Hearing you" }
+        return "Strong signal"
     }
 
     private func barHeight(index: Int) -> CGFloat {
@@ -1372,12 +1384,12 @@ private struct MeetingJobPanel: View {
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(model.meetingJob.stage == .recording ? .red : .primary)
                 Spacer()
-                Text("LOCAL ONLY")
-                    .font(.caption2.monospaced().weight(.semibold))
+                Text("Local only")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.green)
                 if model.meetingJob.requestedLanguage != .automatic {
-                    Text(model.meetingJob.requestedLanguage.title.uppercased())
-                        .font(.caption2.monospaced().weight(.semibold))
+                    Text(model.meetingJob.requestedLanguage.title)
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(OpenLoopVisualSystem.accent)
                 }
             }
@@ -1439,10 +1451,10 @@ private struct MeetingJobPanel: View {
                     .frame(minHeight: 54, maxHeight: model.meetingJob.stage == .ready ? 260 : 140)
                 }
                 .padding(11)
-                .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: 9))
+                .background(.background.opacity(0.62), in: RoundedRectangle(cornerRadius: OpenLoopVisualSystem.inputRadius))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 9)
-                        .stroke(OpenLoopVisualSystem.hairline, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: OpenLoopVisualSystem.inputRadius)
+                        .stroke(OpenLoopVisualSystem.hairline, lineWidth: 0.75)
                 }
             }
             HStack(spacing: 10) {
@@ -1454,7 +1466,7 @@ private struct MeetingJobPanel: View {
                             ? "Retranscribe source"
                             : "Retry locally"
                     ) { model.retryMeetingTranscription() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(OpenLoopAccessoryButtonStyle())
                 }
                 if !model.meetingJob.isActive {
                     Button(
@@ -1492,9 +1504,9 @@ private struct MeetingJobPanel: View {
             ? String(format: "%.1fs", duration)
             : "\(Int(duration.rounded()))s"
         if let peak = model.meetingJob.recordingPeakDecibels {
-            return "RECORDED \(durationText) · PEAK \(Int(peak.rounded())) dB"
+            return "Recorded \(durationText) · peak \(Int(peak.rounded())) dB"
         }
-        return "RECORDED \(durationText) · NO LEVEL DATA"
+        return "Recorded \(durationText) · no level data"
     }
 
     private func copy(_ text: String) {
@@ -1569,8 +1581,8 @@ private struct MeetingTranscriptRow: View {
                             Text("Transcript")
                                 .font(.headline)
                             Spacer()
-                            Text("EVIDENCE")
-                                .font(.caption2.monospaced().weight(.semibold))
+                            Text("Evidence")
+                                .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.secondary)
                         }
 
@@ -1582,8 +1594,8 @@ private struct MeetingTranscriptRow: View {
                                     .frame(width: 44, alignment: .trailing)
                                 VStack(alignment: .leading, spacing: 2) {
                                     if let speaker = segment.speaker {
-                                        Text(speaker.uppercased())
-                                            .font(.caption2.monospaced().weight(.semibold))
+                                        Text(speaker)
+                                            .font(.system(size: 12, weight: .medium))
                                             .foregroundStyle(.secondary)
                                     }
                                     if editingSegmentID == segment.id {
@@ -1658,7 +1670,7 @@ private struct MeetingTranscriptRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(transcript.sourceName)
                         .font(.callout.weight(.medium))
-                    Text("\(duration(transcript.duration)) · \(transcript.detectedLanguage?.uppercased() ?? "AUTO") · \(transcript.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                    Text("\(duration(transcript.duration)) · \(transcript.detectedLanguage?.capitalized ?? "Auto detected") · \(transcript.createdAt.formatted(date: .abbreviated, time: .shortened))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(expanded
@@ -1669,8 +1681,8 @@ private struct MeetingTranscriptRow: View {
                 }
             }
         }
-        .padding(11)
-        .openLoopPanel()
+        .padding(.vertical, 10)
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     private var intelligence: MeetingIntelligence {
@@ -1690,12 +1702,15 @@ private struct MeetingTranscriptRow: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("LOCAL · EXTRACTIVE")
-                    .font(.caption2.monospaced().weight(.semibold))
+                Text("Local · extractive")
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(OpenLoopVisualSystem.accent)
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(OpenLoopVisualSystem.accentSoft, in: Capsule())
+                    .padding(.vertical, 4)
+                    .background(
+                        OpenLoopVisualSystem.accentSoft,
+                        in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    )
             }
 
             briefSection(
@@ -1730,11 +1745,14 @@ private struct MeetingTranscriptRow: View {
             .font(.caption)
             .foregroundStyle(.secondary)
         }
-        .padding(14)
-        .background(OpenLoopVisualSystem.accent.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+        .padding(12)
+        .background(
+            OpenLoopVisualSystem.accent.opacity(0.045),
+            in: RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius)
+        )
         .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(OpenLoopVisualSystem.accent.opacity(0.16), lineWidth: 1)
+            RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius)
+                .stroke(OpenLoopVisualSystem.accent.opacity(0.14), lineWidth: 0.75)
         }
     }
 
@@ -1902,11 +1920,10 @@ private struct StatusBanner: View {
 
     var body: some View {
         Label(text, systemImage: icon)
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .padding(11)
+            .font(OpenLoopVisualSystem.metadata)
+            .foregroundStyle(OpenLoopVisualSystem.accent)
+            .padding(.vertical, 7)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .openLoopPanel(emphasized: true)
     }
 }
 
@@ -1914,20 +1931,31 @@ private struct ReadyTaskRow: View {
     @ObservedObject var model: AppModel
     let item: OpenLoopItem
     @State private var isDropTarget = false
+    @State private var isHovered = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .top, spacing: 8) {
+            OpenLoopCheckbox(isCompleted: false) {
+                Task { await model.finishOpenLoop(item.id) }
+            }
+            VStack(alignment: .leading, spacing: 2) {
                 Text(item.desiredOutcome)
-                    .font(.headline)
+                    .font(OpenLoopVisualSystem.rowTitle)
                 Text(item.nextAction)
-                    .font(.callout)
+                    .font(OpenLoopVisualSystem.metadata)
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
             Spacer(minLength: 14)
-            Button("Start") { Task { await model.startFocus(item.id) } }
-                .buttonStyle(.borderless)
-                .foregroundStyle(OpenLoopVisualSystem.accent)
+            Button {
+                Task { await model.startFocus(item.id) }
+            } label: {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .buttonStyle(OpenLoopAccessoryButtonStyle())
+            .help("Start focus")
+            .opacity(isHovered ? 1 : 0)
             Menu {
                 Button("Move up") { Task { await model.moveOpenLoop(item.id, by: -1) } }
                 Button("Move down") { Task { await model.moveOpenLoop(item.id, by: 1) } }
@@ -1939,9 +1967,10 @@ private struct ReadyTaskRow: View {
             }
             .menuStyle(.borderlessButton)
             .frame(width: 24)
+            .opacity(isHovered ? 1 : 0.34)
         }
-        .padding(.vertical, 13)
-        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 2)
         .frame(minHeight: OpenLoopVisualSystem.taskRowMinimumHeight)
         .contentShape(Rectangle())
         .background(
@@ -1961,6 +1990,9 @@ private struct ReadyTaskRow: View {
             return true
         } isTargeted: { targeted in
             isDropTarget = targeted
+        }
+        .onHover { hovered in
+            withAnimation(.easeOut(duration: 0.12)) { isHovered = hovered }
         }
         .accessibilityAction(named: "Move up") {
             Task { await model.moveOpenLoop(item.id, by: -1) }
@@ -2006,41 +2038,52 @@ private struct ClarificationReviewRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(item.text)
-                    .font(.title3.weight(.medium))
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 12)
-                Text(dispositionLabel(item.disposition))
-                    .font(.caption.monospaced().weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(Color.secondary.opacity(0.09))
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
+        HStack(alignment: .top, spacing: 8) {
+            if let openLoop {
+                OpenLoopCheckbox(isCompleted: openLoop.state == .closed) {
+                    Task { await model.finishOpenLoop(openLoop.intentionID) }
+                }
+            } else {
+                Image(systemName: "tray")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(OpenLoopVisualSystem.inbox)
+                    .frame(
+                        width: OpenLoopVisualSystem.checkboxHitSize,
+                        height: OpenLoopVisualSystem.checkboxHitSize
+                    )
             }
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(item.text)
+                        .font(OpenLoopVisualSystem.rowTitle)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 12)
+                    Text(dispositionLabel(item.disposition))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(dispositionTint)
+                }
 
-            if item.disposition == .action,
-               let outcome = item.desiredOutcome,
-               let action = item.nextAction {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(outcome)
-                        .font(.callout.weight(.medium))
-                    Label(action, systemImage: "arrow.forward")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                if item.disposition == .action,
+                   let outcome = item.desiredOutcome,
+                   let action = item.nextAction {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(outcome)
+                            .font(OpenLoopVisualSystem.metadata.weight(.medium))
+                        Text(action)
+                            .font(OpenLoopVisualSystem.metadata)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if isEditing {
+                    editor
+                } else {
+                    controls
                 }
             }
-
-            if isEditing {
-                editor
-            } else {
-                controls
-            }
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, 9)
     }
 
     private var editor: some View {
@@ -2075,6 +2118,7 @@ private struct ClarificationReviewRow: View {
                     resetDraft()
                     isEditing = false
                 }
+                .buttonStyle(OpenLoopAccessoryButtonStyle(tint: .secondary))
                 Button("Save review") {
                     Task {
                         let saved = await model.applyClarificationReview(
@@ -2086,13 +2130,17 @@ private struct ClarificationReviewRow: View {
                         if saved { isEditing = false }
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(OpenLoopAccessoryButtonStyle())
                 .disabled(model.isSavingReview)
             }
         }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .padding(11)
+        .background(OpenLoopVisualSystem.raised)
+        .clipShape(RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius)
+                .stroke(OpenLoopVisualSystem.hairline, lineWidth: 0.75)
+        }
     }
 
     @ViewBuilder private var controls: some View {
@@ -2102,12 +2150,13 @@ private struct ClarificationReviewRow: View {
                     Button("Start focus") {
                         Task { await model.startFocus(openLoop.intentionID) }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(OpenLoopAccessoryButtonStyle())
                 }
 
                 Button("Finish") {
                     Task { await model.finishOpenLoop(openLoop.intentionID) }
                 }
+                .buttonStyle(OpenLoopAccessoryButtonStyle(tint: .secondary))
 
                 Menu {
                     Button("Move up") {
@@ -2150,13 +2199,13 @@ private struct ClarificationReviewRow: View {
                         resetDraft()
                         isEditing = true
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(OpenLoopAccessoryButtonStyle())
                 } else {
                     Button("Review") {
                         resetDraft()
                         isEditing = true
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(OpenLoopAccessoryButtonStyle(tint: .secondary))
                 }
             } else if let state = item.intentionState {
                 Text(intentionStateLabel(state))
@@ -2183,6 +2232,16 @@ private struct ClarificationReviewRow: View {
         case .later: "Consider later"
         case .release: "Release"
         case .unclear: "Not sure yet"
+        }
+    }
+
+    private var dispositionTint: Color {
+        switch item.disposition {
+        case .action: OpenLoopVisualSystem.act
+        case .memory: OpenLoopVisualSystem.context
+        case .later: OpenLoopVisualSystem.later
+        case .release: .secondary
+        case .unclear: OpenLoopVisualSystem.emerging
         }
     }
 
@@ -2230,35 +2289,54 @@ private struct WorkingMemoryRow: View {
     let record: MemoryRecord
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(record.statement)
-                .font(.body)
-                .textSelection(.enabled)
-            Spacer(minLength: 12)
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(record.kind.rawValue.uppercased()) · \(stateLabel)")
-                Text(evidenceLabel)
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: "brain.head.profile")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(kindTint)
+                .frame(width: OpenLoopVisualSystem.checkboxSize, height: OpenLoopVisualSystem.checkboxSize)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(record.statement)
+                    .font(OpenLoopVisualSystem.rowTitle)
+                    .textSelection(.enabled)
+                HStack(spacing: 5) {
+                    Text(record.kind.rawValue.capitalized)
+                        .foregroundStyle(kindTint)
+                    Text("·")
+                    Text(stateLabel)
+                    Text("·")
+                    Text(evidenceLabel)
+                }
+                .font(OpenLoopVisualSystem.metadata)
+                .foregroundStyle(.secondary)
             }
-            .font(.caption.monospaced())
-            .foregroundStyle(.secondary)
         }
+        .padding(.vertical, 7)
         .accessibilityElement(children: .combine)
     }
 
     private var stateLabel: String {
         switch record.state {
-        case .active: "CURRENT"
-        case .contradicted: "CONTRADICTED"
-        case .superseded: "SUPERSEDED"
-        case .evidenceExpired: "EVIDENCE EXPIRED"
+        case .active: "Current"
+        case .contradicted: "Contradicted"
+        case .superseded: "Superseded"
+        case .evidenceExpired: "Evidence expired"
         }
     }
 
     private var evidenceLabel: String {
         let retained = record.evidence.filter { $0.availability == .retained }.count
         let expired = record.evidence.count - retained
-        if expired == 0 { return "\(retained) EVIDENCE RETAINED" }
-        return "\(retained) RETAINED · \(expired) EXPIRED"
+        if expired == 0 { return "\(retained) evidence retained" }
+        return "\(retained) retained · \(expired) expired"
+    }
+
+    private var kindTint: Color {
+        switch record.kind.rawValue.lowercased() {
+        case "decision": OpenLoopVisualSystem.today
+        case "preference": OpenLoopVisualSystem.context
+        case "procedure": OpenLoopVisualSystem.later
+        default: OpenLoopVisualSystem.accent
+        }
     }
 }
 
@@ -2267,13 +2345,7 @@ private struct SemanticSectionTitle: View {
     let detail: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.title3.weight(.semibold))
-            Text(detail)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
+        OpenLoopSectionHeading(title: title, tint: OpenLoopVisualSystem.context, detail: detail)
         .padding(.top, 4)
     }
 }
@@ -2285,20 +2357,20 @@ private struct SemanticNodeRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text(node.kind.rawValue.uppercased())
-                    .font(.caption2.monospaced().weight(.semibold))
-                    .foregroundStyle(node.status == .speculative ? .orange : OpenLoopVisualSystem.accent)
+                Text(node.kind.rawValue.capitalized)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(kindTint)
                 Spacer()
                 Text("\(Int((node.confidence * 100).rounded()))%")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.tertiary)
             }
             Text(node.claim)
-                .font(.body.weight(.medium))
+                .font(OpenLoopVisualSystem.rowTitleEmphasized)
                 .textSelection(.enabled)
             if showEvidence, let evidence = node.evidence.first {
                 Label(evidence.excerpt, systemImage: "quote.opening")
-                    .font(.caption)
+                    .font(OpenLoopVisualSystem.metadata)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
                     .textSelection(.enabled)
@@ -2308,11 +2380,22 @@ private struct SemanticNodeRow: View {
                 Text("·")
                 Text(node.createdAt, style: .relative)
             }
-            .font(.caption2.monospaced())
+            .font(.system(size: 12))
             .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var kindTint: Color {
+        if node.status == .speculative { return OpenLoopVisualSystem.today }
+        switch node.kind.rawValue.lowercased() {
+        case "decision": return OpenLoopVisualSystem.today
+        case "problem", "question": return OpenLoopVisualSystem.returnColor
+        case "idea", "possibility": return OpenLoopVisualSystem.context
+        case "action", "intention": return OpenLoopVisualSystem.later
+        default: return OpenLoopVisualSystem.accent
+        }
     }
 }
 
@@ -2323,10 +2406,10 @@ private struct SemanticThreadRow: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(thread.node.claim)
-                    .font(.title3.weight(.semibold))
+                    .font(OpenLoopVisualSystem.rowTitleEmphasized)
                 Spacer()
-                Text("STRENGTH \(thread.strength)")
-                    .font(.caption2.monospaced().weight(.semibold))
+                Text("Strength \(thread.strength)")
+                    .font(.system(size: 12, weight: .medium).monospacedDigit())
                     .foregroundStyle(.secondary)
             }
             if thread.related.isEmpty {
@@ -2338,18 +2421,22 @@ private struct SemanticThreadRow: View {
                     LazyHStack(spacing: 6) {
                         ForEach(thread.related) { related in
                             Text(related.claim)
-                                .font(.caption)
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 5)
-                                .background(OpenLoopVisualSystem.accentSoft, in: Capsule())
+                                .font(OpenLoopVisualSystem.metadata)
+                                .foregroundStyle(OpenLoopVisualSystem.context)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(
+                                    OpenLoopVisualSystem.context.opacity(0.08),
+                                    in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                )
                         }
                     }
                 }
                 .scrollIndicators(.hidden)
             }
         }
-        .padding(14)
-        .openLoopPanel()
+        .padding(.vertical, 10)
+        .overlay(alignment: .bottom) { Divider() }
     }
 }
 
@@ -2360,7 +2447,7 @@ private struct RecallEvidenceRow: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(hit.title).font(.headline)
+                    Text(hit.title).font(OpenLoopVisualSystem.rowTitleEmphasized)
                     Text(evidenceLabel)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -2401,11 +2488,11 @@ private struct RecallEvidenceRow: View {
 
     private var evidenceLabel: String {
         switch hit.evidenceID.kind {
-        case .capture: "CAPTURE"
-        case .intention: "INTENTION"
-        case .returnPacket: "RETURN PACKET"
-        case .correction: "VOICE CORRECTION"
-        case .memory: "MEMORY"
+        case .capture: "Capture"
+        case .intention: "Intention"
+        case .returnPacket: "Return point"
+        case .correction: "Voice correction"
+        case .memory: "Memory"
         }
     }
 
@@ -2432,9 +2519,9 @@ private struct ContextSuggestionView: View {
                     .textSelection(.enabled)
             }
             VStack(alignment: .leading, spacing: 9) {
-                Text("WHY NOW · \(suggestion.why.uppercased())")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("Why now · \(suggestion.why)")
+                    .font(OpenLoopVisualSystem.metadata)
+                    .foregroundStyle(OpenLoopVisualSystem.context)
                 ForEach(suggestion.contributions) { contribution in
                     RelevanceContributionBar(contribution: contribution)
                 }
@@ -2443,7 +2530,7 @@ private struct ContextSuggestionView: View {
                 Button("Start") {
                     Task { await model.startSuggestion(suggestion.intentionID) }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(OpenLoopAccessoryButtonStyle())
                 Button("Later") {
                     Task { await model.deferSuggestion(suggestion.intentionID) }
                 }
@@ -2456,7 +2543,7 @@ private struct ContextSuggestionView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             Color.accentColor.opacity(0.08),
-            in: RoundedRectangle(cornerRadius: 12)
+            in: RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius)
         )
     }
 }
@@ -2551,7 +2638,7 @@ private struct InterruptionSheet: View {
                         if saved { dismiss() }
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(OpenLoopAccessoryButtonStyle())
                 .disabled(nextAction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -2567,17 +2654,17 @@ private struct ReturnPacketView: View {
     var body: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
-                packetField("RETURN TO", item.desiredOutcome)
+                packetField("Return to", item.desiredOutcome)
                 if let justCompleted = item.justCompleted {
-                    packetField("JUST COMPLETED", justCompleted)
+                    packetField("Just completed", justCompleted)
                 }
-                packetField("NEXT ACTION", item.nextAction, prominent: true)
+                packetField("Next action", item.nextAction, prominent: true)
                 if let blocker = item.blocker {
-                    packetField("BLOCKER", blocker)
+                    packetField("Blocker", blocker)
                 }
                 if item.references.isEmpty == false {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("REFERENCES").font(.caption).foregroundStyle(.secondary)
+                        Text("References").font(.caption).foregroundStyle(.secondary)
                         ForEach(item.references, id: \.self) { reference in
                             Text(reference).textSelection(.enabled)
                         }
@@ -2590,7 +2677,7 @@ private struct ReturnPacketView: View {
                     Spacer()
                     Button("Finish") { Task { await model.finishFocus(item.intentionID) } }
                     Button("Resume") { Task { await model.resumeFocus(item.intentionID) } }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(OpenLoopAccessoryButtonStyle())
                 }
             }
             .padding(6)
