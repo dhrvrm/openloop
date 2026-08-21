@@ -1797,6 +1797,14 @@ private struct MeetingTranscriptRow: View {
                 onEvidence: onEvidence
             )
 
+            briefSection(
+                title: "Open questions",
+                icon: "questionmark.bubble",
+                insights: intelligence.questions,
+                emptyText: MeetingIntelligencePresentation.emptyQuestionText,
+                onEvidence: onEvidence
+            )
+
             HStack(alignment: .top, spacing: 12) {
                 briefSection(
                     title: "Decisions",
@@ -2504,6 +2512,7 @@ private struct RecallEvidenceRow: View {
         case .returnPacket: "Return point"
         case .correction: "Voice correction"
         case .memory: "Memory"
+        case .meetingTranscript: "Meeting transcript"
         }
     }
 

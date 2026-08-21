@@ -91,6 +91,7 @@ final class AppModel: ObservableObject {
     private var meetingStreamingObservation: AnyCancellable?
     private var dictationCoordinator: (any VoiceDictationCoordinating)?
     private var deliveredTranscriptID: UUID?
+    private var semanticizedMeetingTranscriptIDs: Set<UUID> = []
 
     init(
         loop: ThoughtLoop,
@@ -210,8 +211,10 @@ final class AppModel: ObservableObject {
             meetingJob = job
             handleDictationJob(job)
         }
-        meetingTranscriptObservation = controller.$transcripts.sink { [weak self] in
-            self?.meetingTranscripts = $0
+        meetingTranscriptObservation = controller.$transcripts.sink { [weak self] transcripts in
+            guard let self else { return }
+            meetingTranscripts = transcripts
+            semanticizeNewMeetingTranscripts(transcripts)
         }
         meetingDiagnosticsObservation = controller.$engineDiagnostics.sink { [weak self] in
             self?.meetingEngineDiagnostics = $0
@@ -226,6 +229,35 @@ final class AppModel: ObservableObject {
             self?.streamingVoiceSession = $0
         }
         Task { await controller.refresh() }
+    }
+
+    private func semanticizeNewMeetingTranscripts(_ transcripts: [MeetingTranscript]) {
+        guard let semanticGraph else { return }
+        let pending = transcripts.filter {
+            !semanticizedMeetingTranscriptIDs.contains($0.id)
+        }
+        guard !pending.isEmpty else { return }
+        semanticizedMeetingTranscriptIDs.formUnion(pending.map(\.id))
+        Task { [weak self] in
+            guard let self else { return }
+            for transcript in pending {
+                do {
+                    let nodes = try await semanticGraph.recordMeetingSemantics(
+                        transcript: transcript
+                    )
+                    for node in nodes {
+                        _ = try? await semanticGraph.enrichVector(
+                            nodeID: node.id,
+                            text: node.claim
+                        )
+                    }
+                } catch {
+                    semanticizedMeetingTranscriptIDs.remove(transcript.id)
+                    semanticError = "The transcript is safe, but its context graph is waiting to refresh."
+                }
+            }
+            await refreshSemanticGraph()
+        }
     }
 
     func attachVoiceQualityAudit(
@@ -645,14 +677,16 @@ final class AppModel: ObservableObject {
             isSaving = false
             if let semanticGraph {
                 do {
-                    let node = try await semanticGraph.recordObservation(capture: capture)
+                    let nodes = try await semanticGraph.recordSemantics(capture: capture)
                     await refreshSemanticGraph()
                     Task { [weak self] in
                         guard let self else { return }
-                        _ = try? await semanticGraph.enrichVector(
-                            nodeID: node.id,
-                            text: node.claim
-                        )
+                        for node in nodes {
+                            _ = try? await semanticGraph.enrichVector(
+                                nodeID: node.id,
+                                text: node.claim
+                            )
+                        }
                         await self.refreshSemanticGraph()
                     }
                 } catch {

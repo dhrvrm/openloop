@@ -46,6 +46,161 @@ public actor SemanticGraphLoop {
         return node
     }
 
+    /// Records the raw observation plus conservative, evidence-linked meaning.
+    /// Replaying the same capture is idempotent and never invents a task.
+    @discardableResult
+    public func recordSemantics(
+        capture: RawCapture,
+        extractor: SemanticCandidateExtractor = SemanticCandidateExtractor()
+    ) async throws -> [SemanticNode] {
+        let evidenceID = RecallEvidenceID(kind: .capture, id: capture.id)
+        let current = try await graph()
+        let existing = current.nodes.values.filter { node in
+            node.evidence.contains { $0.id == evidenceID }
+        }.sorted { left, right in
+            if left.id == capture.id { return true }
+            if right.id == capture.id { return false }
+            return left.id.uuidString < right.id.uuidString
+        }
+        if current.nodes[capture.id] != nil { return existing }
+
+        let evidence = try SemanticEvidence(
+            id: evidenceID,
+            excerpt: capture.text,
+            occurredAt: capture.createdAt
+        )
+        let observation = try SemanticNode(
+            id: capture.id,
+            kind: .observation,
+            claim: capture.text,
+            confidence: 1,
+            status: .active,
+            evidence: [evidence],
+            createdAt: capture.createdAt
+        )
+        var nodes = [observation]
+        var events: [SemanticGraphEvent] = [
+            .node(id: UUID(), occurredAt: capture.createdAt, value: observation),
+        ]
+        for candidate in extractor.extract(from: capture.text) {
+            let node = try SemanticNode(
+                kind: candidate.kind,
+                claim: candidate.claim,
+                confidence: candidate.confidence,
+                status: candidate.status,
+                evidence: [evidence],
+                createdAt: capture.createdAt
+            )
+            let relation = try SemanticRelation(
+                sourceID: observation.id,
+                targetID: node.id,
+                kind: .supports,
+                confidence: candidate.confidence,
+                createdAt: capture.createdAt
+            )
+            nodes.append(node)
+            events.append(.node(id: UUID(), occurredAt: capture.createdAt, value: node))
+            events.append(.relation(id: UUID(), occurredAt: capture.createdAt, value: relation))
+        }
+        try await append(events)
+        return nodes
+    }
+
+    /// Projects only extractive meeting insights into the graph. Every node
+    /// points back to the exact transcript segment that justified it.
+    @discardableResult
+    public func recordMeetingSemantics(
+        transcript: MeetingTranscript,
+        compiler: MeetingIntelligenceCompiler = MeetingIntelligenceCompiler()
+    ) async throws -> [SemanticNode] {
+        var current = try await graph()
+        var events: [SemanticGraphEvent] = []
+        var created: [SemanticNode] = []
+        let rootEvidence = try SemanticEvidence(
+            id: RecallEvidenceID(kind: .meetingTranscript, id: transcript.id),
+            excerpt: String(transcript.text.prefix(512)),
+            occurredAt: transcript.createdAt
+        )
+        let root: SemanticNode
+        if let existing = current.nodes[transcript.id] {
+            root = existing
+        } else {
+            root = try SemanticNode(
+                id: transcript.id,
+                kind: .context,
+                claim: "Meeting: \(transcript.sourceName)",
+                confidence: 1,
+                status: .active,
+                evidence: [rootEvidence],
+                createdAt: transcript.createdAt
+            )
+            let event = SemanticGraphEvent.node(
+                id: UUID(),
+                occurredAt: transcript.createdAt,
+                value: root
+            )
+            try current.apply(event)
+            events.append(event)
+            created.append(root)
+        }
+
+        let intelligence = compiler.compile(transcript)
+        let insights: [(MeetingInsight, SemanticNodeKind, Double, SemanticNodeStatus)] =
+            intelligence.summary.map { ($0, .observation, 0.76, .active) }
+            + intelligence.questions.map { ($0, .question, 0.98, .active) }
+            + intelligence.decisions.map { ($0, .decision, 0.96, .active) }
+            + intelligence.actionCandidates.map { ($0, .intention, 0.94, .active) }
+
+        for (insight, kind, confidence, status) in insights {
+            let evidenceID = RecallEvidenceID(
+                kind: .meetingTranscript,
+                id: insight.evidence.segmentID
+            )
+            let exists = current.nodes.values.contains { node in
+                node.kind == kind && node.claim == insight.text
+                    && node.evidence.contains { $0.id == evidenceID }
+            }
+            guard !exists else { continue }
+            let evidence = try SemanticEvidence(
+                id: evidenceID,
+                excerpt: insight.evidence.excerpt,
+                occurredAt: transcript.createdAt.addingTimeInterval(insight.evidence.start)
+            )
+            let node = try SemanticNode(
+                kind: kind,
+                claim: insight.text,
+                confidence: confidence,
+                status: status,
+                evidence: [evidence],
+                createdAt: evidence.occurredAt
+            )
+            let nodeEvent = SemanticGraphEvent.node(
+                id: UUID(),
+                occurredAt: node.createdAt,
+                value: node
+            )
+            try current.apply(nodeEvent)
+            events.append(nodeEvent)
+            let relation = try SemanticRelation(
+                sourceID: root.id,
+                targetID: node.id,
+                kind: .supports,
+                confidence: confidence,
+                createdAt: node.createdAt
+            )
+            let relationEvent = SemanticGraphEvent.relation(
+                id: UUID(),
+                occurredAt: node.createdAt,
+                value: relation
+            )
+            try current.apply(relationEvent)
+            events.append(relationEvent)
+            created.append(node)
+        }
+        try await append(events)
+        return created
+    }
+
     @discardableResult
     public func enrichVector(nodeID: UUID, text: String) async throws -> SemanticVector? {
         guard let embeddingProvider else { return nil }

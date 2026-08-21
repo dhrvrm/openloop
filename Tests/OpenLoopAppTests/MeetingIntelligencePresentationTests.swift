@@ -19,7 +19,7 @@ import Testing
     )
     let brief = MeetingIntelligenceCompiler().compile(transcript)
 
-    #expect(MeetingIntelligencePresentation.countLabel(for: brief) == "2 highlights · 1 decision · 1 action")
+    #expect(MeetingIntelligencePresentation.countLabel(for: brief) == "2 highlights · 0 questions · 1 decision · 1 action")
     let action = try #require(brief.actionCandidates.first)
     #expect(MeetingIntelligencePresentation.evidenceLabel(for: action) == "1:05 · Speaker 2")
 }
@@ -30,4 +30,5 @@ import Testing
     #expect(MeetingIntelligencePresentation.countLabel(for: empty) == "No brief yet")
     #expect(MeetingIntelligencePresentation.emptyDecisionText == "No explicit decisions found.")
     #expect(MeetingIntelligencePresentation.emptyActionText == "No explicit action candidates found.")
+    #expect(MeetingIntelligencePresentation.emptyQuestionText == "No open questions found.")
 }

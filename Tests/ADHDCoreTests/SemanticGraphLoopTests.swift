@@ -74,6 +74,44 @@ private struct SemanticFixtureEmbeddings: EmbeddingProvider {
     #expect(try await loop.ask("checkout performance") == [problem])
 }
 
+@Test func semanticExtractionPreservesUncertaintyAndGroundsEveryMeaning() async throws {
+    let repository = SemanticLoopRepository()
+    let loop = SemanticGraphLoop(repository: repository)
+    let capture = try RawCapture(
+        createdAt: Date(timeIntervalSince1970: 45),
+        text: "Maybe we should migrate to Postgres. Can we reduce release time?"
+    )
+
+    let nodes = try await loop.recordSemantics(capture: capture)
+    let graph = try await loop.graph()
+
+    #expect(nodes.map(\.kind).contains(.observation))
+    #expect(nodes.map(\.kind).contains(.possibility))
+    #expect(nodes.map(\.kind).contains(.question))
+    #expect(nodes.map(\.kind).contains(.decision) == false)
+    #expect(nodes.map(\.kind).contains(.action) == false)
+    #expect(nodes.map(\.kind).contains(.intention) == false)
+    #expect(nodes.filter { $0.kind != .observation }.allSatisfy {
+        $0.evidence.map(\.id) == [RecallEvidenceID(kind: .capture, id: capture.id)]
+    })
+    #expect(graph.relations.values.count == nodes.count - 1)
+
+    let replayed = try await loop.recordSemantics(capture: capture)
+    #expect(Set(replayed.map(\.id)) == Set(nodes.map(\.id)))
+    #expect(try await loop.graph() == graph)
+}
+
+@Test func semanticExtractionUnderstandsExplicitEnglishHindiAndHinglishSignals() async throws {
+    let extractor = SemanticCandidateExtractor()
+
+    #expect(extractor.extract(from: "Checkout is slow after PostHog.").map(\.kind) == [.problem])
+    #expect(extractor.extract(from: "We decided to keep Redis.").map(\.kind) == [.decision])
+    #expect(extractor.extract(from: "I will send the release note.").map(\.kind) == [.intention])
+    #expect(extractor.extract(from: "क्या हम release time कम कर सकते हैं?").map(\.kind) == [.question])
+    #expect(extractor.extract(from: "शायद auth module अलग करना चाहिए।").map(\.kind) == [.possibility])
+    #expect(extractor.extract(from: "Build galat output de raha hai.").map(\.kind) == [.problem])
+}
+
 @Test func semanticGraphLoopStoresVectorsAndGroundedSimilarityRelations() async throws {
     let repository = SemanticLoopRepository()
     let firstText = "Checkout performance after PostHog"
@@ -103,4 +141,40 @@ private struct SemanticFixtureEmbeddings: EmbeddingProvider {
         $0.kind == .relatesTo
             && Set([$0.sourceID, $0.targetID]) == Set([first.id, second.id])
     })
+}
+
+@Test func meetingSemanticsAreExtractiveEvidenceLinkedAndIdempotent() async throws {
+    let repository = SemanticLoopRepository()
+    let loop = SemanticGraphLoop(repository: repository)
+    let segment = try TranscriptSegment(
+        start: 5,
+        end: 12,
+        text: "Can we reduce release time? We decided to automate checks. Dhruv will publish notes."
+    )
+    let transcript = try MeetingTranscript(
+        sourceName: "release.m4a",
+        createdAt: Date(timeIntervalSince1970: 100),
+        duration: 12,
+        modelIdentifier: "local",
+        segments: [segment]
+    )
+
+    let nodes = try await loop.recordMeetingSemantics(transcript: transcript)
+    let graph = try await loop.graph()
+
+    #expect(nodes.map(\.kind).contains(.context))
+    #expect(nodes.map(\.kind).contains(.question))
+    #expect(nodes.map(\.kind).contains(.decision))
+    #expect(nodes.map(\.kind).contains(.intention))
+    #expect(nodes.map(\.kind).contains(.action) == false)
+    #expect(nodes.filter { $0.kind != .context }.allSatisfy { node in
+        node.evidence.allSatisfy { evidence in
+            evidence.id.kind == .meetingTranscript
+                && segment.text.contains(evidence.excerpt)
+        }
+    })
+    #expect(graph.relations.values.count == nodes.count - 1)
+
+    #expect(try await loop.recordMeetingSemantics(transcript: transcript).isEmpty)
+    #expect(try await loop.graph() == graph)
 }

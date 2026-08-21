@@ -51,6 +51,8 @@ final class MeetingTranscriptionController: ObservableObject {
     private var streamingFramePump: StreamingVoiceFramePump?
     private var streamingPreparation: Task<Void, Never>?
     private var streamingGeneration: UUID?
+    private var pendingStreamingFrames: [StreamingVoiceFrame] = []
+    private let maximumPendingStreamingFrames = 32
 
     init(
         repository: any ThoughtRepository,
@@ -182,6 +184,10 @@ final class MeetingTranscriptionController: ObservableObject {
                 .appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("m4a")
             try recorder.start(at: url)
+            pendingStreamingFrames = []
+            recorder.onPCMFrame = { [weak self] frame in
+                self?.acceptStreamingFrame(frame)
+            }
             let startedAt = Date.now
             recordingStartedAt = startedAt
             job = MeetingJobPresentation(
@@ -231,6 +237,7 @@ final class MeetingTranscriptionController: ObservableObject {
         streamingFramePump?.cancel()
         streamingFramePump = nil
         streamingSession = nil
+        pendingStreamingFrames = []
         if let work {
             work.cancel()
             job.message = "Cancelling local transcription"
@@ -471,7 +478,11 @@ final class MeetingTranscriptionController: ObservableObject {
             streamingSession = session
             let pump = StreamingVoiceFramePump(session: session)
             streamingFramePump = pump
-            recorder.onPCMFrame = { frame in pump.enqueue(frame) }
+            for frame in pendingStreamingFrames { pump.enqueue(frame) }
+            pendingStreamingFrames = []
+            recorder.onPCMFrame = { [weak self] frame in
+                self?.acceptStreamingFrame(frame)
+            }
         } catch {
             guard streamingGeneration == generation,
                   job.stage == .recording else { return }
@@ -484,6 +495,9 @@ final class MeetingTranscriptionController: ObservableObject {
     }
 
     private func finishStreamingSession() async {
+        if let streamingPreparation {
+            await streamingPreparation.value
+        }
         cancelStreamingPreparation()
         recorder?.onPCMFrame = nil
         await streamingFramePump?.finish()
@@ -492,6 +506,20 @@ final class MeetingTranscriptionController: ObservableObject {
         }
         streamingFramePump = nil
         streamingSession = nil
+        pendingStreamingFrames = []
+    }
+
+    private func acceptStreamingFrame(_ frame: StreamingVoiceFrame) {
+        if let streamingFramePump {
+            streamingFramePump.enqueue(frame)
+            return
+        }
+        pendingStreamingFrames.append(frame)
+        if pendingStreamingFrames.count > maximumPendingStreamingFrames {
+            pendingStreamingFrames.removeFirst(
+                pendingStreamingFrames.count - maximumPendingStreamingFrames
+            )
+        }
     }
 
     private func apply(_ progress: MeetingTranscriptionProgress) {

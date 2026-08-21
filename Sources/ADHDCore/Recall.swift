@@ -6,6 +6,7 @@ public enum RecallEvidenceKind: String, Codable, CaseIterable, Hashable, Sendabl
     case returnPacket
     case correction
     case memory
+    case meetingTranscript
 }
 
 public struct RecallEvidenceID: Codable, Equatable, Hashable, Sendable {

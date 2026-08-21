@@ -38,7 +38,7 @@ import Testing
     #expect(brief.decisions.map(\.text).contains("हिंदी वाला onboarding flow final है।"))
     #expect(brief.actionCandidates.map(\.text).contains("Dhruv will send the release notes tomorrow."))
     #expect(brief.actionCandidates.map(\.text).contains("मीरा कल तक screenshots भेजेगी।"))
-    #expect((brief.summary + brief.decisions + brief.actionCandidates).allSatisfy { insight in
+    #expect((brief.summary + brief.questions + brief.decisions + brief.actionCandidates).allSatisfy { insight in
         transcript.segments.contains { segment in
             segment.id == insight.evidence.segmentID
                 && segment.text.contains(insight.text)
@@ -77,6 +77,8 @@ import Testing
 
     #expect(brief.decisions.isEmpty)
     #expect(brief.actionCandidates.isEmpty)
+    #expect(brief.questions.count == 4)
+    #expect(brief.questions.map(\.text).contains("क्या हम इसे कल भेजेंगे?"))
 }
 
 @Test func meetingIntelligenceIsDeterministicAndDeduplicatesSummary() throws {

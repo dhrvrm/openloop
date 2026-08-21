@@ -2,6 +2,7 @@ import Foundation
 
 public enum MeetingInsightKind: String, Codable, Equatable, Sendable {
     case summary
+    case question
     case decision
     case actionCandidate
 }
@@ -46,15 +47,18 @@ public struct MeetingInsight: Codable, Equatable, Identifiable, Sendable {
 
 public struct MeetingIntelligence: Codable, Equatable, Sendable {
     public let summary: [MeetingInsight]
+    public let questions: [MeetingInsight]
     public let decisions: [MeetingInsight]
     public let actionCandidates: [MeetingInsight]
 
     public init(
         summary: [MeetingInsight],
+        questions: [MeetingInsight] = [],
         decisions: [MeetingInsight],
         actionCandidates: [MeetingInsight]
     ) {
         self.summary = summary
+        self.questions = questions
         self.decisions = decisions
         self.actionCandidates = actionCandidates
     }
@@ -68,9 +72,14 @@ public struct MeetingIntelligenceCompiler: Sendable {
     public func compile(_ transcript: MeetingTranscript) -> MeetingIntelligence {
         let sentences = transcript.segments.flatMap(Self.sentences)
         guard !sentences.isEmpty else {
-            return MeetingIntelligence(summary: [], decisions: [], actionCandidates: [])
+            return MeetingIntelligence(summary: [], questions: [], decisions: [], actionCandidates: [])
         }
 
+        let questions = sentences.compactMap { sentence in
+            Self.isQuestion(sentence.text)
+                ? Self.insight(.question, from: sentence)
+                : nil
+        }
         let decisions = sentences.compactMap { sentence in
             Self.isExplicitDecision(sentence.text)
                 ? Self.insight(.decision, from: sentence)
@@ -84,6 +93,7 @@ public struct MeetingIntelligenceCompiler: Sendable {
 
         return MeetingIntelligence(
             summary: Self.summary(from: sentences),
+            questions: Self.deduplicated(questions),
             decisions: Self.deduplicated(decisions),
             actionCandidates: Self.deduplicated(actions)
         )

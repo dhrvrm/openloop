@@ -615,7 +615,7 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
             case .capture: captureIDs.contains(evidence.evidenceID.id)
             case .intention, .returnPacket: intentionIDs.contains(evidence.evidenceID.id)
             case .correction: correctionIDs.contains(evidence.evidenceID.id)
-            case .memory: false
+            case .memory, .meetingTranscript: false
             }
             return !removed
         }
