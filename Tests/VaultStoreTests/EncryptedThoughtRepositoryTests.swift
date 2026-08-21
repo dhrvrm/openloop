@@ -728,7 +728,8 @@ private func encryptedSemanticGraphFixture() throws -> [SemanticGraphEvent] {
     let reopened = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
     #expect(try await reopened.capabilityGrants() == [grant])
     #expect(try await reopened.toolActionAuditRecords() == [record])
-    let encrypted = try Data(contentsOf: reopened.fileURL)
+    let reopenedFileURL = await reopened.fileURL
+    let encrypted = try Data(contentsOf: reopenedFileURL)
     #expect(encrypted.range(of: Data("Private release title".utf8)) == nil)
 }
 

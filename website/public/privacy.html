@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#101210" />
+  <meta name="description" content="How OpenLoop handles recordings, transcripts, local models, context, and optional permissions." />
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <title>Privacy — OpenLoop</title>
+  <style>
+    :root{color:#efede7;background:#101210;font:16px/1.7 -apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif}*{box-sizing:border-box}body{margin:0}main{width:min(760px,calc(100% - 40px));margin:auto;padding:80px 0 120px}a{color:#42c4b2}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:110px}header a{text-decoration:none;color:inherit}h1{font-size:clamp(56px,9vw,108px);font-weight:300;line-height:.9;letter-spacing:-.065em;margin:0 0 40px}h2{font-size:25px;margin:60px 0 12px}p,li{color:#a5a7a2}code{font:13px ui-monospace,monospace;color:#42c4b2}.notice{padding:22px;border-left:3px solid #ff4c45;background:#191b19}.back{font-size:14px;border-bottom:1px solid currentColor}
+  </style>
+</head>
+<body><main>
+  <header><a href="./">OpenLoop</a><a class="back" href="https://github.com/dhrvrm/openloop">Source code</a></header>
+  <h1>Your data stays understandable.</h1>
+  <p class="notice">OpenLoop 1.0.2 runs transcription, correction, semantic memory, and storage on your Mac after the required models are downloaded. This release does not include a cloud transcription route.</p>
+  <h2>What is stored</h2>
+  <p>Typed captures, recordings kept for retry, transcripts, corrections, task state, semantic evidence, context settings, and action audit records are stored locally. The main vault is encrypted. Model files and retained source audio are separate local files.</p>
+  <h2>Microphone and accessibility</h2>
+  <p>Microphone access is requested when you start recording. Accessibility access is used only when you ask OpenLoop to insert text into another app. Audio import does not need microphone permission.</p>
+  <h2>Network use</h2>
+  <p>The first speech-model download needs a network connection. The current release does not silently route audio or transcripts to a hosted speech service.</p>
+  <h2>Deletion and retention</h2>
+  <p>You can delete individual transcripts and retained audio, apply a retention policy, or remove all OpenLoop data from the app. Removing all data also removes locally managed model and staging directories.</p>
+  <h2>Community build</h2>
+  <p>The downloadable 1.0.2 DMG is ad-hoc signed and is not Apple-notarized. Review the <a href="https://github.com/dhrvrm/openloop/blob/main/SECURITY.md">security policy</a> and source before installing.</p>
+  <h2>Questions</h2>
+  <p>Open an issue in the <a href="https://github.com/dhrvrm/openloop/issues">public repository</a>. Do not include private recordings, transcripts, keys, or account data.</p>
+</main></body></html>

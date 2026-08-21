@@ -20,25 +20,72 @@ jobs:
         run: |
           version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
           test "${GITHUB_REF_NAME}" = "v${version}"
-      - name: Build versioned DMG
+      - name: Configure release signing
         env:
-          OPENLOOP_ALLOW_ADHOC_RELEASE: "1"
+          SIGNING_P12: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
+          SIGNING_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+          NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          if [[ -n "$SIGNING_P12" && -n "$SIGNING_IDENTITY" && -n "$NOTARY_KEY" && -n "$NOTARY_KEY_ID" && -n "$NOTARY_ISSUER_ID" ]]; then
+            keychain="$RUNNER_TEMP/openloop-signing.keychain-db"
+            keychain_password="$(openssl rand -hex 24)"
+            certificate="$RUNNER_TEMP/openloop-signing.p12"
+            notary_key="$RUNNER_TEMP/AuthKey_${NOTARY_KEY_ID}.p8"
+            printf '%s' "$SIGNING_P12" | base64 --decode > "$certificate"
+            printf '%s' "$NOTARY_KEY" | base64 --decode > "$notary_key"
+            security create-keychain -p "$keychain_password" "$keychain"
+            security set-keychain-settings -lut 21600 "$keychain"
+            security unlock-keychain -p "$keychain_password" "$keychain"
+            security import "$certificate" -k "$keychain" -P "$SIGNING_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
+            security list-keychains -d user -s "$keychain"
+            echo "OPENLOOP_SIGN_IDENTITY=$SIGNING_IDENTITY" >> "$GITHUB_ENV"
+            echo "OPENLOOP_ALLOW_ADHOC_RELEASE=0" >> "$GITHUB_ENV"
+            echo "OPENLOOP_NOTARIZE=1" >> "$GITHUB_ENV"
+            echo "APPLE_NOTARY_KEY_PATH=$notary_key" >> "$GITHUB_ENV"
+            echo "APPLE_NOTARY_KEY_ID=$NOTARY_KEY_ID" >> "$GITHUB_ENV"
+            echo "APPLE_NOTARY_ISSUER_ID=$NOTARY_ISSUER_ID" >> "$GITHUB_ENV"
+            echo "OPENLOOP_RELEASE_SIGNING=Developer ID signed and Apple notarized" >> "$GITHUB_ENV"
+          else
+            echo "OPENLOOP_ALLOW_ADHOC_RELEASE=1" >> "$GITHUB_ENV"
+            echo "OPENLOOP_NOTARIZE=0" >> "$GITHUB_ENV"
+            echo "OPENLOOP_RELEASE_SIGNING=Ad-hoc signed community build; not Apple notarized" >> "$GITHUB_ENV"
+          fi
+      - name: Build versioned DMG
         run: Scripts/build-dmg.sh
       - name: Verify bundle
         env:
-          OPENLOOP_ALLOW_ADHOC_RELEASE: "1"
           OPENLOOP_EXPECTED_VERSION: ${{ github.ref_name }}
         run: Scripts/verify-release.sh ".artifacts/app/OpenLoop ADHD.app"
+      - name: Notarize Developer ID build
+        if: env.OPENLOOP_NOTARIZE == '1'
+        run: |
+          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          dmg=".artifacts/OpenLoop-${version}-arm64.dmg"
+          Scripts/notarize-release.sh "$dmg"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
           dmg=".artifacts/OpenLoop-${version}-arm64.dmg"
+          notes="$RUNNER_TEMP/release-notes.md"
+          {
+            echo "## Install"
+            echo
+            echo "- Apple silicon, macOS 15 or later"
+            echo "- $OPENLOOP_RELEASE_SIGNING"
+            echo "- SHA-256 checksum is attached beside the DMG"
+          } > "$notes"
           if gh release view "v${version}" >/dev/null 2>&1; then
             gh release upload "v${version}" "$dmg" "$dmg.sha256" --clobber
+            gh release edit "v${version}" --notes-file "$notes"
           else
             gh release create "v${version}" "$dmg" "$dmg.sha256" \
               --title "OpenLoop ${version}" \
-              --generate-notes
+              --notes-file "$notes"
           fi

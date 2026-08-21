@@ -1,4 +1,4 @@
-import { useRef, type PointerEvent } from "react";
+import { useRef, useState, type PointerEvent } from "react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -7,14 +7,18 @@ import {
   ArrowRight,
   BracketsAngle,
   GithubLogo,
+  List,
   Microphone,
   Waveform,
+  X,
 } from "@phosphor-icons/react";
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
 const repository = "https://github.com/dhrvrm/openloop";
-const releases = `${repository}/releases/latest`;
+const version = "1.0.2";
+const download = `${repository}/releases/download/v${version}/OpenLoop-${version}-arm64.dmg`;
+const checksum = "b3ea163218e952716f5eb641910e01da869669de9c1c9d352007f927a592b862";
 
 const nodes = [
   { label: "Project", x: 13, y: 39, tone: "quiet" },
@@ -48,8 +52,27 @@ function ProductFrame({ className = "", crop = false }: { className?: string; cr
   return (
     <div className={`product-frame ${className}`}>
       <div className="frame-bar"><i /><i /><i /><span>OpenLoop ADHD</span></div>
-      <div className={crop ? "frame-image frame-image--crop" : "frame-image"}>
-        <img src={`${import.meta.env.BASE_URL}assets/openloop-app.png`} alt="OpenLoop native macOS application showing capture, transcript and local engine state" />
+      <div className={`product-demo${crop ? " product-demo--crop" : ""}`} role="img" aria-label="OpenLoop interface illustration showing task lists and local voice capture">
+        <aside className="demo-sidebar">
+          <b><span className="demo-logo" />OpenLoop</b>
+          {[["Now", "4"], ["Upcoming", ""], ["Someday", ""], ["Inbox", "2"], ["Transcripts", "3"]].map(([label, count], index) => (
+            <span className={index === 0 ? "is-current" : ""} key={label}><i />{label}<small>{count}</small></span>
+          ))}
+        </aside>
+        <div className="demo-content">
+          <small>FOCUS</small>
+          <h3>Now</h3>
+          <p>One useful next step. Everything else stays safe.</p>
+          <div className="demo-capture"><span>What should OpenLoop hold for you?</span><b>Record</b></div>
+          <div className="demo-task"><i /><div><b>Release reliability</b><span>Compare the saved audio and final transcript</span></div></div>
+          <div className="demo-task"><i /><div><b>Voice product</b><span>Review the Hindi and English terminology</span></div></div>
+        </div>
+        <aside className="demo-inspector">
+          <small>LOCAL SYSTEM</small>
+          <b><i /> Listening</b>
+          <AudioMeter />
+          <dl><div><dt>Language</dt><dd>Auto</dd></div><div><dt>Model</dt><dd>Local</dd></div><div><dt>Storage</dt><dd>Encrypted</dd></div></dl>
+        </aside>
       </div>
     </div>
   );
@@ -65,6 +88,7 @@ function AudioMeter() {
 function App() {
   const root = useRef<HTMLDivElement>(null);
   const heroObject = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useGSAP(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -134,39 +158,43 @@ function App() {
   }
 
   return <div ref={root} className="site-shell">
+    <a className="skip-link" href="#main">Skip to content</a>
     <header className="nav-shell">
       <Logo />
-      <nav aria-label="Primary navigation">
+      <nav className={menuOpen ? "is-open" : ""} aria-label="Primary navigation">
         <a href="#product">Product</a>
         <a href="#principles">Principles</a>
+        <a href="#download">Download</a>
         <a href={repository}>GitHub</a>
       </nav>
-      <a className="nav-download" href={releases}>Download <ArrowDown /></a>
+      <button className="nav-menu" type="button" aria-expanded={menuOpen} aria-label="Toggle navigation" onClick={() => setMenuOpen(!menuOpen)}>
+        {menuOpen ? <X /> : <List />}
+      </button>
+      <a className="nav-download" href={download}>Download {version}<ArrowDown /></a>
     </header>
 
-    <main id="top">
-      <section className="hero section-dark" onPointerMove={tiltHero}>
+    <main id="main">
+      <section id="top" className="hero section-dark" onPointerMove={tiltHero}>
         <div className="grid-lines" aria-hidden="true" />
         <div className="hero-copy">
-          <span className="eyebrow"><i /> Local-first voice + memory</span>
+          <span className="eyebrow"><i /> Local voice + working memory</span>
           <h1>Lose the thread.<br />Not the thought.</h1>
-          <p>A private working memory for your Mac. Save a thought, pick it up later, and keep the recording and context on your machine.</p>
+          <p>Dictate into any app, keep the raw evidence, and return to the exact context later. The current release runs its speech and memory pipeline on your Mac.</p>
           <div className="action-row">
-            <ActionLink href={releases}><ArrowDown /> Download for macOS</ActionLink>
+            <ActionLink href={download}><ArrowDown /> Download {version} for macOS</ActionLink>
             <ActionLink href={repository} kind="secondary"><BracketsAngle /> Steal the code, legally</ActionLink>
           </div>
-          <span className="hero-note">Apple silicon · macOS 15+ · MIT licensed</span>
+          <span className="hero-note">Apple silicon · macOS 15+ · 49.2 MB · MIT licensed</span>
         </div>
         <div ref={heroObject} className="hero-object">
           <ProductFrame />
           <div className="recording-chip"><span /><AudioMeter /><b>−24 dB</b></div>
         </div>
-        <div className="hero-index"><span>OL</span><span>01</span></div>
       </section>
 
       <section id="product" className="voice section-dark">
         <div className="section-heading" data-reveal>
-          <span className="section-number">01 / CAPTURE</span>
+          <span className="section-number">Capture</span>
           <h2>Speak before the thought leaves.</h2>
           <p>Press one shortcut and speak. You can see the sound level and words as they arrive. OpenLoop keeps the original recording with the transcript.</p>
         </div>
@@ -175,7 +203,7 @@ function App() {
           <div className="voice-screen voice-screen--middle recording-panel">
             <div className="recording-state"><span /><b>Recording</b><time>00:00:18</time><em>−14 dB</em></div>
             <AudioMeter />
-            <button aria-label="Stop recording"><span /></button>
+            <div className="recording-stop" aria-hidden="true"><span /></div>
           </div>
           <div className="voice-screen voice-screen--front partial-panel">
             <div className="partial-tabs"><b>Stable</b><span>Partial</span></div>
@@ -189,7 +217,7 @@ function App() {
 
       <section className="memory section-dark">
         <div className="memory-copy" data-reveal>
-          <span className="section-number">02 / REMEMBER</span>
+          <span className="section-number">Remember</span>
           <h2>Know why it remembers.</h2>
           <p>OpenLoop keeps decisions, questions, and possible next steps separate. Every saved fact links back to the note or recording it came from.</p>
           <a className="text-link" href={`${repository}#semantic-memory`}>Explore the memory model <ArrowRight /></a>
@@ -198,21 +226,21 @@ function App() {
           <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             {edges.map(([a, b], index) => <line key={index} x1={nodes[a].x} y1={nodes[a].y} x2={nodes[b].x} y2={nodes[b].y} />)}
           </svg>
-          {nodes.map((node) => <button key={node.label} className={`graph-node graph-node--${node.tone}`} style={{ left: `${node.x}%`, top: `${node.y}%` }}>
+          {nodes.map((node) => <div key={node.label} className={`graph-node graph-node--${node.tone}`} style={{ left: `${node.x}%`, top: `${node.y}%` }}>
             <i /><span>{node.label}</span>
-          </button>)}
+          </div>)}
           <aside className="evidence-card">
-            <span>Evidence / verified</span>
+            <span>Evidence linked</span>
             <h3>Prefer local quality over silent cloud fallback.</h3>
-            <p>Architecture decision · transcript 08/18</p>
+            <p>Example decision · opens its source</p>
           </aside>
         </div>
       </section>
 
       <section className="return-section section-light">
         <div className="return-statement" data-reveal>
-          <span className="giant-number">03</span>
-          <span className="section-number">RETURN</span>
+          <span className="giant-number" aria-hidden="true">03</span>
+          <span className="section-number">Return</span>
           <h2>Pick up where you stopped.</h2>
           <p>See what you were doing, the last useful detail, what is still open, and one next step.</p>
         </div>
@@ -223,16 +251,16 @@ function App() {
             <h3>Release reliability</h3>
             <div className="context-block"><label>LAST CONTEXT</label><p>Hindi and English detection worked, but final accuracy still needs a reliable correction pass.</p></div>
             <div className="context-block"><label>UNRESOLVED</label><p>How should confidence be shown without interrupting dictation?</p></div>
-            <button>Compare the saved audio and transcript <ArrowRight /></button>
+            <a className="return-action" href={`${repository}/blob/main/docs/VOICE_SEMANTIC_OPERATING_LAYER.md`}>Read the evidence model <ArrowRight /></a>
           </div>
         </div>
       </section>
 
       <section id="principles" className="engine section-dark">
         <div className="engine-copy" data-reveal>
-          <span className="section-number">04 / LOCAL ENGINE</span>
+          <span className="section-number">Local engine</span>
           <h2>Your audio stays on your Mac.</h2>
-          <p>Recording, transcription, corrections, and saved context can all run locally. Cloud use is optional and never silent.</p>
+          <p>Recording, transcription, correction, and saved context run locally in this release. The first model download needs a network connection; there is no silent cloud transcription route.</p>
           <dl><div><dt>Execution</dt><dd>On device</dd></div><div><dt>Storage</dt><dd>Encrypted locally</dd></div><div><dt>Network</dt><dd>Explicit, never silent</dd></div></dl>
         </div>
         <div className="engine-stack">
@@ -256,7 +284,7 @@ function App() {
           <div className="output-node"><Waveform weight="bold" /></div>
         </div>
         <div className="everywhere-copy" data-reveal>
-          <span className="section-number">05 / OUTPUT</span>
+          <span className="section-number">Output</span>
           <h2>Speak anywhere<br />you type.</h2>
           <p>OpenLoop puts the result into the current app. It uses the clipboard, macOS accessibility, or keyboard input—whichever works best there.</p>
         </div>
@@ -264,7 +292,7 @@ function App() {
 
       <section className="opensource">
         <div className="opensource-copy" data-reveal>
-          <span className="section-number">06 / OPEN SOURCE</span>
+          <span className="section-number">Open source</span>
           <h2>Take it apart.<br />Make it yours.</h2>
           <ActionLink href={repository} kind="secondary"><GithubLogo weight="fill" /> Steal the code, legally</ActionLink>
           <ul><li>MIT licensed</li><li>Swift 6</li><li>Local-first</li><li>Apple silicon</li></ul>
@@ -274,17 +302,41 @@ function App() {
         </div>
       </section>
 
+      <section id="download" className="release-section section-dark">
+        <div className="release-copy" data-reveal>
+          <span className="section-number">Current build</span>
+          <h2>Install the Mac app.</h2>
+          <p>OpenLoop {version} is an Apple-silicon community build for macOS 15 or later. It is ad-hoc signed and not Apple-notarized yet.</p>
+          <ActionLink href={download}><ArrowDown /> Download the DMG</ActionLink>
+        </div>
+        <div className="release-ledger" data-reveal>
+          <dl>
+            <div><dt>Version</dt><dd>{version} (15)</dd></div>
+            <div><dt>Download</dt><dd>49.2 MB · arm64</dd></div>
+            <div><dt>Requires</dt><dd>macOS 15+ · Apple silicon</dd></div>
+            <div><dt>Signing</dt><dd>Ad-hoc community build</dd></div>
+            <div><dt>SHA-256</dt><dd><code>{checksum}</code></dd></div>
+          </dl>
+          <ol>
+            <li>Open the DMG and drag OpenLoop ADHD to Applications.</li>
+            <li>On first launch, Control-click the app and choose Open.</li>
+            <li>Microphone access is requested only when you start recording.</li>
+          </ol>
+          <a className="checksum-link" href={`${download}.sha256`}>Download checksum <ArrowRight /></a>
+        </div>
+      </section>
+
       <section className="closing section-light">
         <div data-reveal>
           <Microphone weight="light" />
           <h2>Keep the thought.</h2>
           <div className="action-row">
-            <ActionLink href={releases}><ArrowDown /> Download OpenLoop</ActionLink>
+            <ActionLink href={download}><ArrowDown /> Download OpenLoop {version}</ActionLink>
             <ActionLink href={repository} kind="secondary"><GithubLogo /> View source</ActionLink>
           </div>
           <p>Open source. Local-first. Built for macOS.</p>
         </div>
-        <footer><Logo /><nav><a href={`${repository}/tree/main/docs`}>Documentation</a><a href={`${repository}/releases`}>Releases</a><a href={`${repository}/blob/main/SECURITY.md`}>Security</a></nav></footer>
+        <footer><Logo /><nav><a href={`${repository}/tree/main/docs`}>Documentation</a><a href={`${repository}/releases`}>Releases</a><a href={`${repository}/blob/main/SECURITY.md`}>Security</a><a href={`${import.meta.env.BASE_URL}privacy.html`}>Privacy</a><a href={`${repository}/blob/main/LICENSE`}>License</a></nav></footer>
         <div className="closing-wave"><AudioMeter /></div>
       </section>
     </main>
