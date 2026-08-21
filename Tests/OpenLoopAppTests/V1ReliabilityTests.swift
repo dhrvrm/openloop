@@ -31,13 +31,13 @@ struct V1ReliabilityTests {
     @Test func workspaceOrientationMakesNavigationAndCaptureShortcutsExplicit() {
         #expect(WorkspaceOrientation.sections.map(\.title) == ["Focus", "Intelligence"])
         #expect(WorkspaceOrientation.sections[0].destinations.map(\.title) == [
-            "Now", "Inbox", "Later", "Return",
+            "Now", "Upcoming", "Someday", "Inbox", "Later", "Return",
         ])
         #expect(WorkspaceOrientation.sections[1].destinations.map(\.title) == [
             "Transcripts", "Context", "Emerging", "Ask", "Act",
         ])
-        #expect(Set(WorkspaceOrientation.destinations.map(\.id)).count == 9)
-        #expect(Set(WorkspaceOrientation.destinations.map(\.icon)).count == 9)
+        #expect(Set(WorkspaceOrientation.destinations.map(\.id)).count == 11)
+        #expect(Set(WorkspaceOrientation.destinations.map(\.icon)).count == 11)
         #expect(WorkspaceOrientation.destination(atLegacyTab: 0) == .now)
         #expect(WorkspaceOrientation.destination(atLegacyTab: 3) == .ask)
         #expect(WorkspaceOrientation.destination(atLegacyTab: 99) == .now)
@@ -98,10 +98,10 @@ struct V1ReliabilityTests {
         #expect(OpenLoopVisualSystem.space3 == 12)
         #expect(OpenLoopVisualSystem.space4 == 20)
         #expect(OpenLoopVisualSystem.space5 == 32)
-        #expect(OpenLoopVisualSystem.sidebarWidth == 224)
-        #expect(OpenLoopVisualSystem.contentMaximumWidth == 660)
-        #expect(OpenLoopVisualSystem.checkboxSize == 16)
-        #expect(OpenLoopVisualSystem.checkboxHitSize == 26)
+        #expect(OpenLoopVisualSystem.sidebarWidth == 252)
+        #expect(OpenLoopVisualSystem.contentMaximumWidth == 760)
+        #expect(OpenLoopVisualSystem.checkboxSize == 18)
+        #expect(OpenLoopVisualSystem.checkboxHitSize == 28)
         #expect(OpenLoopVisualSystem.taskRowMinimumHeight == 44)
         #expect(OpenLoopVisualSystem.sidebarSelectionRadius == 6)
         #expect(OpenLoopVisualSystem.inputRadius == 8)

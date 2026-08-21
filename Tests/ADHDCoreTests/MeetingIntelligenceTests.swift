@@ -77,7 +77,7 @@ import Testing
 
     #expect(brief.decisions.isEmpty)
     #expect(brief.actionCandidates.isEmpty)
-    #expect(brief.questions.count == 4)
+    #expect(brief.questions.count == 3)
     #expect(brief.questions.map(\.text).contains("क्या हम इसे कल भेजेंगे?"))
 }
 

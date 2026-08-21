@@ -63,6 +63,7 @@ final class AppModel: ObservableObject {
     @Published var dictationActionNotice: String?
     @Published var isVoiceContextEnabled: Bool
     @Published private(set) var isSystemDictationActive = false
+    @Published private(set) var lastIntentionMove: IntentionMove?
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -862,6 +863,35 @@ final class AppModel: ObservableObject {
         ids.insert(movedID, at: targetIndex)
         return await runThoughtCommand {
             try await self.loop.reorderOpenIntentions(ids)
+        }
+    }
+
+    @discardableResult
+    func moveOpenLoop(
+        _ intentionID: UUID,
+        to destination: IntentionDestination
+    ) async -> Bool {
+        commandError = nil
+        do {
+            lastIntentionMove = try await loop.moveIntention(intentionID, to: destination)
+            return await refresh()
+        } catch {
+            commandError = "That move could not be saved."
+            return false
+        }
+    }
+
+    @discardableResult
+    func undoLastIntentionMove() async -> Bool {
+        guard let move = lastIntentionMove else { return false }
+        commandError = nil
+        do {
+            try await loop.apply(move.inverse)
+            lastIntentionMove = nil
+            return await refresh()
+        } catch {
+            commandError = "That move could not be undone."
+            return false
         }
     }
 

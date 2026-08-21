@@ -267,16 +267,39 @@ public struct SemanticGraphProjection: Sendable {
     public func ask(_ query: String, in graph: SemanticGraph, limit: Int = 5) -> [SemanticNode] {
         let queryTerms = Self.terms(query)
         guard !queryTerms.isEmpty else { return [] }
-        return graph.nodes.values.filter { $0.status != .superseded }.map { node in
+        let ranked = graph.nodes.values.filter { $0.status != .superseded }.map { node in
             (node, queryTerms.intersection(Self.terms(node.claim)).count)
         }.filter { $0.1 > 0 }.sorted {
             if $0.1 != $1.1 { return $0.1 > $1.1 }
+            let leftSpecificity = Self.specificity($0.0.kind)
+            let rightSpecificity = Self.specificity($1.0.kind)
+            if leftSpecificity != rightSpecificity { return leftSpecificity > rightSpecificity }
             if $0.0.confidence != $1.0.confidence { return $0.0.confidence > $1.0.confidence }
             return $0.0.createdAt > $1.0.createdAt
-        }.prefix(max(0, limit)).map(\.0)
+        }
+        var claims = Set<String>()
+        return ranked.compactMap { node, _ -> SemanticNode? in
+            let key = Self.normalizedClaim(node.claim)
+            guard claims.insert(key).inserted else { return nil }
+            return node
+        }.prefix(max(0, limit)).map { $0 }
     }
 
     private static func terms(_ value: String) -> Set<String> {
         Set(value.lowercased().split { !$0.isLetter && !$0.isNumber }.map(String.init))
+    }
+
+    private static func normalizedClaim(_ value: String) -> String {
+        value.lowercased().filter { $0.isLetter || $0.isNumber || $0.isWhitespace }
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    private static func specificity(_ kind: SemanticNodeKind) -> Int {
+        switch kind {
+        case .decision, .intention, .question, .problem, .possibility, .preference: 4
+        case .idea, .action, .project, .person, .concept: 3
+        case .knowledge, .intent: 2
+        case .observation, .context: 1
+        }
     }
 }

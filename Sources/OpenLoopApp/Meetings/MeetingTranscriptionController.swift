@@ -128,6 +128,9 @@ final class MeetingTranscriptionController: ObservableObject {
         if job.stage == .recording {
             let recordedDuration = recordingStartedAt.map { max(0, Date().timeIntervalSince($0)) }
             let recordedPeak = peakRecordingDecibels
+            if let streamingPreparation {
+                await streamingPreparation.value
+            }
             guard let url = recorder.stop() else {
                 cancelStreamingPreparation()
                 streamingFramePump?.cancel()

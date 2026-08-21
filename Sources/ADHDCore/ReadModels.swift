@@ -72,6 +72,12 @@ public struct OpenLoopItem: Equatable, Identifiable, Sendable {
     public let state: IntentionState
     public let createdAt: Date
     public let manualOrder: Int?
+    public let destination: IntentionDestination
+    public let heading: String?
+    public let scheduledAt: Date?
+    public let deadline: Date?
+    public let tags: [String]
+    public let checklist: [IntentionChecklistItem]
 }
 
 public struct ThoughtReadModels: Sendable {
@@ -92,7 +98,7 @@ public struct ThoughtReadModels: Sendable {
             return makeNowItem(intention, focusSession: currentSession)
         }
         return intentions
-            .filter { $0.state != .interrupted }
+            .filter { $0.state != .interrupted && ($0.state == .active || $0.destination == .anytime) }
             .sorted(by: comesBefore)
             .first
             .map { makeNowItem($0, focusSession: nil) }
@@ -184,7 +190,13 @@ public struct ThoughtReadModels: Sendable {
                 nextAction: $0.nextAction,
                 state: $0.state,
                 createdAt: $0.createdAt,
-                manualOrder: $0.manualOrder
+                manualOrder: $0.manualOrder,
+                destination: $0.destination,
+                heading: $0.heading,
+                scheduledAt: $0.scheduledAt,
+                deadline: $0.deadline,
+                tags: $0.tags,
+                checklist: $0.checklist
             )
         }.sorted {
             let rank: [IntentionState: Int] = [.active: 0, .open: 1, .interrupted: 2]

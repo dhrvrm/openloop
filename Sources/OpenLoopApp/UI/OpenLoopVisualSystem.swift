@@ -38,11 +38,11 @@ enum OpenLoopVisualSystem {
     static let space4: CGFloat = 20
     static let space5: CGFloat = 32
 
-    static let sidebarWidth: CGFloat = 224
-    static let contentMaximumWidth: CGFloat = 660
+    static let sidebarWidth: CGFloat = 252
+    static let contentMaximumWidth: CGFloat = 760
     static let inspectorIdealWidth: CGFloat = 320
-    static let checkboxSize: CGFloat = 16
-    static let checkboxHitSize: CGFloat = 26
+    static let checkboxSize: CGFloat = 18
+    static let checkboxHitSize: CGFloat = 28
     static let taskRowMinimumHeight: CGFloat = 44
     static let compactRowMinimumHeight: CGFloat = 30
     static let sidebarSelectionRadius: CGFloat = 6
@@ -85,6 +85,8 @@ enum OpenLoopVisualSystem {
     static func tint(for destination: WorkspaceDestination.ID) -> Color {
         switch destination {
         case .now: today
+        case .upcoming: today
+        case .someday: later
         case .inbox: inbox
         case .later: later
         case .return: returnColor
@@ -99,6 +101,8 @@ enum OpenLoopVisualSystem {
     static func icon(forSurfaceTitle title: String) -> String {
         switch title {
         case "Now": "star.fill"
+        case "Upcoming": "calendar"
+        case "Someday": "archivebox.fill"
         case "Inbox": "tray.fill"
         case "Later": "archivebox.fill"
         case "Return": "arrow.uturn.backward.circle.fill"
@@ -114,6 +118,8 @@ enum OpenLoopVisualSystem {
     static func tint(forSurfaceTitle title: String) -> Color {
         switch title {
         case "Now": today
+        case "Upcoming": today
+        case "Someday": later
         case "Inbox": inbox
         case "Later": later
         case "Return": returnColor

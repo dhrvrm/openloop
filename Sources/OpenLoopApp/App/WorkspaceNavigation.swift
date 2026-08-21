@@ -11,6 +11,8 @@ struct WorkspaceDestination: Equatable, Identifiable, Sendable {
         case later = 6
         case `return` = 7
         case transcripts = 8
+        case upcoming = 9
+        case someday = 10
     }
 
     let id: ID
@@ -36,8 +38,10 @@ enum WorkspaceOrientation {
             title: "Focus",
             destinations: [
                 WorkspaceDestination(id: .now, title: "Now", icon: "scope"),
+                WorkspaceDestination(id: .upcoming, title: "Upcoming", icon: "calendar"),
+                WorkspaceDestination(id: .someday, title: "Someday", icon: "archivebox"),
                 WorkspaceDestination(id: .inbox, title: "Inbox", icon: "tray"),
-                WorkspaceDestination(id: .later, title: "Later", icon: "archivebox"),
+                WorkspaceDestination(id: .later, title: "Later", icon: "tray.full"),
                 WorkspaceDestination(id: .return, title: "Return", icon: "arrow.uturn.backward"),
             ]
         ),

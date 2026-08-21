@@ -61,3 +61,52 @@ import Testing
         )
     }
 }
+
+@Test func legacyIntentionDecodesIntoAnytimeWithoutLosingTaskData() throws {
+    let id = UUID()
+    let sourceID = UUID()
+    let data = try JSONSerialization.data(withJSONObject: [
+        "id": id.uuidString,
+        "sourceCaptureID": sourceID.uuidString,
+        "desiredOutcome": "Ship the release",
+        "nextAction": "Run checks",
+        "state": "open",
+        "createdAt": 0,
+    ])
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .secondsSince1970
+
+    let value = try decoder.decode(Intention.self, from: data)
+
+    #expect(value.id == id)
+    #expect(value.destination == .anytime)
+    #expect(value.tags.isEmpty)
+    #expect(value.checklist.isEmpty)
+}
+
+@Test func intentionOrganizationNormalizesTagsAndKeepsChecklistDomainBacked() {
+    let id = UUID()
+    var intention = Intention(
+        id: id,
+        sourceCaptureID: id,
+        desiredOutcome: "Publish",
+        nextAction: "Prepare notes",
+        state: .open,
+        createdAt: .now,
+        returnPacket: nil
+    )
+    intention.move(to: .upcoming, order: 4)
+    intention.organize(
+        heading: " Release ",
+        scheduledAt: Date(timeIntervalSince1970: 100),
+        deadline: Date(timeIntervalSince1970: 200),
+        tags: ["macOS", " macOS ", "Voice"],
+        checklist: [IntentionChecklistItem(text: "Attach DMG")]
+    )
+
+    #expect(intention.destination == .upcoming)
+    #expect(intention.manualOrder == 4)
+    #expect(intention.heading == "Release")
+    #expect(intention.tags == ["macOS", "Voice"])
+    #expect(intention.checklist.map(\.text) == ["Attach DMG"])
+}

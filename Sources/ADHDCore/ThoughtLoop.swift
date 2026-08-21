@@ -92,7 +92,13 @@ public struct ThoughtLoop: Sendable {
                     state: .open,
                     createdAt: currentIntention.createdAt,
                     returnPacket: nil,
-                    manualOrder: currentIntention.manualOrder
+                    manualOrder: currentIntention.manualOrder,
+                    destination: currentIntention.destination,
+                    heading: currentIntention.heading,
+                    scheduledAt: currentIntention.scheduledAt,
+                    deadline: currentIntention.deadline,
+                    tags: currentIntention.tags,
+                    checklist: currentIntention.checklist
                 )
             } else {
                 try currentIntention.transition(to: .released)
@@ -184,6 +190,29 @@ public struct ThoughtLoop: Sendable {
             return intention
         }
         try await repository.save(intentions: reordered)
+    }
+
+    @discardableResult
+    public func moveIntention(
+        _ id: UUID,
+        to destination: IntentionDestination
+    ) async throws -> IntentionMove {
+        var intention = try await loadIntention(id)
+        let move = IntentionMove(
+            intentionID: id,
+            source: intention.destination,
+            destination: destination,
+            sourceOrder: intention.manualOrder
+        )
+        intention.move(to: destination)
+        try await repository.save(intention: intention)
+        return move
+    }
+
+    public func apply(_ move: IntentionMove) async throws {
+        var intention = try await loadIntention(move.intentionID)
+        intention.move(to: move.destination, order: move.sourceOrder)
+        try await repository.save(intention: intention)
     }
 
     private func loadIntention(_ id: UUID) async throws -> Intention {

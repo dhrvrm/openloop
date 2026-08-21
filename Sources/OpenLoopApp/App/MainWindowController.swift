@@ -18,6 +18,8 @@ private struct MainView: View {
     @State private var confirmingReset = false
     @State private var actSection = 0
     @State private var contextPresentation = ContextPresentation.space
+    @State private var quickFindPresented = false
+    @State private var sidebarVisible = true
     @FocusState private var recallFieldFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -25,8 +27,20 @@ private struct MainView: View {
         ZStack {
             OpenLoopVisualSystem.canvas.ignoresSafeArea()
             HStack(spacing: 0) {
-                workspaceSidebar
-                Divider().opacity(0.55)
+                if sidebarVisible {
+                    workspaceSidebar
+                    Divider().opacity(0.55)
+                } else {
+                    Button {
+                        sidebarVisible = true
+                    } label: {
+                        Image(systemName: "sidebar.left")
+                            .frame(width: 40, height: 40)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Show sidebar · ⌘/")
+                    .frame(maxHeight: .infinity, alignment: .top)
+                }
                 selectedSurface
                     .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .topLeading)
                     .padding(.horizontal, OpenLoopVisualSystem.contentHorizontalPadding)
@@ -35,7 +49,7 @@ private struct MainView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
-        .frame(minWidth: 760, minHeight: 560)
+        .frame(minWidth: sidebarVisible ? 760 : 520, minHeight: 560)
         .tint(OpenLoopVisualSystem.accent)
         .inspector(
             isPresented: Binding(
@@ -74,6 +88,13 @@ private struct MainView: View {
                 }
             }
         }
+        .sheet(isPresented: $quickFindPresented) {
+            QuickFindView(
+                model: model,
+                selection: $selection,
+                isPresented: $quickFindPresented
+            )
+        }
         .alert("Remove all OpenLoop data?", isPresented: $confirmingReset) {
             Button("Cancel", role: .cancel) {}
             Button("Remove everything", role: .destructive) {
@@ -94,6 +115,18 @@ private struct MainView: View {
         case .later: laterView
         case .return: returnView
         case .transcripts: transcriptsView
+        case .upcoming: scheduledTaskView(
+            destination: .upcoming,
+            eyebrow: "Plan",
+            title: "Upcoming",
+            detail: "Work you have deliberately scheduled for later."
+        )
+        case .someday: scheduledTaskView(
+            destination: .someday,
+            eyebrow: "Possibilities",
+            title: "Someday",
+            detail: "Ideas worth keeping without making them urgent."
+        )
         case .now: nowView
         }
     }
@@ -119,6 +152,14 @@ private struct MainView: View {
                                 count: sidebarCount(for: destination.id),
                                 isSelected: selection == destination.id
                             ) { selection = destination.id }
+                            .dropDestination(for: String.self) { values, _ in
+                                guard let value = values.first,
+                                      let sourceID = UUID(uuidString: value),
+                                      let target = intentionDestination(for: destination.id)
+                                else { return false }
+                                Task { await model.moveOpenLoop(sourceID, to: target) }
+                                return true
+                            }
                         }
                     }
                 }
@@ -127,6 +168,30 @@ private struct MainView: View {
             Spacer()
 
             VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    quickFindPresented = true
+                } label: {
+                    Label("Quick Find", systemImage: "magnifyingglass")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, OpenLoopVisualSystem.space2)
+                        .frame(height: 34)
+                }
+                .buttonStyle(OpenLoopNavigationButtonStyle())
+                .keyboardShortcut("f", modifiers: .command)
+                .help("Travel to any list or task · ⌘F")
+
+                Button {
+                    sidebarVisible.toggle()
+                } label: {
+                    Label("Hide sidebar", systemImage: "sidebar.left")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, OpenLoopVisualSystem.space2)
+                        .frame(height: 34)
+                }
+                .buttonStyle(OpenLoopNavigationButtonStyle())
+                .keyboardShortcut("/", modifiers: .command)
+                .help("Hide sidebar · ⌘/")
+
                 Divider().opacity(0.65)
                 Button {
                     model.setAdvancedModeEnabled(!model.isAdvancedModeEnabled)
@@ -161,7 +226,11 @@ private struct MainView: View {
 
     private func sidebarCount(for destination: WorkspaceDestination.ID) -> Int? {
         let count = switch destination {
-        case .now: model.openLoops.filter { $0.state == .open }.count
+        case .now: model.openLoops.filter {
+            $0.state == .open && $0.destination == .anytime
+        }.count
+        case .upcoming: model.openLoops.filter { $0.destination == .upcoming }.count
+        case .someday: model.openLoops.filter { $0.destination == .someday }.count
         case .inbox: model.reviewItems.filter(\.needsDecision).count
         case .later: model.reviewItems.filter { !$0.needsDecision }.count
         case .return: model.returns.count
@@ -172,6 +241,17 @@ private struct MainView: View {
         case .ask: 0
         }
         return count == 0 ? nil : count
+    }
+
+    private func intentionDestination(
+        for workspace: WorkspaceDestination.ID
+    ) -> IntentionDestination? {
+        switch workspace {
+        case .now: .anytime
+        case .upcoming: .upcoming
+        case .someday: .someday
+        default: nil
+        }
     }
 
     private var interruptionPresented: Binding<Bool> {
@@ -210,7 +290,9 @@ private struct MainView: View {
 
                 if let item = model.now, item.focus != nil {
                     currentIntention(item)
-                } else if model.openLoops.contains(where: { $0.state == .open }) {
+                } else if model.openLoops.contains(where: {
+                    $0.state == .open && $0.destination == .anytime
+                }) {
                     readyQueue
                 } else if model.suggestions.isEmpty {
                     ContentUnavailableView(
@@ -264,13 +346,52 @@ private struct MainView: View {
             )
             .padding(.bottom, OpenLoopVisualSystem.space1)
 
-            ForEach(model.openLoops.filter { $0.state == .open }) { item in
+            ForEach(model.openLoops.filter {
+                $0.state == .open && $0.destination == .anytime
+            }) { item in
                 ReadyTaskRow(model: model, item: item)
                 Divider()
                     .padding(.leading, OpenLoopVisualSystem.checkboxHitSize + OpenLoopVisualSystem.space2)
             }
         }
         .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
+    }
+
+    private func scheduledTaskView(
+        destination: IntentionDestination,
+        eyebrow: String,
+        title: String,
+        detail: String
+    ) -> some View {
+        let items = model.openLoops.filter {
+            $0.state == .open && $0.destination == destination
+        }
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: OpenLoopVisualSystem.space5) {
+                ScreenHeader(eyebrow: eyebrow, title: title, detail: detail)
+                if items.isEmpty {
+                    ContentUnavailableView(
+                        "Nothing here",
+                        systemImage: destination == .upcoming ? "calendar" : "archivebox",
+                        description: Text("Move a task here from its ••• menu or drag it onto the sidebar.")
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 280)
+                } else {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(items) { item in
+                            ReadyTaskRow(model: model, item: item)
+                            Divider()
+                                .padding(.leading, OpenLoopVisualSystem.checkboxHitSize + OpenLoopVisualSystem.space2)
+                        }
+                    }
+                }
+                if model.lastIntentionMove != nil {
+                    Button("Undo last move") { Task { await model.undoLastIntentionMove() } }
+                        .buttonStyle(.link)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private func currentIntention(_ item: NowItem) -> some View {
@@ -1062,6 +1183,127 @@ private struct WorkspaceSidebarButton: View {
         .buttonStyle(OpenLoopNavigationButtonStyle())
         .onHover { hovered in
             withAnimation(.easeOut(duration: 0.12)) { isHovered = hovered }
+        }
+    }
+}
+
+private struct QuickFindView: View {
+    @ObservedObject var model: AppModel
+    @Binding var selection: WorkspaceDestination.ID
+    @Binding var isPresented: Bool
+    @State private var query = ""
+    @FocusState private var searchFocused: Bool
+
+    private var normalizedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private var destinations: [WorkspaceDestination] {
+        guard !normalizedQuery.isEmpty else { return WorkspaceOrientation.destinations }
+        return WorkspaceOrientation.destinations.filter {
+            $0.title.lowercased().contains(normalizedQuery)
+        }
+    }
+
+    private var tasks: [OpenLoopItem] {
+        guard !normalizedQuery.isEmpty else { return [] }
+        return model.openLoops.filter {
+            $0.desiredOutcome.lowercased().contains(normalizedQuery)
+                || $0.nextAction.lowercased().contains(normalizedQuery)
+                || $0.tags.contains { $0.lowercased().contains(normalizedQuery) }
+        }.prefix(8).map { $0 }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: OpenLoopVisualSystem.space2) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Find a list or task", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.title3)
+                    .focused($searchFocused)
+                Button("Done") { isPresented = false }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(OpenLoopVisualSystem.accent)
+            }
+            .padding(18)
+            Divider()
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    if !destinations.isEmpty {
+                        quickFindHeading("Lists")
+                        ForEach(destinations) { destination in
+                            Button {
+                                selection = destination.id
+                                isPresented = false
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Image(systemName: destination.icon)
+                                        .foregroundStyle(OpenLoopVisualSystem.tint(for: destination.id))
+                                        .frame(width: 20)
+                                    Text(destination.title)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 18)
+                                .frame(height: 38)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    if !tasks.isEmpty {
+                        quickFindHeading("Tasks")
+                        ForEach(tasks) { task in
+                            Button {
+                                selection = destination(for: task)
+                                isPresented = false
+                            } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(task.desiredOutcome)
+                                        .font(OpenLoopVisualSystem.rowTitle)
+                                    Text(task.nextAction)
+                                        .font(OpenLoopVisualSystem.metadata)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    if destinations.isEmpty && tasks.isEmpty {
+                        ContentUnavailableView.search(text: query)
+                            .frame(maxWidth: .infinity, minHeight: 220)
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+        }
+        .frame(width: 540, height: 480)
+        .background(OpenLoopVisualSystem.canvas)
+        .task { searchFocused = true }
+    }
+
+    private func quickFindHeading(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.caption2.weight(.semibold))
+            .tracking(0.7)
+            .foregroundStyle(.tertiary)
+            .padding(.horizontal, 18)
+            .padding(.top, 12)
+            .padding(.bottom, 5)
+    }
+
+    private func destination(for task: OpenLoopItem) -> WorkspaceDestination.ID {
+        if task.state == .interrupted { return .return }
+        switch task.destination {
+        case .anytime: return .now
+        case .upcoming: return .upcoming
+        case .someday: return .someday
         }
     }
 }
@@ -1971,6 +2213,12 @@ private struct ReadyTaskRow: View {
             Menu {
                 Button("Move up") { Task { await model.moveOpenLoop(item.id, by: -1) } }
                 Button("Move down") { Task { await model.moveOpenLoop(item.id, by: 1) } }
+                Divider()
+                Menu("Move to") {
+                    Button("Now") { Task { await model.moveOpenLoop(item.id, to: .anytime) } }
+                    Button("Upcoming") { Task { await model.moveOpenLoop(item.id, to: .upcoming) } }
+                    Button("Someday") { Task { await model.moveOpenLoop(item.id, to: .someday) } }
+                }
                 Divider()
                 Button("Finish") { Task { await model.finishOpenLoop(item.id) } }
                 Button("Release", role: .destructive) { Task { await model.releaseOpenLoop(item.id) } }

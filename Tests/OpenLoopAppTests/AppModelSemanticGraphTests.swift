@@ -48,7 +48,10 @@ private struct SemanticUnusedClarifier: ClarificationProvider {
     await model.refreshSemanticGraph()
     await model.askSemanticContext("checkout")
 
-    #expect(model.semanticNodes.map(\.claim) == ["Checkout is slower after PostHog"])
+    #expect(model.semanticNodes.map(\.claim) == [
+        "Checkout is slower after PostHog", "Checkout is slower after PostHog",
+    ])
+    #expect(Set(model.semanticNodes.map(\.kind)) == [.observation, .problem])
     #expect(model.semanticAnswers.map(\.claim) == ["Checkout is slower after PostHog"])
     #expect(model.semanticError == nil)
 }

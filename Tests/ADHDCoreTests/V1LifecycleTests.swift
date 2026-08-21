@@ -84,4 +84,27 @@ struct V1LifecycleTests {
         #expect(update.session.state == .finished)
         #expect(try await repository.intention(id: id)?.state == .released)
     }
+
+    @Test func destinationMovePersistsAndItsInverseRestoresTheSource() async throws {
+        let repository = V1LifecycleRepository()
+        let id = UUID()
+        try await repository.save(intention: Intention(
+            id: id,
+            sourceCaptureID: id,
+            desiredOutcome: "Plan later work",
+            nextAction: "Review scope",
+            state: .open,
+            createdAt: .now,
+            returnPacket: nil,
+            manualOrder: 3
+        ))
+        let loop = ThoughtLoop(repository: repository, clarifier: V1UnusedClarifier())
+
+        let move = try await loop.moveIntention(id, to: .someday)
+        #expect(try await repository.intention(id: id)?.destination == .someday)
+
+        try await loop.apply(move.inverse)
+        #expect(try await repository.intention(id: id)?.destination == .anytime)
+        #expect(try await repository.intention(id: id)?.manualOrder == 3)
+    }
 }
