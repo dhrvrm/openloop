@@ -64,7 +64,7 @@ private struct VoiceCaptureView: View {
                 .foregroundStyle(.tertiary)
 
             HStack {
-                Text("⌘⇧R to \(controller.state == .recording ? "stop and save" : "start")")
+                Text("⌃⌥Space to \(controller.state == .recording ? "stop and save" : "start")")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                 Spacer()

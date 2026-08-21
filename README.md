@@ -174,7 +174,7 @@ streaks, urgency scores, or notifications.
 ## Local multilingual meeting transcription
 
 Use **Import audio…** for WAV, MP3, M4A, MP4, FLAC, AIFF, or CAF, or press
-Command-Shift-R to start and stop a local M4A recording. Import needs no privacy
+Control-Option-Space to start and stop local dictation. Import needs no privacy
 permission. Recording requests only Microphone permission; the production path
 does not request macOS Speech Recognition access. While recording, the primary
 control turns red and a live input meter shows the microphone's measured dB level,

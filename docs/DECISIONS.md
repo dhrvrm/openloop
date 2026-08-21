@@ -131,7 +131,7 @@ typed content, or background application changes.
 
 Status: accepted.
 
-Command-Shift-R toggles a visible recording session backed by Apple Speech and
+Control-Option-Space toggles a visible local dictation session and
 AVAudioEngine. Recognition is allowed only when the current recognizer declares
 on-device support and the request explicitly requires on-device recognition;
 there is no network fallback. Audio buffers are not written to disk or retained.

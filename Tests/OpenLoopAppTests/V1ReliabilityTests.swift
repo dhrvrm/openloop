@@ -34,7 +34,7 @@ struct V1ReliabilityTests {
         ])
         #expect(Set(WorkspaceOrientation.destinations.map(\.icon)).count == 5)
         #expect(WorkspaceOrientation.quickCaptureShortcut.contains("Space"))
-        #expect(WorkspaceOrientation.voiceCaptureShortcut.contains("Record"))
+        #expect(WorkspaceOrientation.voiceCaptureShortcut.contains("⌃⌥Space"))
         #expect(WorkspaceOrientation.emptyCaptureGuidance.contains("Command-Shift-Space"))
     }
 

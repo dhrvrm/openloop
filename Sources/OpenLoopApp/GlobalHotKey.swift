@@ -15,7 +15,7 @@ struct GlobalHotKeyBinding: Equatable {
         keyCode: UInt32(kVK_Space), modifiers: UInt32(cmdKey | shiftKey), id: 1
     )
     static let voiceCapture = GlobalHotKeyBinding(
-        keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(cmdKey | shiftKey), id: 2
+        keyCode: UInt32(kVK_Space), modifiers: UInt32(controlKey | optionKey), id: 2
     )
     static let recall = GlobalHotKeyBinding(
         keyCode: UInt32(kVK_ANSI_F), modifiers: UInt32(cmdKey | shiftKey), id: 3

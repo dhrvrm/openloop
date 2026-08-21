@@ -786,9 +786,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         let voiceItem = menu.addItem(
             withTitle: "Dictate & Insert",
             action: #selector(toggleVoiceCapture),
-            keyEquivalent: "r"
+            keyEquivalent: " "
         )
-        voiceItem.keyEquivalentModifierMask = [.command, .shift]
+        voiceItem.keyEquivalentModifierMask = [.control, .option]
         menu.addItem(withTitle: "Live", action: #selector(showLive), keyEquivalent: "")
         let pauseItem = menu.addItem(
             withTitle: "Pause",

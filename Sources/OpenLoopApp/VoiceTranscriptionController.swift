@@ -394,7 +394,7 @@ final class OnDeviceSpeechTranscriber: VoiceTranscribing {
                     onTranscript(result.bestTranscription.formattedString, result.isFinal)
                 }
                 if error != nil {
-                    onFailure("On-device transcription stopped. Press Command-Shift-R to try again.")
+                    onFailure("On-device transcription stopped. Press Control-Option-Space to try again.")
                 }
             }
         }

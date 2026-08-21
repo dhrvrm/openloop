@@ -17,7 +17,7 @@ enum WorkspaceOrientation {
         WorkspaceDestination(title: "Act", icon: "bolt.circle"),
     ]
     static let quickCaptureShortcut = "⌘⇧Space  Quick Capture"
-    static let voiceCaptureShortcut = "⌘⇧R  Dictate & insert"
+    static let voiceCaptureShortcut = "⌃⌥Space  Dictate & insert"
     static let emptyCaptureGuidance = "Type above or press Command-Shift-Space from anywhere."
 }
 

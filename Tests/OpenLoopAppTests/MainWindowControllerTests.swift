@@ -107,11 +107,12 @@ private actor EnabledWindowContextTrail: ContextTrailProviding {
     controller.closeForTesting()
 }
 
-@Test func recallUsesADistinctCommandShiftFBinding() {
+@Test func dictationUsesControlOptionSpaceWithoutOverlappingOtherGlobalBindings() {
     #expect(GlobalHotKeyBinding.quickCapture.id == 1)
     #expect(GlobalHotKeyBinding.voiceCapture.id == 2)
     #expect(GlobalHotKeyBinding.recall.id == 3)
-    #expect(GlobalHotKeyBinding.recall.keyCode != GlobalHotKeyBinding.voiceCapture.keyCode)
+    #expect(GlobalHotKeyBinding.voiceCapture.keyCode == GlobalHotKeyBinding.quickCapture.keyCode)
+    #expect(GlobalHotKeyBinding.voiceCapture.modifiers != GlobalHotKeyBinding.quickCapture.modifiers)
     #expect(GlobalHotKeyBinding.recall.modifiers == GlobalHotKeyBinding.quickCapture.modifiers)
 }
 
