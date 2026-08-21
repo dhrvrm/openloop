@@ -9,6 +9,21 @@ struct LocalTranscriptionOutput: Equatable, Sendable {
     let detectedLanguage: String?
     let modelIdentifier: String
     let segments: [TranscriptSegment]
+    let fusionEvidence: TranscriptFusionResult?
+
+    init(
+        duration: TimeInterval,
+        detectedLanguage: String?,
+        modelIdentifier: String,
+        segments: [TranscriptSegment],
+        fusionEvidence: TranscriptFusionResult? = nil
+    ) {
+        self.duration = duration
+        self.detectedLanguage = detectedLanguage
+        self.modelIdentifier = modelIdentifier
+        self.segments = segments
+        self.fusionEvidence = fusionEvidence
+    }
 }
 
 protocol MeetingTranscribing: Sendable {

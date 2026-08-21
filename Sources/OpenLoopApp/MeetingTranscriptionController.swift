@@ -303,7 +303,8 @@ final class MeetingTranscriptionController: ObservableObject {
                     detectedLanguage: output.detectedLanguage,
                     modelIdentifier: output.modelIdentifier,
                     segments: output.segments,
-                    sourceAudioFileName: stagedURL.lastPathComponent
+                    sourceAudioFileName: stagedURL.lastPathComponent,
+                    fusionEvidence: output.fusionEvidence
                 )
                 job.previewText = transcript.text
                 try await repository.save(meetingTranscript: transcript)

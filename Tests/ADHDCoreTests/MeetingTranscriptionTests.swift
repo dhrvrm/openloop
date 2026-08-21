@@ -86,5 +86,40 @@ import Testing
     )
 
     #expect(decoded.sourceAudioFileName == nil)
+    #expect(decoded.fusionEvidence == nil)
     #expect(decoded.text == "legacy")
+}
+
+@Test func transcriptRetainsRawRecognizerDisagreementEvidence() throws {
+    let primary = TranscriptEvidence(
+        engineIdentifier: "qwen",
+        text: "SGLC release कम करें",
+        start: 0,
+        end: 2
+    )
+    let secondary = TranscriptEvidence(
+        engineIdentifier: "whisper",
+        text: "SGVC release काम करें",
+        start: 0,
+        end: 2
+    )
+    let fusion = TranscriptFusionPolicy().fuse(
+        primary: [primary],
+        secondary: [secondary]
+    )
+    let transcript = try MeetingTranscript(
+        sourceName: "meeting.wav",
+        duration: 2,
+        modelIdentifier: "accuracy-first",
+        segments: [try TranscriptSegment(start: 0, end: 2, text: primary.text)],
+        fusionEvidence: fusion
+    )
+
+    let decoded = try JSONDecoder().decode(
+        MeetingTranscript.self,
+        from: JSONEncoder().encode(transcript)
+    )
+    #expect(decoded.fusionEvidence == fusion)
+    #expect(decoded.fusionEvidence?.reviewSpans[0].primary.text == primary.text)
+    #expect(decoded.fusionEvidence?.reviewSpans[0].secondary?.text == secondary.text)
 }

@@ -32,6 +32,7 @@ actor QwenMeetingTranscriber: MeetingTranscribing {
     private let qwenModelID: String
     private let modelStorageURL: URL
     private let fallback: any MeetingTranscribing
+    private let fallbackEnabled: Bool
     private let contextProvider: @Sendable () async -> [String]
     private let modelLoader: ModelLoader
     private var model: (any QwenSpeechRecognizing)?
@@ -40,6 +41,7 @@ actor QwenMeetingTranscriber: MeetingTranscribing {
         qwenModelID: String = ASRModelSize.small.defaultModelId,
         modelStorageURL: URL,
         fallback: any MeetingTranscribing,
+        fallbackEnabled: Bool = true,
         contextProvider: @escaping @Sendable () async -> [String] = { [] },
         modelLoader: ModelLoader? = nil
     ) {
@@ -47,6 +49,7 @@ actor QwenMeetingTranscriber: MeetingTranscribing {
         self.modelIdentifier = "\(qwenModelID.split(separator: "/").last.map(String.init) ?? qwenModelID) · Whisper fallback"
         self.modelStorageURL = modelStorageURL
         self.fallback = fallback
+        self.fallbackEnabled = fallbackEnabled
         self.contextProvider = contextProvider
         self.modelLoader = modelLoader ?? Self.loadModel
     }
@@ -85,6 +88,7 @@ actor QwenMeetingTranscriber: MeetingTranscribing {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            guard fallbackEnabled else { throw error }
             await progress(.init(
                 stage: .waitingForModel,
                 fraction: 0,

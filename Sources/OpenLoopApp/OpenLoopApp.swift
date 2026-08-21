@@ -184,14 +184,19 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 modelStorageURL: directory.appendingPathComponent("Models/WhisperKit", isDirectory: true)
             )
             let voiceLearning = VoiceLearningLoop(repository: repository)
+            let qwenTranscriber = QwenMeetingTranscriber(
+                modelStorageURL: directory.appendingPathComponent("Models/Qwen3-ASR", isDirectory: true),
+                fallback: whisperTranscriber,
+                fallbackEnabled: false,
+                contextProvider: {
+                    (try? await voiceLearning.vocabulary(limit: 80)) ?? []
+                }
+            )
             let meetingController = MeetingTranscriptionController(
                 repository: repository,
-                transcriber: QwenMeetingTranscriber(
-                    modelStorageURL: directory.appendingPathComponent("Models/Qwen3-ASR", isDirectory: true),
-                    fallback: whisperTranscriber,
-                    contextProvider: {
-                        (try? await voiceLearning.vocabulary(limit: 80)) ?? []
-                    }
+                transcriber: AccuracyFirstTranscriber(
+                    primary: qwenTranscriber,
+                    witness: whisperTranscriber
                 ),
                 stagingDirectory: directory.appendingPathComponent("Meeting Staging", isDirectory: true),
                 recorder: MeetingAudioRecorder()

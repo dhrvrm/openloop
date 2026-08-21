@@ -87,6 +87,7 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
     public let modelIdentifier: String
     public let segments: [TranscriptSegment]
     public let sourceAudioFileName: String?
+    public let fusionEvidence: TranscriptFusionResult?
 
     public init(
         id: UUID = UUID(),
@@ -96,7 +97,8 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
         detectedLanguage: String? = nil,
         modelIdentifier: String,
         segments: [TranscriptSegment],
-        sourceAudioFileName: String? = nil
+        sourceAudioFileName: String? = nil,
+        fusionEvidence: TranscriptFusionResult? = nil
     ) throws {
         let ordered = segments.sorted {
             if $0.start == $1.start { return $0.id.uuidString < $1.id.uuidString }
@@ -111,6 +113,7 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
         self.modelIdentifier = modelIdentifier
         self.segments = ordered
         self.sourceAudioFileName = try Self.validatedSourceAudioFileName(sourceAudioFileName)
+        self.fusionEvidence = fusionEvidence
     }
 
     public var text: String { segments.map(\.text).joined(separator: "\n") }
@@ -136,6 +139,7 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
         case modelIdentifier
         case segments
         case sourceAudioFileName
+        case fusionEvidence
     }
 
     public init(from decoder: Decoder) throws {
@@ -148,7 +152,11 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
             detectedLanguage: values.decodeIfPresent(String.self, forKey: .detectedLanguage),
             modelIdentifier: values.decode(String.self, forKey: .modelIdentifier),
             segments: values.decode([TranscriptSegment].self, forKey: .segments),
-            sourceAudioFileName: values.decodeIfPresent(String.self, forKey: .sourceAudioFileName)
+            sourceAudioFileName: values.decodeIfPresent(String.self, forKey: .sourceAudioFileName),
+            fusionEvidence: values.decodeIfPresent(
+                TranscriptFusionResult.self,
+                forKey: .fusionEvidence
+            )
         )
     }
 
@@ -162,6 +170,7 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
         try values.encode(modelIdentifier, forKey: .modelIdentifier)
         try values.encode(segments, forKey: .segments)
         try values.encodeIfPresent(sourceAudioFileName, forKey: .sourceAudioFileName)
+        try values.encodeIfPresent(fusionEvidence, forKey: .fusionEvidence)
     }
 }
 
