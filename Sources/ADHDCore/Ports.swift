@@ -29,6 +29,10 @@ public protocol ThoughtRepository: Sendable {
     func suggestionEvents() async throws -> [SuggestionEvent]
     func save(transcriptionCorrection: TranscriptionCorrection) async throws
     func transcriptionCorrections() async throws -> [TranscriptionCorrection]
+    func save(voiceQualityCase: VoiceQualityCase) async throws
+    func voiceQualityCases() async throws -> [VoiceQualityCase]
+    func save(voiceQualityAttempt: VoiceQualityAttempt) async throws
+    func voiceQualityAttempts(caseID: UUID?) async throws -> [VoiceQualityAttempt]
     func save(meetingTranscript: MeetingTranscript) async throws
     func meetingTranscripts() async throws -> [MeetingTranscript]
     func deleteMeetingTranscript(id: UUID) async throws
@@ -123,6 +127,18 @@ public extension ThoughtRepository {
     }
 
     func transcriptionCorrections() async throws -> [TranscriptionCorrection] { [] }
+
+    func save(voiceQualityCase: VoiceQualityCase) async throws {
+        throw ThoughtRepositoryCompatibilityError.voiceLearningUnsupported
+    }
+
+    func voiceQualityCases() async throws -> [VoiceQualityCase] { [] }
+
+    func save(voiceQualityAttempt: VoiceQualityAttempt) async throws {
+        throw ThoughtRepositoryCompatibilityError.voiceLearningUnsupported
+    }
+
+    func voiceQualityAttempts(caseID: UUID? = nil) async throws -> [VoiceQualityAttempt] { [] }
 
     func save(meetingTranscript: MeetingTranscript) async throws {
         throw ThoughtRepositoryCompatibilityError.meetingTranscriptionUnsupported

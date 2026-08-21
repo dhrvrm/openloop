@@ -13,6 +13,8 @@ private struct VaultSnapshot: Codable {
     var resurfacingRules: [UUID: ResurfacingRule] = [:]
     var suggestionEvents: [UUID: SuggestionEvent] = [:]
     var transcriptionCorrections: [UUID: TranscriptionCorrection] = [:]
+    var voiceQualityCases: [UUID: VoiceQualityCase] = [:]
+    var voiceQualityAttempts: [UUID: VoiceQualityAttempt] = [:]
     var meetingTranscripts: [UUID: MeetingTranscript] = [:]
     var memoryRecords: [UUID: MemoryRecord] = [:]
     var contextTrailSettings = ContextTrailSettings()
@@ -28,6 +30,8 @@ private struct VaultSnapshot: Codable {
         case resurfacingRules
         case suggestionEvents
         case transcriptionCorrections
+        case voiceQualityCases
+        case voiceQualityAttempts
         case meetingTranscripts
         case memoryRecords
         case contextTrailSettings
@@ -64,6 +68,14 @@ private struct VaultSnapshot: Codable {
         transcriptionCorrections = try container.decodeIfPresent(
             [UUID: TranscriptionCorrection].self,
             forKey: .transcriptionCorrections
+        ) ?? [:]
+        voiceQualityCases = try container.decodeIfPresent(
+            [UUID: VoiceQualityCase].self,
+            forKey: .voiceQualityCases
+        ) ?? [:]
+        voiceQualityAttempts = try container.decodeIfPresent(
+            [UUID: VoiceQualityAttempt].self,
+            forKey: .voiceQualityAttempts
         ) ?? [:]
         meetingTranscripts = try container.decodeIfPresent(
             [UUID: MeetingTranscript].self,
@@ -278,6 +290,31 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         )
     }
 
+    public func save(voiceQualityCase: VoiceQualityCase) async throws {
+        try update { $0.voiceQualityCases[voiceQualityCase.id] = voiceQualityCase }
+    }
+
+    public func voiceQualityCases() async throws -> [VoiceQualityCase] {
+        try synchronize()
+        return snapshot.voiceQualityCases.values.sorted(by: Self.voiceQualityCaseOrder)
+    }
+
+    public func save(voiceQualityAttempt: VoiceQualityAttempt) async throws {
+        try update { snapshot in
+            guard snapshot.voiceQualityCases[voiceQualityAttempt.caseID] != nil else {
+                throw VoiceQualityRepositoryError.missingCase(voiceQualityAttempt.caseID)
+            }
+            snapshot.voiceQualityAttempts[voiceQualityAttempt.id] = voiceQualityAttempt
+        }
+    }
+
+    public func voiceQualityAttempts(caseID: UUID? = nil) async throws -> [VoiceQualityAttempt] {
+        try synchronize()
+        return snapshot.voiceQualityAttempts.values
+            .filter { caseID == nil || $0.caseID == caseID }
+            .sorted(by: Self.voiceQualityAttemptOrder)
+    }
+
     public func save(meetingTranscript: MeetingTranscript) async throws {
         try update { $0.meetingTranscripts[meetingTranscript.id] = meetingTranscript }
     }
@@ -394,6 +431,8 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
             && snapshot.resurfacingRules.isEmpty
             && snapshot.suggestionEvents.isEmpty
             && snapshot.transcriptionCorrections.isEmpty
+            && snapshot.voiceQualityCases.isEmpty
+            && snapshot.voiceQualityAttempts.isEmpty
             && snapshot.meetingTranscripts.isEmpty
             && snapshot.memoryRecords.isEmpty
             && snapshot.contextTrailSettings == ContextTrailSettings()
@@ -432,6 +471,8 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
                   candidate.resurfacingRules.isEmpty,
                   candidate.suggestionEvents.isEmpty,
                   candidate.transcriptionCorrections.isEmpty,
+                  candidate.voiceQualityCases.isEmpty,
+                  candidate.voiceQualityAttempts.isEmpty,
                   candidate.meetingTranscripts.isEmpty,
                   candidate.memoryRecords.isEmpty,
                   candidate.contextTrailSettings == ContextTrailSettings(),
@@ -575,6 +616,22 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
     private static func transcriptionCorrectionOrder(
         _ lhs: TranscriptionCorrection,
         _ rhs: TranscriptionCorrection
+    ) -> Bool {
+        if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.createdAt < rhs.createdAt
+    }
+
+    private static func voiceQualityCaseOrder(
+        _ lhs: VoiceQualityCase,
+        _ rhs: VoiceQualityCase
+    ) -> Bool {
+        if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
+        return lhs.createdAt < rhs.createdAt
+    }
+
+    private static func voiceQualityAttemptOrder(
+        _ lhs: VoiceQualityAttempt,
+        _ rhs: VoiceQualityAttempt
     ) -> Bool {
         if lhs.createdAt == rhs.createdAt { return lhs.id.uuidString < rhs.id.uuidString }
         return lhs.createdAt < rhs.createdAt
