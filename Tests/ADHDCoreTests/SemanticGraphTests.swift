@@ -97,6 +97,9 @@ private func semanticEvidence(_ text: String, id: UUID = UUID()) throws -> Seman
     #expect(graph.nodes[old.id]?.supersededBy == new.id)
     #expect(graph.nodes[new.id]?.status == .active)
     #expect(graph.history(for: old.id).count == 2)
+
+    let replayed = try SemanticGraph(events: graph.events)
+    #expect(replayed == graph)
 }
 
 @Test func projectionsSurfaceEmergingAndUnresolvedWithoutCreatingTasks() throws {

@@ -184,6 +184,55 @@ private struct SemanticFixtureEmbeddings: EmbeddingProvider {
     }))
 }
 
+@Test func recurringDerivedMeaningsConsolidateWithoutDeletingEpisodeEvidence() async throws {
+    let repository = SemanticLoopRepository()
+    let loop = SemanticGraphLoop(repository: repository)
+    var problems: [SemanticNode] = []
+    var events: [SemanticGraphEvent] = []
+    for index in 0..<3 {
+        let evidence = try SemanticEvidence(
+            id: RecallEvidenceID(kind: .capture, id: UUID()),
+            excerpt: "Checkout was slow in episode \(index)",
+            occurredAt: Date(timeIntervalSince1970: Double(90 + index))
+        )
+        let node = try SemanticNode(
+            kind: .problem,
+            claim: index == 2 ? "Checkout performance remains slow" : "Checkout is slow",
+            confidence: 0.8 + (Double(index) * 0.05),
+            status: .active,
+            evidence: [evidence],
+            createdAt: evidence.occurredAt
+        )
+        problems.append(node)
+        events.append(.node(id: UUID(), occurredAt: node.createdAt, value: node))
+    }
+    for pair in zip(problems, problems.dropFirst()) {
+        events.append(.relation(
+            id: UUID(),
+            occurredAt: pair.1.createdAt,
+            value: try SemanticRelation(
+                sourceID: pair.0.id,
+                targetID: pair.1.id,
+                kind: .relatesTo,
+                confidence: 0.93,
+                createdAt: pair.1.createdAt
+            )
+        ))
+    }
+    try await loop.append(events)
+
+    let consolidated = try await loop.consolidateRecurringClaims()
+    let graph = try await loop.graph()
+
+    #expect(consolidated.count == 1)
+    #expect(consolidated[0].claim == "Checkout performance remains slow")
+    #expect(consolidated[0].evidence.count == 3)
+    #expect(problems.allSatisfy { graph.nodes[$0.id]?.status == .superseded })
+    #expect(problems.allSatisfy { graph.nodes[$0.id] != nil })
+    #expect(try await loop.consolidateRecurringClaims().isEmpty)
+    #expect(try SemanticGraph(events: graph.events) == graph)
+}
+
 @Test func semanticExtractionPreservesUncertaintyAndGroundsEveryMeaning() async throws {
     let repository = SemanticLoopRepository()
     let loop = SemanticGraphLoop(repository: repository)

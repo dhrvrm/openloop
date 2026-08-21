@@ -321,6 +321,113 @@ public actor SemanticGraphLoop {
         projection.unresolved(in: try await graph())
     }
 
+    /// Condenses recurring derived meanings while preserving every original
+    /// node and evidence excerpt in append-only history. Raw observations and
+    /// meeting contexts are never auto-superseded.
+    @discardableResult
+    public func consolidateRecurringClaims(
+        minimumOccurrences: Int = 3,
+        minimumSimilarity: Double = 0.86
+    ) async throws -> [SemanticNode] {
+        guard minimumOccurrences >= 2,
+              minimumSimilarity.isFinite,
+              (0...1).contains(minimumSimilarity) else { return [] }
+        let current = try await graph()
+        let eligibleKinds: Set<SemanticNodeKind> = [.problem, .idea, .possibility, .concept]
+        let eligible = current.nodes.filter { _, node in
+            eligibleKinds.contains(node.kind) && node.status != .superseded
+        }
+        var adjacency = Dictionary(uniqueKeysWithValues: eligible.keys.map { ($0, Set<UUID>()) })
+        for relation in current.relations.values where
+            relation.kind == .relatesTo && relation.confidence >= minimumSimilarity {
+            guard let source = eligible[relation.sourceID],
+                  let target = eligible[relation.targetID],
+                  source.kind == target.kind else { continue }
+            adjacency[source.id, default: []].insert(target.id)
+            adjacency[target.id, default: []].insert(source.id)
+        }
+
+        var visited = Set<UUID>()
+        var components: [[SemanticNode]] = []
+        for start in eligible.keys.sorted(by: { $0.uuidString < $1.uuidString }) {
+            guard visited.insert(start).inserted else { continue }
+            var queue = [start]
+            var component: [SemanticNode] = []
+            while let nodeID = queue.popLast() {
+                guard let node = eligible[nodeID] else { continue }
+                component.append(node)
+                for neighbor in adjacency[nodeID, default: []]
+                    .sorted(by: { $0.uuidString > $1.uuidString })
+                    where visited.insert(neighbor).inserted {
+                    queue.append(neighbor)
+                }
+            }
+            if component.count >= minimumOccurrences { components.append(component) }
+        }
+
+        var events: [SemanticGraphEvent] = []
+        var consolidated: [SemanticNode] = []
+        for component in components {
+            let ordered = component.sorted {
+                if $0.createdAt != $1.createdAt { return $0.createdAt < $1.createdAt }
+                return $0.id.uuidString < $1.id.uuidString
+            }
+            guard let latest = ordered.last else { continue }
+            var evidenceIDs = Set<RecallEvidenceID>()
+            let evidence = ordered.flatMap(\.evidence).filter {
+                evidenceIDs.insert($0.id).inserted
+            }.sorted {
+                if $0.occurredAt != $1.occurredAt { return $0.occurredAt < $1.occurredAt }
+                return $0.id.id.uuidString < $1.id.id.uuidString
+            }
+            let averageConfidence = ordered.map(\.confidence).reduce(0, +)
+                / Double(ordered.count)
+            let node = try SemanticNode(
+                kind: latest.kind,
+                claim: latest.claim,
+                confidence: averageConfidence,
+                status: ordered.contains(where: { $0.status == .active }) ? .active : .speculative,
+                evidence: evidence,
+                createdAt: latest.createdAt
+            )
+            events.append(.node(id: UUID(), occurredAt: node.createdAt, value: node))
+
+            let vectors = ordered.compactMap { current.vectors[$0.id] }
+            if vectors.count == ordered.count,
+               let first = vectors.first,
+               vectors.allSatisfy({
+                   $0.providerIdentifier == first.providerIdentifier
+                       && $0.values.count == first.values.count
+               }) {
+                let averaged = first.values.indices.map { index in
+                    vectors.map { $0.values[index] }.reduce(0, +) / Double(vectors.count)
+                }
+                let vector = try SemanticVector(
+                    providerIdentifier: first.providerIdentifier,
+                    values: averaged,
+                    createdAt: node.createdAt
+                )
+                events.append(.vector(
+                    id: UUID(),
+                    occurredAt: node.createdAt,
+                    nodeID: node.id,
+                    value: vector
+                ))
+            }
+            for old in ordered {
+                events.append(.supersession(
+                    id: UUID(),
+                    occurredAt: node.createdAt,
+                    oldID: old.id,
+                    newID: node.id
+                ))
+            }
+            consolidated.append(node)
+        }
+        try await append(events)
+        return consolidated
+    }
+
     public func ask(_ query: String, limit: Int = 5) async throws -> [SemanticAnswer] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let queryTerms = Self.terms(query)

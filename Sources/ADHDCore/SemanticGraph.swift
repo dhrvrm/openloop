@@ -195,15 +195,17 @@ public struct SemanticGraph: Codable, Equatable, Sendable {
             guard nodes[value.sourceID] != nil else { throw SemanticGraphError.missingNode(value.sourceID) }
             guard nodes[value.targetID] != nil else { throw SemanticGraphError.missingNode(value.targetID) }
             relations[value.id] = value
-        case .supersession(_, _, let oldID, let newID):
+        case .supersession(let eventID, let occurredAt, let oldID, let newID):
             guard let old = nodes[oldID] else { throw SemanticGraphError.missingNode(oldID) }
             guard nodes[newID] != nil else { throw SemanticGraphError.missingNode(newID) }
             nodes[oldID] = try old.superseded(by: newID)
             let relation = try SemanticRelation(
+                id: eventID,
                 sourceID: newID,
                 targetID: oldID,
                 kind: .supersedes,
-                confidence: 1
+                confidence: 1,
+                createdAt: occurredAt
             )
             relations[relation.id] = relation
         case .vector(_, _, let nodeID, let value):

@@ -257,6 +257,7 @@ final class AppModel: ObservableObject {
                             text: node.claim
                         )
                     }
+                    _ = try? await semanticGraph.consolidateRecurringClaims()
                 } catch {
                     semanticizedMeetingTranscriptIDs.remove(transcript.id)
                     semanticError = "The transcript is safe, but its context graph is waiting to refresh."
@@ -506,6 +507,7 @@ final class AppModel: ObservableObject {
             do {
                 _ = try await semanticGraph.synchronize(memoryRecords: memoryRecords)
                 _ = try? await semanticGraph.enrichMissingVectors()
+                _ = try? await semanticGraph.consolidateRecurringClaims()
                 await refreshSemanticGraph()
             } catch {
                 semanticError = "Memory is safe, but its graph projection is waiting to refresh."
@@ -726,6 +728,7 @@ final class AppModel: ObservableObject {
                                 text: node.claim
                             )
                         }
+                        _ = try? await semanticGraph.consolidateRecurringClaims()
                         await self.refreshSemanticGraph()
                     }
                 } catch {
