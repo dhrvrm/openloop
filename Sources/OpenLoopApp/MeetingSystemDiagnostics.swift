@@ -76,7 +76,7 @@ enum MeetingPipelineNodeKind: String, CaseIterable, Codable, Sendable {
         switch self {
         case .audio: "Audio"
         case .staging: "Local staging"
-        case .whisper: "Whisper large-v3"
+        case .whisper: "Qwen + Whisper"
         case .speakers: "Speaker separation"
         case .vault: "Encrypted vault"
         case .recall: "Recall"
@@ -87,7 +87,7 @@ enum MeetingPipelineNodeKind: String, CaseIterable, Codable, Sendable {
         switch self {
         case .audio: "Import or microphone"
         case .staging: "Retry-safe temporary copy"
-        case .whisper: "Language + word timestamps"
+        case .whisper: "Accuracy-first text + timestamp fallback"
         case .speakers: "Local Pyannote alignment"
         case .vault: "AES-GCM persistence"
         case .recall: "Selectable meeting evidence"
@@ -165,10 +165,10 @@ struct MeetingEngineDiagnostics: Equatable, Sendable {
     var stagingLocation: String
 
     static let checking = MeetingEngineDiagnostics(
-        transcriptionModel: "Whisper large-v3",
-        diarizationModel: "SpeakerKit Pyannote",
+        transcriptionModel: "Qwen3-ASR · Whisper fallback",
+        diarizationModel: "Whisper timestamps · SpeakerKit Pyannote fallback",
         transcriptionModelState: .checking,
-        modelCacheLocation: "OpenLoop data / Models / WhisperKit",
+        modelCacheLocation: "OpenLoop data / Models / Qwen3-ASR",
         stagingLocation: "OpenLoop data / Meeting Staging"
     )
 }

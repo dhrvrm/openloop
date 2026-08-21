@@ -56,6 +56,7 @@ with text. Ambient speech and local semantic memory arrive later.
 
 ## Documents
 
+- [Voice semantic operating layer](docs/VOICE_SEMANTIC_OPERATING_LAYER.md)
 - [ADHD-centered product definition](docs/PRODUCT.md)
 - [Local Mac feasibility](docs/FEASIBILITY.md)
 - [Native technology choices](docs/TECHNOLOGY.md)
@@ -180,8 +181,9 @@ control turns red and a live input meter shows the microphone's measured dB leve
 signal strength, and movement; it is driven by local audio power rather than a
 decorative animation.
 
-The first job downloads WhisperKit's `large-v3-v20240930_626MB` Core ML model,
-selected for maximum multilingual accuracy. The UI distinguishes model download,
+The accuracy-first path downloads a local Qwen3-ASR 0.6B MLX model and retains
+WhisperKit's `large-v3-v20240930_626MB` Core ML model as its timestamped fallback.
+Both run on this Mac. The UI distinguishes model download,
 audio preparation, transcription, speaker separation, encryption, completion,
 failure, cancellation, and retry. Real partial text appears as a selectable live
 transcript while Whisper is working; after encryption, the completed transcript

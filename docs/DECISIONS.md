@@ -262,3 +262,40 @@ Ad-hoc local builds use `root-key.local` directly and never fall back to Keychai
 automatically. This removes repeated ACL prompts caused by changing code hashes.
 Stable microphone authorization across replaced binaries still requires stable
 Developer ID signing; an ad-hoc binary identity cannot be made stable in code.
+
+## D-022 — Qwen3-ASR becomes accuracy-first for code-switched final text
+
+Status: accepted for the next local release, with corpus-wide quality gate unresolved.
+
+On the retained 13.6-second English-Hindi-English recording, local Qwen3-ASR
+0.6B recovered the intended Hindi phrase, the English frame, and the SGLC acronym
+more accurately than the current WhisperKit large-v3 path. The Swift application
+therefore uses a pinned native Qwen/MLX implementation for accuracy-first final
+text and retains Whisper as a local fallback. The Qwen model is loaded once and
+kept warm in unified memory. Learned vocabulary is supplied automatically as
+bounded context; ordinary multilingual recognition requires no user prompt or
+manual language selection.
+
+Whisper remains valuable for timestamped evidence, speaker alignment, and
+independent recognition. Future fusion escalates uncertain spans instead of
+running every engine over every frame. Provider superiority is not claimed until
+the user-corrected Indian-English/Hindi/Hinglish corpus passes WER/CER, terminology,
+dropped-span, and stop-to-final latency gates.
+
+## D-023 — Semantic evidence, not tasks, is the primary product object
+
+Status: accepted as the product direction.
+
+Voice, text, imported material, and tool results enter OpenLoop as immutable
+evidence. The semantic layer may derive observations, facts, problems, ideas,
+questions, possibilities, preferences, decisions, intentions, actions,
+procedures, references, entities, and relationships. Each derived object carries
+confidence, status, provenance, context, and supersession history. A possibility
+is never promoted to a decision and an observation is never promoted to a task
+without explicit commitment or confirmation.
+
+The principal surfaces become Live, Context, Emerging, Ask, and Act. Repeated
+evidence can form quiet threads, connections, and unresolved questions. MCP is a
+permission-aware action layer with separate Observe, Suggest, and Act authority;
+it is not the memory model or the product identity. The complete contract and
+implementation staging live in `docs/VOICE_SEMANTIC_OPERATING_LAYER.md`.

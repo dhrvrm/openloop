@@ -574,7 +574,7 @@ private struct MainView: View {
                         : "MEETING TRANSCRIPTS · \(model.meetingTranscripts.count)")
                         .font(.caption.monospaced().weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Text("Multilingual Whisper · processed locally · encrypted here")
+                    Text("Qwen accuracy · Whisper fallback · processed locally")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }

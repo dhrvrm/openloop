@@ -180,10 +180,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 return
             }
             let quickCapture = QuickCaptureController(model: model)
+            let whisperTranscriber = WhisperKitMeetingTranscriber(
+                modelStorageURL: directory.appendingPathComponent("Models/WhisperKit", isDirectory: true)
+            )
+            let voiceLearning = VoiceLearningLoop(repository: repository)
             let meetingController = MeetingTranscriptionController(
                 repository: repository,
-                transcriber: WhisperKitMeetingTranscriber(
-                    modelStorageURL: directory.appendingPathComponent("Models/WhisperKit", isDirectory: true)
+                transcriber: QwenMeetingTranscriber(
+                    modelStorageURL: directory.appendingPathComponent("Models/Qwen3-ASR", isDirectory: true),
+                    fallback: whisperTranscriber,
+                    contextProvider: {
+                        (try? await voiceLearning.vocabulary(limit: 80)) ?? []
+                    }
                 ),
                 stagingDirectory: directory.appendingPathComponent("Meeting Staging", isDirectory: true),
                 recorder: MeetingAudioRecorder()

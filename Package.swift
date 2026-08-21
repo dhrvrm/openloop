@@ -17,6 +17,10 @@ let package = Package(
             url: "https://github.com/argmaxinc/argmax-oss-swift.git",
             from: "1.1.0"
         ),
+        .package(
+            url: "https://github.com/soniqo/speech-swift.git",
+            revision: "17302bd13c2fc192d89fd79a71810a3a1d8c4f1a"
+        ),
     ],
     targets: [
         .target(name: "ADHDCore"),
@@ -41,6 +45,7 @@ let package = Package(
                 "VaultStore",
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
                 .product(name: "SpeakerKit", package: "argmax-oss-swift"),
+                .product(name: "Qwen3ASR", package: "speech-swift"),
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
