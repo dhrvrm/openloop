@@ -185,7 +185,7 @@ private struct MainView: View {
                 ScreenHeader(
                     eyebrow: "Focus",
                     title: "Now",
-                    detail: "Choose one visible next move. Everything else can wait safely."
+                    detail: "Pick one thing to do now. Everything else stays saved."
                 )
 
                 if let notice = model.recoveryNotice {
@@ -212,14 +212,14 @@ private struct MainView: View {
                     readyQueue
                 } else if model.suggestions.isEmpty {
                     ContentUnavailableView(
-                        model.returns.isEmpty ? "Nothing active" : "Your place is saved",
+                        model.returns.isEmpty ? "Nothing to do now" : "You can pick up where you stopped",
                         systemImage: model.returns.isEmpty
                             ? "circle.dashed"
                             : "arrow.uturn.backward.circle",
                         description: Text(
                             model.returns.isEmpty
                                 ? WorkspaceOrientation.emptyCaptureGuidance
-                                : "Open Return when you are ready to continue."
+                                : "Open Return when you want to continue."
                         )
                     )
                     .frame(maxWidth: .infinity, minHeight: 240)
@@ -230,7 +230,7 @@ private struct MainView: View {
                 if model.suggestions.isEmpty == false {
                     VStack(alignment: .leading, spacing: 5) {
                         OpenLoopSectionHeading(title: "Relevant here")
-                        Text("A linked open loop, shown without a notification.")
+                        Text("Related work you may want to continue.")
                             .font(OpenLoopVisualSystem.metadata)
                             .foregroundStyle(.secondary)
                     }
@@ -402,7 +402,7 @@ private struct MainView: View {
             ScreenHeader(
                 eyebrow: "RECOVERY",
                 title: "Return",
-                detail: "Exact restart points saved before an interruption."
+                detail: "Pick up where you stopped, with the details you need."
             )
             if let error = model.commandError {
                 Text(error).font(.callout).foregroundStyle(.secondary)
@@ -431,7 +431,7 @@ private struct MainView: View {
                 ScreenHeader(
                     eyebrow: "Capture",
                     title: "Inbox",
-                    detail: "Unsorted thoughts and recordings wait here until their meaning is clear."
+                    detail: "New notes and recordings wait here until you decide where they belong."
                 )
                 QuickAddComposer(model: model, text: $quickAddText) {
                     let captured = await model.submitCapture(quickAddText)
@@ -441,13 +441,13 @@ private struct MainView: View {
                     ContentUnavailableView(
                         "Inbox is clear",
                         systemImage: "tray",
-                        description: Text("New captures appear here before you place or release them.")
+                        description: Text("New notes and recordings appear here first.")
                     )
                     .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
                     reviewSection(
                         title: "Needs a decision",
-                        detail: "Nothing is promoted into your work without your choice.",
+                        detail: "You choose what to do with each item.",
                         items: needsDecision
                     )
                 }
@@ -464,7 +464,7 @@ private struct MainView: View {
                 ScreenHeader(
                     eyebrow: "Focus",
                     title: "Later",
-                    detail: "Available work and retained thoughts with no current commitment."
+                    detail: "Things you saved but are not doing now."
                 )
 
                 if let error = model.reviewError {
@@ -483,7 +483,7 @@ private struct MainView: View {
                 } else {
                     reviewSection(
                         title: "Held safely",
-                        detail: "These remain editable until you bring them into Now.",
+                        detail: "Edit these here or move one to Now.",
                         items: heldSafely
                     )
                 }
@@ -521,7 +521,7 @@ private struct MainView: View {
                 ScreenHeader(
                     eyebrow: "QUERY",
                     title: "Ask your context",
-                    detail: "Search what OpenLoop understands, then inspect the original evidence."
+                    detail: "Search your notes and recordings. Open a result to see where it came from."
                 )
 
                 semanticAskPanel
@@ -550,7 +550,7 @@ private struct MainView: View {
                 HStack {
                     Text("⌘⇧F opens Ask")
                     Spacer()
-                    Text("Exact + local semantic evidence")
+                    Text("Searches only this Mac")
                 }
                 .font(.caption.monospaced())
                 .foregroundStyle(.tertiary)
@@ -560,21 +560,21 @@ private struct MainView: View {
                         .frame(maxWidth: .infinity, minHeight: 200)
                 } else if let error = model.recallError {
                     ContentUnavailableView(
-                        "Recall paused",
+                        "Search is unavailable",
                         systemImage: "magnifyingglass",
                         description: Text(error)
                     )
                 } else if model.recallQuery.isEmpty {
                     ContentUnavailableView(
-                        "Search your evidence",
+                        "Search what you saved",
                         systemImage: "text.magnifyingglass",
                         description: Text("Try a name, exact phrase, decision, or restart action.")
                     )
                 } else if model.recallHits.isEmpty {
                     ContentUnavailableView(
-                        "No matching evidence",
+                        "No match found",
                         systemImage: "magnifyingglass",
-                        description: Text("OpenLoop will not invent an answer.")
+                        description: Text("Try a name, phrase, or different words.")
                     )
                 } else {
                     LazyVStack(spacing: 0) {
@@ -602,9 +602,9 @@ private struct MainView: View {
     private var semanticAskPanel: some View {
         VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space3) {
             OpenLoopSectionHeading(
-                title: "Ask",
+                title: "Ask a question",
                 tint: OpenLoopVisualSystem.ask,
-                detail: "Grounded answers from your local semantic graph"
+                detail: "Answers use your saved notes and recordings"
             )
             HStack(spacing: OpenLoopVisualSystem.space2) {
                 TextField("What have I been thinking about?", text: $model.semanticQuery)
@@ -621,11 +621,11 @@ private struct MainView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else if model.semanticQuery.isEmpty {
-                Text("Answers are matched locally and always keep their evidence attached.")
+                Text("OpenLoop searches this Mac and shows the source of each answer.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else if model.semanticAnswers.isEmpty {
-                Text("No grounded answer found. OpenLoop will not invent one.")
+                Text("No answer found in what you saved.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
@@ -643,7 +643,7 @@ private struct MainView: View {
                 ScreenHeader(
                     eyebrow: "Understanding",
                     title: "Context",
-                    detail: "Evidence-grounded observations, concepts, people, projects, and decisions."
+                    detail: "See the people, projects, questions, and decisions connected to your notes."
                 )
                 Picker("Context presentation", selection: $contextPresentation) {
                     ForEach(ContextPresentation.allCases, id: \.self) { presentation in
@@ -653,19 +653,19 @@ private struct MainView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 168)
                 if model.isRefreshingSemanticGraph {
-                    ProgressView("Rebuilding context locally…")
+                    ProgressView("Updating connections…")
                         .frame(maxWidth: .infinity, minHeight: 180)
                 } else if let error = model.semanticError {
                     ContentUnavailableView(
-                        "Context paused",
+                        "Connections are unavailable",
                         systemImage: "point.3.connected.trianglepath.dotted",
                         description: Text(error)
                     )
                 } else if model.semanticNodes.isEmpty {
                     ContentUnavailableView(
-                        "No semantic context yet",
+                        "No connections yet",
                         systemImage: "point.3.connected.trianglepath.dotted",
-                        description: Text("Capture naturally in Now or Inbox. OpenLoop preserves evidence before deriving meaning.")
+                        description: Text("Add a note or recording. Connections appear when OpenLoop finds clear links.")
                     )
                     .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
@@ -702,20 +702,20 @@ private struct MainView: View {
                 ScreenHeader(
                     eyebrow: "PATTERNS",
                     title: "Emerging",
-                    detail: "Repeated themes and unresolved thinking surface quietly. Nothing becomes a task automatically."
+                    detail: "See topics and open questions that keep coming up. Nothing becomes a task unless you choose it."
                 )
                 if model.emergingThreads.isEmpty && model.unresolvedSemanticNodes.isEmpty {
                     ContentUnavailableView(
-                        "No pattern is strong enough yet",
+                        "No repeated topics yet",
                         systemImage: "sparkles",
-                        description: Text("OpenLoop waits for grounded recurrence instead of generating productivity noise.")
+                        description: Text("A topic appears here after it comes up more than once.")
                     )
                     .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
                     if !model.unresolvedSemanticNodes.isEmpty {
                         SemanticSectionTitle(
                             title: "Unresolved",
-                            detail: "Active questions and problems with no confirmed resolution."
+                            detail: "Questions and problems that still need an answer."
                         )
                         ForEach(model.unresolvedSemanticNodes) { node in
                             SemanticNodeRow(node: node, showEvidence: true)
@@ -724,7 +724,7 @@ private struct MainView: View {
                     if !model.emergingThreads.isEmpty {
                         SemanticSectionTitle(
                             title: "Threads",
-                            detail: "Connected ideas ranked by evidence and relationships."
+                            detail: "Ideas that appear together in your notes and recordings."
                         )
                         ForEach(model.emergingThreads) { thread in
                             SemanticThreadRow(thread: thread)
@@ -743,7 +743,7 @@ private struct MainView: View {
             ScreenHeader(
                 eyebrow: "EXECUTION",
                 title: "Act",
-                detail: "Choose an explicit next move. Suggestions remain reviewable until you approve them."
+                detail: "Choose what to do next. OpenLoop never acts without your approval."
             )
             Picker("Action workspace", selection: $actSection) {
                 Text("Ready").tag(0)
@@ -764,7 +764,7 @@ private struct MainView: View {
                     ContentUnavailableView(
                         "Nothing ready to act on",
                         systemImage: "bolt.circle",
-                        description: Text("Potential actions stay in Emerging until you deliberately promote them.")
+                        description: Text("Possible next steps stay in Emerging until you choose one.")
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -781,7 +781,7 @@ private struct MainView: View {
                     title: "Meeting transcripts",
                     tint: OpenLoopVisualSystem.inbox,
                     detail: model.meetingTranscripts.isEmpty
-                        ? "Qwen accuracy · Whisper fallback · processed locally"
+                        ? "High-accuracy models · runs on this Mac"
                         : "\(model.meetingTranscripts.count) stored locally"
                 )
                 Button("Import audio…") { presentMeetingImporter() }
@@ -793,7 +793,7 @@ private struct MainView: View {
             }
 
             if model.meetingTranscripts.isEmpty && model.meetingJob.stage == nil {
-                Text("Drop in a long meeting recording. The first run downloads a high-accuracy local model; your audio never leaves this Mac.")
+                Text("Choose a meeting recording. The first run downloads the speech model. Your audio stays on this Mac.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 4)
@@ -905,9 +905,9 @@ private struct MainView: View {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
                         OpenLoopSectionHeading(
-                            title: "Working memory",
+                            title: "Saved facts",
                             tint: OpenLoopVisualSystem.context,
-                            detail: "Explicit claims linked to stored evidence"
+                            detail: "Things OpenLoop remembers, with the note or recording they came from"
                         )
                     }
                     Spacer()
@@ -919,7 +919,7 @@ private struct MainView: View {
                 }
 
                 if model.isCompilingMemory && model.memoryRecords.isEmpty {
-                    ProgressView("Checking explicit memory…")
+                    ProgressView("Checking saved facts…")
                         .controlSize(.small)
                 }
 
@@ -1695,10 +1695,10 @@ private struct MeetingTranscriptRow: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Label("Meeting brief", systemImage: "sparkles")
+                    Label("Meeting notes", systemImage: "sparkles")
                         .font(.headline)
                         .foregroundStyle(OpenLoopVisualSystem.accent)
-                    Text("Evidence-ranked and verbatim — no cloud processing, no invented tasks.")
+                    Text("Based on the transcript. Runs on this Mac and does not create tasks for you.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1740,7 +1740,7 @@ private struct MeetingTranscriptRow: View {
             }
 
             Label(
-                "Action candidates stay here until you review them; OpenLoop does not add them to Now automatically.",
+                "Possible next steps stay here until you review them. OpenLoop does not add them to Now.",
                 systemImage: "hand.raised"
             )
             .font(.caption)
