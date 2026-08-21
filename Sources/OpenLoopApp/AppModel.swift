@@ -42,6 +42,7 @@ final class AppModel: ObservableObject {
     @Published var meetingEngineDiagnostics = MeetingEngineDiagnostics.checking
     @Published var meetingPipelineEvents: [MeetingPipelineEvent] = []
     @Published var recordingDecibels: Float?
+    @Published var streamingVoiceSession: VoiceSessionSnapshot?
     @Published var isAdvancedModeEnabled: Bool
     @Published var meetingLanguagePreference: MeetingLanguagePreference
     @Published var semanticNodes: [SemanticNode] = []
@@ -72,6 +73,7 @@ final class AppModel: ObservableObject {
     private var meetingDiagnosticsObservation: AnyCancellable?
     private var meetingEventsObservation: AnyCancellable?
     private var meetingMeterObservation: AnyCancellable?
+    private var meetingStreamingObservation: AnyCancellable?
 
     init(
         loop: ThoughtLoop,
@@ -153,6 +155,9 @@ final class AppModel: ObservableObject {
         }
         meetingMeterObservation = controller.$recordingDecibels.sink { [weak self] in
             self?.recordingDecibels = $0
+        }
+        meetingStreamingObservation = controller.$streamingSnapshot.sink { [weak self] in
+            self?.streamingVoiceSession = $0
         }
         Task { await controller.refresh() }
     }

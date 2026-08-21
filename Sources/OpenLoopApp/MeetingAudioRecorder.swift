@@ -168,10 +168,10 @@ final class MeetingAudioRecorder: NSObject, MeetingAudioRecording, AVAudioRecord
         do {
             try startPCMStreamingIfNeeded()
         } catch {
-            value.stop()
-            recorder = nil
-            outputURL = nil
-            throw error
+            // The complete recorder is the durable accuracy path. A live tap
+            // failure must never discard or prevent that recording.
+            stopPCMStreaming()
+            onPCMFrame = nil
         }
         startMetering()
     }

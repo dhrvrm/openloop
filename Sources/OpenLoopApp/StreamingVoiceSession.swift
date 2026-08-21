@@ -24,6 +24,12 @@ protocol StreamingSpeechRecognizing: AnyObject, Sendable {
     ) async throws -> String
 }
 
+protocol StreamingVoiceSessionBuilding: Sendable {
+    func make(
+        onUpdate: @escaping StreamingVoiceSession.UpdateHandler
+    ) async throws -> StreamingVoiceSession
+}
+
 struct StreamingVoiceFrame: Equatable, Sendable {
     let samples: [Float]
     let sampleRate: Int
@@ -331,6 +337,80 @@ actor StreamingVoiceSession {
 
     private func publish() async {
         await onUpdate(snapshot())
+    }
+}
+
+actor LocalStreamingVoiceSessionBuilder: StreamingVoiceSessionBuilding {
+    private let recognizer: any StreamingSpeechRecognizing
+    private let vadStorageURL: URL
+    private let context: @Sendable () async -> [String]
+    private var vadModel: SileroVADModel?
+
+    init(
+        recognizer: any StreamingSpeechRecognizing,
+        vadStorageURL: URL,
+        context: @escaping @Sendable () async -> [String] = { [] }
+    ) {
+        self.recognizer = recognizer
+        self.vadStorageURL = vadStorageURL
+        self.context = context
+    }
+
+    func make(
+        onUpdate: @escaping StreamingVoiceSession.UpdateHandler
+    ) async throws -> StreamingVoiceSession {
+        let model: SileroVADModel
+        if let vadModel {
+            model = vadModel
+        } else {
+            try FileManager.default.createDirectory(
+                at: vadStorageURL,
+                withIntermediateDirectories: true
+            )
+            model = try await SileroVADModel.fromPretrained(
+                cacheDir: vadStorageURL,
+                offlineMode: false
+            )
+            vadModel = model
+        }
+        return StreamingVoiceSession(
+            vad: SileroStreamingVoiceActivityDetector(model: model),
+            recognizer: recognizer,
+            context: context,
+            onUpdate: onUpdate
+        )
+    }
+}
+
+@MainActor
+final class StreamingVoiceFramePump {
+    private let session: StreamingVoiceSession
+    private var tail: Task<Void, Never>?
+    private var acceptsFrames = true
+
+    init(session: StreamingVoiceSession) {
+        self.session = session
+    }
+
+    func enqueue(_ frame: StreamingVoiceFrame) {
+        guard acceptsFrames else { return }
+        let previous = tail
+        tail = Task {
+            if let previous { await previous.value }
+            try? await session.ingest(frame)
+        }
+    }
+
+    func finish() async {
+        acceptsFrames = false
+        await tail?.value
+    }
+
+    func cancel() {
+        acceptsFrames = false
+        tail?.cancel()
+        tail = nil
+        Task { await session.cancel() }
     }
 }
 

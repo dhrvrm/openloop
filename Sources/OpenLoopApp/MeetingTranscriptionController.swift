@@ -36,26 +36,32 @@ final class MeetingTranscriptionController: ObservableObject {
     @Published private(set) var pipelineEvents: [MeetingPipelineEvent] = []
     @Published private(set) var languagePreference = MeetingLanguagePreference.automatic
     @Published private(set) var recordingDecibels: Float?
+    @Published private(set) var streamingSnapshot: VoiceSessionSnapshot?
 
     private let repository: any ThoughtRepository
     private let transcriber: any MeetingTranscribing
     private let stagingDirectory: URL
     private let recorder: (any MeetingAudioRecording)?
+    private let streamingBuilder: (any StreamingVoiceSessionBuilding)?
     private var work: Task<Void, Never>?
     private var eventHistory = MeetingPipelineEventHistory()
     private var recordingStartedAt: Date?
     private var peakRecordingDecibels: Float?
+    private var streamingSession: StreamingVoiceSession?
+    private var streamingFramePump: StreamingVoiceFramePump?
 
     init(
         repository: any ThoughtRepository,
         transcriber: any MeetingTranscribing,
         stagingDirectory: URL,
-        recorder: (any MeetingAudioRecording)? = nil
+        recorder: (any MeetingAudioRecording)? = nil,
+        streamingBuilder: (any StreamingVoiceSessionBuilding)? = nil
     ) {
         self.repository = repository
         self.transcriber = transcriber
         self.stagingDirectory = stagingDirectory
         self.recorder = recorder
+        self.streamingBuilder = streamingBuilder
         recorder?.onDecibelUpdate = { [weak self] value in
             self?.recordingDecibels = value
             if let value {
@@ -119,6 +125,10 @@ final class MeetingTranscriptionController: ObservableObject {
             let recordedDuration = recordingStartedAt.map { max(0, Date().timeIntervalSince($0)) }
             let recordedPeak = peakRecordingDecibels
             guard let url = recorder.stop() else {
+                streamingFramePump?.cancel()
+                streamingFramePump = nil
+                streamingSession = nil
+                recorder.onPCMFrame = nil
                 recordingDecibels = nil
                 recordingStartedAt = nil
                 peakRecordingDecibels = nil
@@ -129,13 +139,15 @@ final class MeetingTranscriptionController: ObservableObject {
                 recordEvent(stage: .failed, message: job.message, fraction: job.fraction)
                 return
             }
+            await finishStreamingSession()
             recordingDecibels = nil
             recordingStartedAt = nil
             start(
                 stagedURL: url,
                 sourceName: "OpenLoop recording.m4a",
                 recordingDuration: recordedDuration,
-                recordingPeakDecibels: recordedPeak
+                recordingPeakDecibels: recordedPeak,
+                initialPreviewText: streamingSnapshot?.transcript.visibleText
             )
             return
         }
@@ -143,6 +155,7 @@ final class MeetingTranscriptionController: ObservableObject {
         recordingDecibels = nil
         recordingStartedAt = nil
         peakRecordingDecibels = nil
+        streamingSnapshot = nil
         job = MeetingJobPresentation(
             stage: .requestingMicrophone,
             message: "Requesting microphone access",
@@ -165,6 +178,7 @@ final class MeetingTranscriptionController: ObservableObject {
             let url = stagingDirectory
                 .appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("m4a")
+            await prepareStreamingSession()
             try recorder.start(at: url)
             let startedAt = Date.now
             recordingStartedAt = startedAt
@@ -179,6 +193,10 @@ final class MeetingTranscriptionController: ObservableObject {
             recordEvent(stage: .recording, message: job.message, fraction: 0)
         } catch {
             recorder.cancel()
+            recorder.onPCMFrame = nil
+            streamingFramePump?.cancel()
+            streamingFramePump = nil
+            streamingSession = nil
             recordingDecibels = nil
             job.stage = .failed
             job.message = "Recording could not start. Check the selected microphone or import an audio file."
@@ -204,6 +222,10 @@ final class MeetingTranscriptionController: ObservableObject {
         recordingDecibels = nil
         recordingStartedAt = nil
         peakRecordingDecibels = nil
+        recorder?.onPCMFrame = nil
+        streamingFramePump?.cancel()
+        streamingFramePump = nil
+        streamingSession = nil
         if let work {
             work.cancel()
             job.message = "Cancelling local transcription"
@@ -316,7 +338,8 @@ final class MeetingTranscriptionController: ObservableObject {
         sourceName: String,
         recordingDuration: TimeInterval? = nil,
         recordingPeakDecibels: Float? = nil,
-        replacingTranscriptID: UUID? = nil
+        replacingTranscriptID: UUID? = nil,
+        initialPreviewText: String? = nil
     ) {
         job = MeetingJobPresentation(
             stage: .waitingForModel,
@@ -331,6 +354,7 @@ final class MeetingTranscriptionController: ObservableObject {
             recordingDuration: recordingDuration,
             recordingPeakDecibels: recordingPeakDecibels
         )
+        job.previewText = initialPreviewText?.isEmpty == false ? initialPreviewText : nil
         recordEvent(stage: .waitingForModel, message: job.message, fraction: 0)
         work = Task { [weak self] in
             guard let self else { return }
@@ -394,6 +418,46 @@ final class MeetingTranscriptionController: ObservableObject {
                 work = nil
             }
         }
+    }
+
+    private func prepareStreamingSession() async {
+        guard let streamingBuilder, let recorder else { return }
+        job.message = "Preparing local voice activity detection"
+        do {
+            let session = try await streamingBuilder.make { [weak self] snapshot in
+                await MainActor.run {
+                    guard let self else { return }
+                    self.streamingSnapshot = snapshot
+                    let visible = snapshot.transcript.visibleText
+                    if self.job.stage == .recording, !visible.isEmpty {
+                        self.job.previewText = visible
+                        self.job.message = snapshot.vadState == .speech
+                            ? "Speech detected · transcribing partial text locally"
+                            : "Listening locally · finalizing stable text"
+                    }
+                }
+            }
+            try await session.start()
+            streamingSession = session
+            let pump = StreamingVoiceFramePump(session: session)
+            streamingFramePump = pump
+            recorder.onPCMFrame = { frame in pump.enqueue(frame) }
+        } catch {
+            recorder.onPCMFrame = nil
+            streamingSession = nil
+            streamingFramePump = nil
+            job.message = "Live partials are unavailable; the complete recording will still transcribe locally."
+        }
+    }
+
+    private func finishStreamingSession() async {
+        recorder?.onPCMFrame = nil
+        await streamingFramePump?.finish()
+        if let streamingSession {
+            try? await streamingSession.stop()
+        }
+        streamingFramePump = nil
+        streamingSession = nil
     }
 
     private func apply(_ progress: MeetingTranscriptionProgress) {

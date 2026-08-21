@@ -200,7 +200,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                     witness: whisperTranscriber
                 ),
                 stagingDirectory: directory.appendingPathComponent("Meeting Staging", isDirectory: true),
-                recorder: MeetingAudioRecorder()
+                recorder: MeetingAudioRecorder(),
+                streamingBuilder: LocalStreamingVoiceSessionBuilder(
+                    recognizer: qwenTranscriber,
+                    vadStorageURL: directory.appendingPathComponent("Models/Silero-VAD", isDirectory: true),
+                    context: {
+                        (try? await voiceLearning.vocabulary(limit: 80)) ?? []
+                    }
+                )
             )
             model.attachMeetingTranscription(meetingController)
             let mainWindow = MainWindowController(model: model)

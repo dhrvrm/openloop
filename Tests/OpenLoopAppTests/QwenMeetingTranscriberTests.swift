@@ -1,3 +1,4 @@
+import ADHDCore
 import Foundation
 import Testing
 @testable import OpenLoopApp
@@ -33,4 +34,85 @@ import Testing
         text: "Can we reduce it?",
         requested: nil
     ) == "en")
+}
+
+@Test func qwenStreamingRecognitionReusesWarmModelAndAppliesVocabulary() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let model = StreamingQwenModel()
+    let loaderCount = LockedCounter()
+    let transcriber = QwenMeetingTranscriber(
+        modelStorageURL: root,
+        fallback: UnusedQwenFallback(),
+        modelLoader: { _, _, _ in
+            loaderCount.increment()
+            return model
+        }
+    )
+
+    let partial = try await transcriber.transcribe(
+        samples: [Float](repeating: 0.1, count: 9_600),
+        sampleRate: 16_000,
+        context: ["SGLC", "Dhruv"],
+        isFinal: false
+    )
+    let final = try await transcriber.transcribe(
+        samples: [Float](repeating: 0.1, count: 16_000),
+        sampleRate: 16_000,
+        context: ["SGLC", "Dhruv"],
+        isFinal: true
+    )
+
+    #expect(partial == "partial Hinglish")
+    #expect(final == "final Hinglish")
+    #expect(loaderCount.value == 1)
+    #expect(model.contexts == [
+        "Vocabulary and names: SGLC, Dhruv",
+        "Vocabulary and names: SGLC, Dhruv",
+    ])
+    #expect(model.languages == [nil, nil])
+}
+
+private final class StreamingQwenModel: QwenSpeechRecognizing, @unchecked Sendable {
+    private(set) var contexts: [String?] = []
+    private(set) var languages: [String?] = []
+    private var callCount = 0
+
+    func transcribe(
+        audio: [Float],
+        sampleRate: Int,
+        language: String?,
+        maxTokens: Int,
+        context: String?
+    ) -> String {
+        contexts.append(context)
+        languages.append(language)
+        defer { callCount += 1 }
+        return callCount == 0 ? " partial Hinglish " : " final Hinglish "
+    }
+}
+
+private actor UnusedQwenFallback: MeetingTranscribing {
+    nonisolated let modelIdentifier = "unused"
+
+    func transcribe(
+        audioURL: URL,
+        progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
+    ) async throws -> LocalTranscriptionOutput {
+        throw MeetingTranscriptionError.localModelUnavailable
+    }
+}
+
+private final class LockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int {
+        lock.withLock { count }
+    }
+
+    func increment() {
+        lock.withLock { count += 1 }
+    }
 }

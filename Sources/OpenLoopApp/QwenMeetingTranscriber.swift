@@ -20,7 +20,7 @@ extension Qwen3ASRModel: QwenSpeechRecognizing {}
 /// Qwen produces the final words. Whisper remains available as an automatic
 /// fallback while the native Qwen model is downloading, unavailable, or
 /// returns an empty result. The actor keeps Qwen resident after its first load.
-actor QwenMeetingTranscriber: MeetingTranscribing {
+actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
     typealias ModelLoader = @Sendable (
         String,
         URL,
@@ -72,6 +72,24 @@ actor QwenMeetingTranscriber: MeetingTranscribing {
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
     ) async throws -> LocalTranscriptionOutput {
         try await transcribe(audioURL: audioURL, languageCode: nil, progress: progress)
+    }
+
+    func transcribe(
+        samples: [Float],
+        sampleRate: Int,
+        context: [String],
+        isFinal: Bool
+    ) async throws -> String {
+        let model = try await loadModelIfNeeded { _ in }
+        return model.transcribe(
+            audio: samples,
+            sampleRate: sampleRate,
+            language: nil,
+            maxTokens: Self.maximumTokens(
+                for: Double(samples.count) / Double(max(1, sampleRate))
+            ),
+            context: Self.context(from: context)
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func transcribe(

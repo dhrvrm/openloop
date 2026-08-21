@@ -39,11 +39,11 @@ struct AdvancedInspector: View {
         VStack(alignment: .leading, spacing: 11) {
             sectionLabel("LIVE DECISION TRACE", icon: "waveform.path.ecg")
             VStack(spacing: 0) {
-                InspectorFact(label: "Audio signal", value: runtime.audioSignal)
+                InspectorFact(label: "Audio signal", value: liveAudioSignal)
                 Divider()
-                InspectorFact(label: "VAD", value: runtime.vadState)
+                InspectorFact(label: "VAD", value: liveVADState)
                 Divider()
-                InspectorFact(label: "Recognizer", value: runtime.activeRecognizer)
+                InspectorFact(label: "Recognizer", value: liveRecognizer)
                 Divider()
                 InspectorFact(label: "Fusion", value: runtime.fusionStatus)
                 Divider()
@@ -54,12 +54,12 @@ struct AdvancedInspector: View {
             .padding(.horizontal, 12)
             .openLoopPanel(emphasized: model.meetingJob.isActive)
 
-            if runtime.unstableText != "None" {
+            if liveUnstableText != "None" {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("UNSTABLE / LIVE")
                         .font(.caption2.monospaced().weight(.semibold))
                         .foregroundStyle(.orange)
-                    Text(runtime.unstableText)
+                    Text(liveUnstableText)
                         .font(.caption)
                         .lineLimit(5)
                         .textSelection(.enabled)
@@ -67,7 +67,44 @@ struct AdvancedInspector: View {
                 .padding(12)
                 .openLoopPanel()
             }
+            if let stable = model.streamingVoiceSession?.transcript.stableText,
+               !stable.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("STABLE / COMMITTED")
+                        .font(.caption2.monospaced().weight(.semibold))
+                        .foregroundStyle(OpenLoopVisualSystem.accent)
+                    Text(stable)
+                        .font(.caption)
+                        .lineLimit(8)
+                        .textSelection(.enabled)
+                }
+                .padding(12)
+                .openLoopPanel()
+            }
         }
+    }
+
+    private var liveAudioSignal: String {
+        guard let value = model.streamingVoiceSession?.inputDecibels else {
+            return runtime.audioSignal
+        }
+        return "\(Int(value.rounded())) dB · \(model.streamingVoiceSession?.processedFrameCount ?? 0) frames"
+    }
+
+    private var liveVADState: String {
+        guard let snapshot = model.streamingVoiceSession else { return runtime.vadState }
+        return snapshot.vadState == .speech ? "Speech" : "Silence"
+    }
+
+    private var liveRecognizer: String {
+        model.streamingVoiceSession?.activeRecognizer ?? runtime.activeRecognizer
+    }
+
+    private var liveUnstableText: String {
+        guard let snapshot = model.streamingVoiceSession else { return runtime.unstableText }
+        return snapshot.transcript.unstableText.isEmpty
+            ? "None"
+            : snapshot.transcript.unstableText
     }
 
     private var inspectorHeader: some View {

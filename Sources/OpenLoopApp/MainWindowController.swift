@@ -1058,6 +1058,25 @@ private struct QuickAddComposer: View {
             }
             if model.meetingJob.stage == .recording {
                 RecordingLevelMeter(decibels: model.recordingDecibels)
+                if let snapshot = model.streamingVoiceSession,
+                   !snapshot.transcript.visibleText.isEmpty {
+                    VStack(alignment: .leading, spacing: 5) {
+                        if !snapshot.transcript.stableText.isEmpty {
+                            Text(snapshot.transcript.stableText)
+                                .foregroundStyle(.primary)
+                        }
+                        if !snapshot.transcript.unstableText.isEmpty {
+                            Text(snapshot.transcript.unstableText)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .font(.callout)
+                    .textSelection(.enabled)
+                    .padding(11)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.background.opacity(0.55), in: RoundedRectangle(cornerRadius: 9))
+                    .accessibilityLabel("Live transcription")
+                }
             }
             HStack(spacing: 10) {
                 Button("Import meeting audio…", systemImage: "waveform.badge.plus") {

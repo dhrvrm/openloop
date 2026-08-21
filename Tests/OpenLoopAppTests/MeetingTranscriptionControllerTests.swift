@@ -213,6 +213,37 @@ import Testing
 }
 
 @MainActor
+@Test func liveRecordingPublishesVADGuidedPartialAndStableTranscript() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let recorder = FakeMeetingRecorder()
+    let recognizer = ControllerStreamingRecognizer()
+    let builder = ControllerStreamingBuilder(recognizer: recognizer)
+    let controller = MeetingTranscriptionController(
+        repository: MeetingRepository(),
+        transcriber: SuccessfulMeetingTranscriber(),
+        stagingDirectory: root,
+        recorder: recorder,
+        streamingBuilder: builder
+    )
+
+    await controller.toggleRecording()
+    recorder.emitPCMFrame(controllerStreamingFrame(0.2))
+    recorder.emitPCMFrame(controllerStreamingFrame(0.3))
+    await controller.toggleRecording()
+
+    let snapshot = try #require(controller.streamingSnapshot)
+    #expect(snapshot.processedFrameCount == 2)
+    #expect(snapshot.finalizedUtteranceCount == 1)
+    #expect(snapshot.transcript.stableText == "release time कम कर सकते हैं")
+    #expect(snapshot.transcript.unstableText.isEmpty)
+    #expect(snapshot.vadState == .silence)
+    #expect(await recognizer.callKinds() == [false, true])
+    await controller.waitUntilSettledForTesting()
+}
+
+@MainActor
 @Test func automaticLanguageDetectionPassesNoLanguageCodeToWhisper() async throws {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -540,6 +571,7 @@ private final class FakeMeetingRecorder: MeetingAudioRecording {
     private(set) var isRecording = false
     private var url: URL?
     var onDecibelUpdate: ((Float?) -> Void)?
+    var onPCMFrame: (@MainActor @Sendable (StreamingVoiceFrame) -> Void)?
     var shouldFailStop = false
 
     func requestPermission() async -> Bool { true }
@@ -565,4 +597,60 @@ private final class FakeMeetingRecorder: MeetingAudioRecording {
     func emitDecibels(_ value: Float) {
         onDecibelUpdate?(value)
     }
+
+    func emitPCMFrame(_ frame: StreamingVoiceFrame) {
+        onPCMFrame?(frame)
+    }
+}
+
+private final class ControllerStreamingVAD: @unchecked Sendable,
+    StreamingVoiceActivityDetecting {
+    private var index = 0
+
+    func process(samples: [Float]) throws -> [StreamingVADEvent] {
+        defer { index += 1 }
+        return index == 0 ? [.speechStarted] : [.speechEnded]
+    }
+
+    func finish() throws -> [StreamingVADEvent] { [] }
+    func reset() { index = 0 }
+}
+
+private actor ControllerStreamingRecognizer: StreamingSpeechRecognizing {
+    nonisolated let modelIdentifier = "controller-streaming-test"
+    private var calls: [Bool] = []
+
+    func transcribe(
+        samples: [Float],
+        sampleRate: Int,
+        context: [String],
+        isFinal: Bool
+    ) async throws -> String {
+        calls.append(isFinal)
+        return isFinal ? "release time कम कर सकते हैं" : "release time कम"
+    }
+
+    func callKinds() -> [Bool] { calls }
+}
+
+private struct ControllerStreamingBuilder: StreamingVoiceSessionBuilding {
+    let recognizer: ControllerStreamingRecognizer
+
+    func make(
+        onUpdate: @escaping StreamingVoiceSession.UpdateHandler
+    ) async throws -> StreamingVoiceSession {
+        StreamingVoiceSession(
+            vad: ControllerStreamingVAD(),
+            recognizer: recognizer,
+            configuration: StreamingVoiceConfiguration(partialResultInterval: 0.020),
+            onUpdate: onUpdate
+        )
+    }
+}
+
+private func controllerStreamingFrame(_ value: Float) -> StreamingVoiceFrame {
+    StreamingVoiceFrame(
+        samples: [Float](repeating: value, count: 320),
+        decibels: -20
+    )
 }
