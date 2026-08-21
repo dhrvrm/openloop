@@ -76,7 +76,10 @@ struct V1ReliabilityTests {
         #expect(OpenLoopVisualSystem.inputRadius == 8)
         #expect(OpenLoopVisualSystem.editorRadius == 10)
         #expect(OpenLoopVisualSystem.panelRadius == 10)
-        #expect(OpenLoopVisualSystem.contentTopPadding == 36)
+        #expect(OpenLoopVisualSystem.contentTopPadding == 52)
+        #expect(OpenLoopVisualSystem.contentBottomPadding == 48)
         #expect(OpenLoopVisualSystem.contentHorizontalPadding == 40)
+        #expect(OpenLoopVisualSystem.inspectorTopPadding == 32)
+        #expect(OpenLoopVisualSystem.inspectorBottomPadding == 40)
     }
 }

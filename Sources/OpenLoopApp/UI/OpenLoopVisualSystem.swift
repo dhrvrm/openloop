@@ -49,8 +49,11 @@ enum OpenLoopVisualSystem {
     static let inputRadius: CGFloat = 8
     static let editorRadius: CGFloat = 10
     static let panelRadius: CGFloat = 10
-    static let contentTopPadding: CGFloat = 36
+    static let contentTopPadding: CGFloat = 52
+    static let contentBottomPadding: CGFloat = 48
     static let contentHorizontalPadding: CGFloat = 40
+    static let inspectorTopPadding: CGFloat = 32
+    static let inspectorBottomPadding: CGFloat = 40
 
     // MARK: Type
 

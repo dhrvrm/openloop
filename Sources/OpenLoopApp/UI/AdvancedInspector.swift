@@ -21,7 +21,8 @@ struct AdvancedInspector: View {
                 recentEvents
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, OpenLoopVisualSystem.space4)
+            .padding(.top, OpenLoopVisualSystem.inspectorTopPadding)
+            .padding(.bottom, OpenLoopVisualSystem.inspectorBottomPadding)
         }
         .scrollIndicators(.hidden)
         .background(OpenLoopVisualSystem.sidebar)

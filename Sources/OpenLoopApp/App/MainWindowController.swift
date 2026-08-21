@@ -31,7 +31,7 @@ private struct MainView: View {
                     .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .topLeading)
                     .padding(.horizontal, OpenLoopVisualSystem.contentHorizontalPadding)
                     .padding(.top, OpenLoopVisualSystem.contentTopPadding)
-                    .padding(.bottom, OpenLoopVisualSystem.space4)
+                    .padding(.bottom, OpenLoopVisualSystem.contentBottomPadding)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
