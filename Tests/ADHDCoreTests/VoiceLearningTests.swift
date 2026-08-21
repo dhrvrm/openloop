@@ -66,6 +66,83 @@ import Testing
     #expect(try await loop.vocabulary(limit: 100) == ["Call Kuvam", "Kuvam"])
 }
 
+@Test func vocabularyScopesKeepProjectTermsOutOfOtherProjects() throws {
+    let global = try TranscriptionCorrection(
+        recognized: "ex code",
+        corrected: "Xcode",
+        scope: .global
+    )
+    let projectA = try TranscriptionCorrection(
+        recognized: "sglc",
+        corrected: "SGLC",
+        scope: .project,
+        projectIdentifier: "release-platform"
+    )
+    let projectB = try TranscriptionCorrection(
+        recognized: "post hog",
+        corrected: "PostHog",
+        scope: .project,
+        projectIdentifier: "storefront"
+    )
+    let vocabulary = PersonalVocabulary(corrections: [global, projectA, projectB])
+
+    #expect(vocabulary.phrases(
+        scopes: [.global, .project],
+        projectIdentifier: "release-platform"
+    ).contains("SGLC"))
+    #expect(!vocabulary.phrases(
+        scopes: [.global, .project],
+        projectIdentifier: "release-platform"
+    ).contains("PostHog"))
+}
+
+@Test func normalizationRequiresRepeatedEvidenceAndTokenBoundaries() throws {
+    let first = try TranscriptionCorrection(
+        recognized: "ex code",
+        corrected: "Xcode",
+        createdAt: Date(timeIntervalSince1970: 1),
+        scope: .programming
+    )
+    let second = try TranscriptionCorrection(
+        recognized: "ex code",
+        corrected: "Xcode",
+        createdAt: Date(timeIntervalSince1970: 2),
+        scope: .programming
+    )
+    let oneOff = try TranscriptionCorrection(
+        recognized: "read is",
+        corrected: "Redis",
+        scope: .programming
+    )
+    let rules = PersonalVocabulary(corrections: [first, second, oneOff])
+        .normalizationRules()
+
+    #expect(rules.count == 1)
+    #expect(rules[0].recognized == "ex code")
+    #expect(rules[0].evidenceCount == 2)
+    #expect(DeterministicTranscriptNormalizer.apply(
+        rules,
+        to: "Open ex code, then explain nextcode."
+    ) == "Open Xcode, then explain nextcode.")
+}
+
+@Test func legacyCorrectionDefaultsToPersonalScope() throws {
+    let object: [String: Any] = [
+        "id": "00000000-0000-0000-0000-000000000091",
+        "recognized": "cool van",
+        "corrected": "Kuvam",
+        "createdAt": 10,
+    ]
+    let data = try JSONSerialization.data(withJSONObject: object)
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .secondsSince1970
+
+    let decoded = try decoder.decode(TranscriptionCorrection.self, from: data)
+
+    #expect(decoded.scope == .personal)
+    #expect(decoded.projectIdentifier == nil)
+}
+
 private actor VoiceLearningRepository: ThoughtRepository {
     private var corrections: [TranscriptionCorrection] = []
 

@@ -290,6 +290,16 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         )
     }
 
+    public func save(
+        meetingTranscript: MeetingTranscript,
+        transcriptionCorrection: TranscriptionCorrection
+    ) async throws {
+        try update {
+            $0.transcriptionCorrections[transcriptionCorrection.id] = transcriptionCorrection
+            $0.meetingTranscripts[meetingTranscript.id] = meetingTranscript
+        }
+    }
+
     public func save(voiceQualityCase: VoiceQualityCase) async throws {
         try update { $0.voiceQualityCases[voiceQualityCase.id] = voiceQualityCase }
     }

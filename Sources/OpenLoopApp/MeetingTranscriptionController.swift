@@ -247,6 +247,64 @@ final class MeetingTranscriptionController: ObservableObject {
         }
     }
 
+    @discardableResult
+    func correctSegment(
+        transcriptID: UUID,
+        segmentID: UUID,
+        correctedText: String,
+        scope: VocabularyScope = .personal,
+        projectIdentifier: String? = nil,
+        at date: Date = .now
+    ) async -> Bool {
+        guard let transcriptIndex = transcripts.firstIndex(where: { $0.id == transcriptID }),
+              let segmentIndex = transcripts[transcriptIndex].segments.firstIndex(
+                where: { $0.id == segmentID }
+              ) else { return false }
+        let transcript = transcripts[transcriptIndex]
+        let segment = transcript.segments[segmentIndex]
+        do {
+            let correction = try TranscriptionCorrection(
+                recognized: segment.text,
+                corrected: correctedText,
+                createdAt: date,
+                scope: scope,
+                projectIdentifier: projectIdentifier
+            )
+            var segments = transcript.segments
+            segments[segmentIndex] = try TranscriptSegment(
+                id: segment.id,
+                start: segment.start,
+                end: segment.end,
+                text: correction.corrected,
+                speaker: segment.speaker
+            )
+            let corrected = try MeetingTranscript(
+                id: transcript.id,
+                sourceName: transcript.sourceName,
+                createdAt: transcript.createdAt,
+                duration: transcript.duration,
+                detectedLanguage: transcript.detectedLanguage,
+                modelIdentifier: transcript.modelIdentifier,
+                segments: segments,
+                sourceAudioFileName: transcript.sourceAudioFileName,
+                fusionEvidence: transcript.fusionEvidence
+            )
+            try await repository.save(
+                meetingTranscript: corrected,
+                transcriptionCorrection: correction
+            )
+            transcripts[transcriptIndex] = corrected
+            if job.completedTranscriptID == transcriptID {
+                job.previewText = corrected.text
+            }
+            return true
+        } catch VoiceLearningError.unchangedText {
+            return true
+        } catch {
+            return false
+        }
+    }
+
     func waitUntilSettledForTesting() async {
         while job.isActive || work != nil {
             await Task.yield()

@@ -175,6 +175,26 @@ final class AppModel: ObservableObject {
     }
 
     @discardableResult
+    func correctMeetingSegment(
+        transcriptID: UUID,
+        segmentID: UUID,
+        correctedText: String,
+        scope: VocabularyScope = .personal
+    ) async -> Bool {
+        guard let meetingController else { return false }
+        let saved = await meetingController.correctSegment(
+            transcriptID: transcriptID,
+            segmentID: segmentID,
+            correctedText: correctedText,
+            scope: scope
+        )
+        if !saved {
+            commandError = "That correction could not be saved. The original transcript is unchanged."
+        }
+        return saved
+    }
+
+    @discardableResult
     func captureMeetingTranscript(_ id: UUID) async -> Bool {
         guard let transcript = meetingTranscripts.first(where: { $0.id == id }) else {
             return false

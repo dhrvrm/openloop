@@ -28,6 +28,10 @@ public protocol ThoughtRepository: Sendable {
     func append(suggestionEvent: SuggestionEvent) async throws
     func suggestionEvents() async throws -> [SuggestionEvent]
     func save(transcriptionCorrection: TranscriptionCorrection) async throws
+    func save(
+        meetingTranscript: MeetingTranscript,
+        transcriptionCorrection: TranscriptionCorrection
+    ) async throws
     func transcriptionCorrections() async throws -> [TranscriptionCorrection]
     func save(voiceQualityCase: VoiceQualityCase) async throws
     func voiceQualityCases() async throws -> [VoiceQualityCase]
@@ -127,6 +131,14 @@ public extension ThoughtRepository {
     }
 
     func transcriptionCorrections() async throws -> [TranscriptionCorrection] { [] }
+
+    func save(
+        meetingTranscript: MeetingTranscript,
+        transcriptionCorrection: TranscriptionCorrection
+    ) async throws {
+        try await save(transcriptionCorrection: transcriptionCorrection)
+        try await save(meetingTranscript: meetingTranscript)
+    }
 
     func save(voiceQualityCase: VoiceQualityCase) async throws {
         throw ThoughtRepositoryCompatibilityError.voiceLearningUnsupported

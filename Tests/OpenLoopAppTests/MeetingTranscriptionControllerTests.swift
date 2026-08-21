@@ -71,6 +71,44 @@ import Testing
 }
 
 @MainActor
+@Test func correctingMeetingSegmentAtomicallyPreservesRawLearningEvidence() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let audio = root.appendingPathComponent("meeting.m4a")
+    try Data("audio fixture".utf8).write(to: audio)
+    let repository = MeetingRepository()
+    let controller = MeetingTranscriptionController(
+        repository: repository,
+        transcriber: SequenceMeetingTranscriber(texts: ["हम SGVC release काम करें"]),
+        stagingDirectory: root.appendingPathComponent("staging")
+    )
+    controller.importAudio(audio)
+    await controller.waitUntilSettledForTesting()
+    let transcript = try #require(controller.transcripts.first)
+    let segment = try #require(transcript.segments.first)
+
+    let saved = await controller.correctSegment(
+        transcriptID: transcript.id,
+        segmentID: segment.id,
+        correctedText: "हम SGLC release कम करें",
+        scope: .project,
+        projectIdentifier: "release-platform",
+        at: Date(timeIntervalSince1970: 30)
+    )
+
+    #expect(saved)
+    #expect(controller.transcripts.first?.text == "हम SGLC release कम करें")
+    let corrections = await repository.storedCorrections()
+    #expect(corrections.count == 1)
+    #expect(corrections[0].recognized == "हम SGVC release काम करें")
+    #expect(corrections[0].corrected == "हम SGLC release कम करें")
+    #expect(corrections[0].scope == .project)
+    #expect(corrections[0].projectIdentifier == "release-platform")
+}
+
+@MainActor
 @Test func dismissingCompletedJobExplicitlyDiscardsRetainedAudio() async throws {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -448,6 +486,7 @@ private actor SequenceMeetingTranscriber: MeetingTranscribing {
 
 private actor MeetingRepository: ThoughtRepository {
     private var values: [MeetingTranscript] = []
+    private var corrections: [TranscriptionCorrection] = []
     private let failFetchAfterSave: Bool
     private var didSave = false
 
@@ -468,6 +507,22 @@ private actor MeetingRepository: ThoughtRepository {
         return values
     }
     func storedValues() -> [MeetingTranscript] { values }
+    func storedCorrections() -> [TranscriptionCorrection] { corrections }
+    func save(transcriptionCorrection: TranscriptionCorrection) async throws {
+        corrections.append(transcriptionCorrection)
+    }
+    func transcriptionCorrections() async throws -> [TranscriptionCorrection] { corrections }
+    func save(
+        meetingTranscript: MeetingTranscript,
+        transcriptionCorrection: TranscriptionCorrection
+    ) async throws {
+        if let index = values.firstIndex(where: { $0.id == meetingTranscript.id }) {
+            values[index] = meetingTranscript
+        } else {
+            values.append(meetingTranscript)
+        }
+        corrections.append(transcriptionCorrection)
+    }
     func deleteMeetingTranscript(id: UUID) async throws { values.removeAll { $0.id == id } }
     func save(capture: RawCapture) async throws {}
     func save(proposal: ClarificationProposal) async throws {}

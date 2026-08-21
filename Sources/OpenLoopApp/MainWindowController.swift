@@ -1163,6 +1163,8 @@ private struct MeetingTranscriptRow: View {
     let onEvidence: (UUID) -> Void
     @State private var expanded: Bool
     @State private var selectedEvidenceID: UUID?
+    @State private var editingSegmentID: UUID?
+    @State private var correctionDraft = ""
 
     init(
         model: AppModel,
@@ -1207,9 +1209,44 @@ private struct MeetingTranscriptRow: View {
                                             .font(.caption2.monospaced().weight(.semibold))
                                             .foregroundStyle(.secondary)
                                     }
-                                    Text(segment.text)
-                                        .font(.callout)
-                                        .textSelection(.enabled)
+                                    if editingSegmentID == segment.id {
+                                        TextEditor(text: $correctionDraft)
+                                            .font(.callout)
+                                            .frame(minHeight: 64)
+                                            .padding(5)
+                                            .background(
+                                                Color(nsColor: .textBackgroundColor).opacity(0.5),
+                                                in: RoundedRectangle(cornerRadius: 7)
+                                            )
+                                        HStack {
+                                            Button("Save correction") {
+                                                Task {
+                                                    if await model.correctMeetingSegment(
+                                                        transcriptID: transcript.id,
+                                                        segmentID: segment.id,
+                                                        correctedText: correctionDraft
+                                                    ) {
+                                                        editingSegmentID = nil
+                                                    }
+                                                }
+                                            }
+                                            .disabled(correctionDraft.trimmingCharacters(
+                                                in: .whitespacesAndNewlines
+                                            ).isEmpty)
+                                            Button("Cancel") { editingSegmentID = nil }
+                                        }
+                                        .buttonStyle(.borderless)
+                                    } else {
+                                        Text(segment.text)
+                                            .font(.callout)
+                                            .textSelection(.enabled)
+                                        Button("Correct transcript") {
+                                            correctionDraft = segment.text
+                                            editingSegmentID = segment.id
+                                        }
+                                        .font(.caption)
+                                        .buttonStyle(.borderless)
+                                    }
                                 }
                             }
                             .padding(.horizontal, 8)
