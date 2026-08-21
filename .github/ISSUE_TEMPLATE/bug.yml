@@ -1,0 +1,36 @@
+name: Bug report
+description: Report reproducible behavior in OpenLoop.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach private recordings, transcripts, credentials, or Keychain exports.
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Include the visible state and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the shortest reliable sequence.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: OpenLoop version
+      placeholder: 1.0.0 (13)
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS and hardware
+      placeholder: macOS 15.6, MacBook Air M4
+    validations:
+      required: true

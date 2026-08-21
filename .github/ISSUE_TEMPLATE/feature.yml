@@ -1,0 +1,26 @@
+name: Product proposal
+description: Propose a focused improvement to capture, understand, remember, or act.
+title: "proposal: "
+labels: [proposal]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What fails in the current user workflow?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe observable behavior, not an implementation brand or model.
+    validations:
+      required: true
+  - type: dropdown
+    id: capability
+    attributes:
+      label: Capability
+      options: [Capture, Voice, Meetings, Memory, Return, Output, Privacy, Website, Other]
+    validations:
+      required: true

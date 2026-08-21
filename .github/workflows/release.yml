@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+      - name: Validate tag matches plist
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          test "${GITHUB_REF_NAME}" = "v${version}"
+      - name: Build versioned DMG
+        run: Scripts/build-dmg.sh
+      - name: Verify bundle
+        run: Scripts/verify-release.sh ".artifacts/app/OpenLoop ADHD.app"
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          dmg=".artifacts/OpenLoop-${version}-arm64.dmg"
+          if gh release view "v${version}" >/dev/null 2>&1; then
+            gh release upload "v${version}" "$dmg" "$dmg.sha256" --clobber
+          else
+            gh release create "v${version}" "$dmg" "$dmg.sha256" \
+              --title "OpenLoop ${version}" \
+              --generate-notes
+          fi

@@ -4,8 +4,13 @@ set -euo pipefail
 openloop_root="${0:A:h:h}"
 artifacts_dir="$openloop_root/.artifacts"
 stage_dir="$artifacts_dir/dmg-stage"
-dmg_path="$artifacts_dir/OpenLoop-ADHD.dmg"
 app_bundle="$artifacts_dir/app/OpenLoop ADHD.app"
+version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$openloop_root/Resources/Info.plist")"
+architecture="$(/usr/bin/uname -m)"
+if [[ "$architecture" == "arm64" ]]; then
+    architecture="arm64"
+fi
+dmg_path="$artifacts_dir/OpenLoop-$version-$architecture.dmg"
 
 "$openloop_root/Scripts/build-app.sh"
 if [[ -e "$stage_dir" ]]; then
@@ -20,4 +25,5 @@ fi
     -ov \
     -format UDZO \
     "$dmg_path"
+/usr/bin/shasum -a 256 "$dmg_path" > "$dmg_path.sha256"
 print -r -- "$dmg_path"

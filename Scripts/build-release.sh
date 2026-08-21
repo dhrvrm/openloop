@@ -13,4 +13,5 @@ fi
 "$openloop_root/Scripts/verify-release.sh" \
     "$openloop_root/.artifacts/app/OpenLoop ADHD.app"
 
-print -r -- "$openloop_root/.artifacts/OpenLoop-ADHD.dmg"
+version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$openloop_root/Resources/Info.plist")"
+print -r -- "$openloop_root/.artifacts/OpenLoop-$version-arm64.dmg"
