@@ -6,6 +6,7 @@ artifacts_dir="$openloop_root/.artifacts"
 app_bundle="$artifacts_dir/app/OpenLoop ADHD.app"
 contents_dir="$app_bundle/Contents"
 sign_identity="${OPENLOOP_SIGN_IDENTITY:--}"
+allow_adhoc_release="${OPENLOOP_ALLOW_ADHOC_RELEASE:-0}"
 
 swift build --package-path "$openloop_root" -c release --arch arm64
 speech_swift_metallib="$openloop_root/.build/checkouts/speech-swift/scripts/build_mlx_metallib.sh"
@@ -19,7 +20,7 @@ if [[ -e "$app_bundle" ]]; then
 fi
 /bin/mkdir -p "$contents_dir/MacOS" "$contents_dir/Resources"
 /usr/bin/ditto "$openloop_root/Resources/Info.plist" "$contents_dir/Info.plist"
-if [[ "$sign_identity" == "-" ]]; then
+if [[ "$sign_identity" == "-" && "$allow_adhoc_release" != "1" ]]; then
     /usr/libexec/PlistBuddy \
         -c "Add :OpenLoopLocalDevelopmentBuild bool true" \
         "$contents_dir/Info.plist"

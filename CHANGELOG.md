@@ -6,6 +6,11 @@ All notable changes are recorded here. Releases follow semantic versioning.
 
 - Nothing yet.
 
+## [1.0.2] — 2026-08-22
+
+- Made community DMG signing an explicit, verified release mode.
+- Removed hard-coded version checks from bundle verification.
+
 ## [1.0.1] — 2026-08-22
 
 - Added the public product website and GitHub Pages deployment.
@@ -23,6 +28,7 @@ All notable changes are recorded here. Releases follow semantic versioning.
 - Added encrypted local storage, permission-aware capture and advanced diagnostics.
 - Established the native visual system and global capture shortcuts.
 
-[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/dhrvrm/openloop/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/dhrvrm/openloop/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/dhrvrm/openloop/releases/tag/v1.0.0
