@@ -8,6 +8,48 @@ private struct LegacySnapshot: Codable {
     var intentions: [UUID: Intention]
 }
 
+private func semanticGraphFixture() throws -> [SemanticGraphEvent] {
+    let timestamp = Date(timeIntervalSince1970: 20)
+    let evidence = try SemanticEvidence(
+        id: RecallEvidenceID(kind: .capture, id: UUID()),
+        excerpt: "Checkout is slower after PostHog",
+        occurredAt: timestamp
+    )
+    let project = try SemanticNode(
+        id: UUID(),
+        kind: .project,
+        claim: "Storefront",
+        confidence: 1,
+        status: .active,
+        evidence: [evidence],
+        createdAt: timestamp
+    )
+    let problem = try SemanticNode(
+        id: UUID(),
+        kind: .problem,
+        claim: "Checkout performance degraded",
+        confidence: 0.8,
+        status: .active,
+        evidence: [evidence],
+        createdAt: timestamp
+    )
+    return [
+        .node(id: UUID(), occurredAt: timestamp, value: project),
+        .node(id: UUID(), occurredAt: timestamp.addingTimeInterval(1), value: problem),
+        .relation(
+            id: UUID(),
+            occurredAt: timestamp.addingTimeInterval(2),
+            value: try SemanticRelation(
+                sourceID: problem.id,
+                targetID: project.id,
+                kind: .partOf,
+                confidence: 0.9,
+                createdAt: timestamp.addingTimeInterval(2)
+            )
+        ),
+    ]
+}
+
 @Test func savedThoughtsSurviveRepositoryRestart() async throws {
     let directory = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -41,6 +83,40 @@ private struct LegacySnapshot: Codable {
     #expect(try await reader.captures(disposition: .later) == [capture])
     #expect(try await reader.intention(id: intention.id) == intention)
     #expect(try await reader.openIntentions() == [intention])
+}
+
+@Test func semanticGraphEventsSurviveDevelopmentRestartInAppendOrder() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let events = try semanticGraphFixture()
+    let writer = try JSONFileThoughtRepository(directory: directory)
+
+    try await writer.append(semanticGraphEvents: events)
+
+    let reader = try JSONFileThoughtRepository(directory: directory)
+    #expect(try await reader.semanticGraphEvents() == events)
+    #expect(try SemanticGraph(events: await reader.semanticGraphEvents()).events == events)
+}
+
+@Test func semanticGraphAppendRejectsInvalidBatchAtomically() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let repository = try JSONFileThoughtRepository(directory: directory)
+    let relation = try SemanticRelation(
+        sourceID: UUID(),
+        targetID: UUID(),
+        kind: .relatesTo,
+        confidence: 1
+    )
+
+    await #expect(throws: SemanticGraphError.self) {
+        try await repository.append(semanticGraphEvents: [
+            .relation(id: UUID(), occurredAt: .now, value: relation),
+        ])
+    }
+    #expect(try await repository.semanticGraphEvents().isEmpty)
 }
 
 @Test func clarificationCorrectionSurvivesDevelopmentRestart() async throws {
@@ -144,6 +220,7 @@ private struct LegacySnapshot: Codable {
     #expect(try await repository.memoryRecords().isEmpty)
     #expect(try await repository.contextTrailSettings() == ContextTrailSettings())
     #expect(try await repository.contextTrailEvents().isEmpty)
+    #expect(try await repository.semanticGraphEvents().isEmpty)
     #expect(try await repository.clarificationCorrections(captureID: nil).isEmpty)
 }
 

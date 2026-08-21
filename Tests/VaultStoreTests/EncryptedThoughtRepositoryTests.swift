@@ -29,6 +29,24 @@ private func temporaryDirectory() -> URL {
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
 }
 
+private func encryptedSemanticGraphFixture() throws -> [SemanticGraphEvent] {
+    let timestamp = Date(timeIntervalSince1970: 80)
+    let evidence = try SemanticEvidence(
+        id: RecallEvidenceID(kind: .capture, id: UUID()),
+        excerpt: "distinct private checkout graph marker",
+        occurredAt: timestamp
+    )
+    let node = try SemanticNode(
+        kind: .problem,
+        claim: "Distinct private semantic graph claim",
+        confidence: 0.88,
+        status: .active,
+        evidence: [evidence],
+        createdAt: timestamp
+    )
+    return [.node(id: UUID(), occurredAt: timestamp, value: node)]
+}
+
 @Test func keychainProviderReturnsTheSame32ByteKey() throws {
     let service = "dev.openloop.tests.\(UUID().uuidString)"
     let account = "root-key"
@@ -119,6 +137,21 @@ private func temporaryDirectory() -> URL {
     let reader = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
     #expect(try await reader.captures(disposition: .later) == [capture])
     #expect(try await reader.proposal(captureID: capture.id) == proposal)
+}
+
+@Test func semanticGraphSurvivesEncryptedRestartWithoutPlaintext() async throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let events = try encryptedSemanticGraphFixture()
+    let writer = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+
+    try await writer.append(semanticGraphEvents: events)
+
+    let payload = try Data(contentsOf: directory.appendingPathComponent("openloop.vault"))
+    #expect(payload.range(of: Data("Distinct private semantic graph claim".utf8)) == nil)
+    #expect(payload.range(of: Data("distinct private checkout graph marker".utf8)) == nil)
+    let reader = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
+    #expect(try await reader.semanticGraphEvents() == events)
 }
 
 @Test func clarificationCorrectionSurvivesEncryptedRestart() async throws {
@@ -239,6 +272,7 @@ private func temporaryDirectory() -> URL {
     #expect(try await repository.memoryRecords().isEmpty)
     #expect(try await repository.contextTrailSettings() == ContextTrailSettings())
     #expect(try await repository.contextTrailEvents().isEmpty)
+    #expect(try await repository.semanticGraphEvents().isEmpty)
 }
 
 @Test func transcriptionCorrectionSurvivesEncryptedRestartWithoutPlaintext() async throws {

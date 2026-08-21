@@ -19,6 +19,7 @@ public enum SemanticGraphError: Error, Equatable {
     case missingEvidence
     case missingNode(UUID)
     case selfRelation
+    case duplicateEvent(UUID)
 }
 
 public struct SemanticEvidence: Codable, Equatable, Sendable {
@@ -124,6 +125,15 @@ public enum SemanticGraphEvent: Codable, Equatable, Identifiable, Sendable {
         case .node(let id, _, _), .relation(let id, _, _), .supersession(let id, _, _, _): id
         }
     }
+
+    public var occurredAt: Date {
+        switch self {
+        case .node(_, let occurredAt, _),
+             .relation(_, let occurredAt, _),
+             .supersession(_, let occurredAt, _, _):
+            occurredAt
+        }
+    }
 }
 
 public struct SemanticGraph: Codable, Equatable, Sendable {
@@ -139,6 +149,9 @@ public struct SemanticGraph: Codable, Equatable, Sendable {
     }
 
     public mutating func apply(_ event: SemanticGraphEvent) throws {
+        guard events.contains(where: { $0.id == event.id }) == false else {
+            throw SemanticGraphError.duplicateEvent(event.id)
+        }
         switch event {
         case .node(_, _, let value):
             nodes[value.id] = value

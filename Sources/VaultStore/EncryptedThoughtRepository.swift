@@ -19,6 +19,7 @@ private struct VaultSnapshot: Codable {
     var memoryRecords: [UUID: MemoryRecord] = [:]
     var contextTrailSettings = ContextTrailSettings()
     var contextTrailEvents: [UUID: ContextTrailEvent] = [:]
+    var semanticGraphEvents: [SemanticGraphEvent] = []
     var retentionPolicy = PrivacyRetentionPolicy.keepForever
 
     private enum CodingKeys: String, CodingKey {
@@ -36,6 +37,7 @@ private struct VaultSnapshot: Codable {
         case memoryRecords
         case contextTrailSettings
         case contextTrailEvents
+        case semanticGraphEvents
         case retentionPolicy
     }
 
@@ -93,6 +95,10 @@ private struct VaultSnapshot: Codable {
             [UUID: ContextTrailEvent].self,
             forKey: .contextTrailEvents
         ) ?? [:]
+        semanticGraphEvents = try container.decodeIfPresent(
+            [SemanticGraphEvent].self,
+            forKey: .semanticGraphEvents
+        ) ?? []
         retentionPolicy = try container.decodeIfPresent(
             PrivacyRetentionPolicy.self,
             forKey: .retentionPolicy
@@ -377,6 +383,19 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
         }
     }
 
+    public func append(semanticGraphEvents events: [SemanticGraphEvent]) async throws {
+        guard !events.isEmpty else { return }
+        try update { snapshot in
+            _ = try SemanticGraph(events: snapshot.semanticGraphEvents + events)
+            snapshot.semanticGraphEvents.append(contentsOf: events)
+        }
+    }
+
+    public func semanticGraphEvents() async throws -> [SemanticGraphEvent] {
+        try synchronize()
+        return snapshot.semanticGraphEvents
+    }
+
     public func allCaptures() async throws -> [RawCapture] {
         try synchronize()
         return snapshot.captures.values.sorted(by: Self.captureOrder)
@@ -447,6 +466,7 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
             && snapshot.memoryRecords.isEmpty
             && snapshot.contextTrailSettings == ContextTrailSettings()
             && snapshot.contextTrailEvents.isEmpty
+            && snapshot.semanticGraphEvents.isEmpty
             && snapshot.retentionPolicy == .keepForever
     }
 
@@ -487,6 +507,7 @@ public actor EncryptedThoughtRepository: ThoughtRepository {
                   candidate.memoryRecords.isEmpty,
                   candidate.contextTrailSettings == ContextTrailSettings(),
                   candidate.contextTrailEvents.isEmpty,
+                  candidate.semanticGraphEvents.isEmpty,
                   candidate.retentionPolicy == .keepForever else {
                 throw VaultStoreError.vaultNotEmpty
             }

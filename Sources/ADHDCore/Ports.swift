@@ -47,6 +47,8 @@ public protocol ThoughtRepository: Sendable {
     func append(contextTrailEvent: ContextTrailEvent) async throws
     func contextTrailEvents() async throws -> [ContextTrailEvent]
     func replace(contextTrailEvents: [ContextTrailEvent]) async throws
+    func append(semanticGraphEvents: [SemanticGraphEvent]) async throws
+    func semanticGraphEvents() async throws -> [SemanticGraphEvent]
     func allCaptures() async throws -> [RawCapture]
     func allIntentions() async throws -> [Intention]
     func privacySummary() async throws -> PrivacyDataSummary
@@ -63,6 +65,7 @@ public enum ThoughtRepositoryCompatibilityError: Error, Equatable {
     case meetingTranscriptionUnsupported
     case workingMemoryUnsupported
     case contextTrailUnsupported
+    case semanticGraphUnsupported
     case privacyUnsupported
 }
 
@@ -183,6 +186,12 @@ public extension ThoughtRepository {
     func replace(contextTrailEvents: [ContextTrailEvent]) async throws {
         throw ThoughtRepositoryCompatibilityError.contextTrailUnsupported
     }
+
+    func append(semanticGraphEvents: [SemanticGraphEvent]) async throws {
+        throw ThoughtRepositoryCompatibilityError.semanticGraphUnsupported
+    }
+
+    func semanticGraphEvents() async throws -> [SemanticGraphEvent] { [] }
 
     func allCaptures() async throws -> [RawCapture] { [] }
 

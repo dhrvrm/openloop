@@ -16,6 +16,7 @@ private struct Snapshot: Codable {
     var memoryRecords: [UUID: MemoryRecord] = [:]
     var contextTrailSettings = ContextTrailSettings()
     var contextTrailEvents: [UUID: ContextTrailEvent] = [:]
+    var semanticGraphEvents: [SemanticGraphEvent] = []
     var retentionPolicy = PrivacyRetentionPolicy.keepForever
 
     private enum CodingKeys: String, CodingKey {
@@ -33,6 +34,7 @@ private struct Snapshot: Codable {
         case memoryRecords
         case contextTrailSettings
         case contextTrailEvents
+        case semanticGraphEvents
         case retentionPolicy
     }
 
@@ -90,6 +92,10 @@ private struct Snapshot: Codable {
             [UUID: ContextTrailEvent].self,
             forKey: .contextTrailEvents
         ) ?? [:]
+        semanticGraphEvents = try container.decodeIfPresent(
+            [SemanticGraphEvent].self,
+            forKey: .semanticGraphEvents
+        ) ?? []
         retentionPolicy = try container.decodeIfPresent(
             PrivacyRetentionPolicy.self,
             forKey: .retentionPolicy
@@ -353,6 +359,18 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
                 uniqueKeysWithValues: contextTrailEvents.map { ($0.id, $0) }
             )
         }
+    }
+
+    public func append(semanticGraphEvents events: [SemanticGraphEvent]) async throws {
+        guard !events.isEmpty else { return }
+        try update { snapshot in
+            _ = try SemanticGraph(events: snapshot.semanticGraphEvents + events)
+            snapshot.semanticGraphEvents.append(contentsOf: events)
+        }
+    }
+
+    public func semanticGraphEvents() async throws -> [SemanticGraphEvent] {
+        snapshot.semanticGraphEvents
     }
 
     public func allCaptures() async throws -> [RawCapture] {

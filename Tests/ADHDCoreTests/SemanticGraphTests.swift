@@ -136,3 +136,29 @@ private func semanticEvidence(_ text: String, id: UUID = UUID()) throws -> Seman
     #expect(answers == [checkout])
     #expect(!answers[0].evidence.isEmpty)
 }
+
+@Test func semanticGraphRejectsDuplicateEventIdentifiers() throws {
+    let eventID = UUID()
+    let first = try SemanticNode(
+        kind: .observation,
+        claim: "Checkout slowed down",
+        confidence: 0.8,
+        status: .active,
+        evidence: [try semanticEvidence("Checkout is slow")]
+    )
+    let second = try SemanticNode(
+        kind: .observation,
+        claim: "Authentication became coupled",
+        confidence: 0.7,
+        status: .active,
+        evidence: [try semanticEvidence("Auth is coupled")]
+    )
+    var graph = try SemanticGraph()
+    try graph.apply(.node(id: eventID, occurredAt: .now, value: first))
+
+    #expect(throws: SemanticGraphError.duplicateEvent(eventID)) {
+        try graph.apply(.node(id: eventID, occurredAt: .now, value: second))
+    }
+    #expect(graph.events.count == 1)
+    #expect(graph.nodes[second.id] == nil)
+}
