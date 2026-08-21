@@ -62,14 +62,21 @@ struct V1ReliabilityTests {
     }
 
     @Test func nativeWorkspaceGeometryKeepsOneCompactVisualRhythm() {
-        #expect(OpenLoopVisualSystem.sidebarWidth == 238)
-        #expect(OpenLoopVisualSystem.contentMaximumWidth == 720)
-        #expect(OpenLoopVisualSystem.checkboxSize == 18)
-        #expect(OpenLoopVisualSystem.checkboxHitSize == 28)
-        #expect(OpenLoopVisualSystem.taskRowMinimumHeight == 47)
-        #expect(OpenLoopVisualSystem.sidebarSelectionRadius == 7)
-        #expect(OpenLoopVisualSystem.inputRadius == 9)
-        #expect(OpenLoopVisualSystem.editorRadius == 11)
-        #expect(OpenLoopVisualSystem.panelRadius == 11)
+        #expect(OpenLoopVisualSystem.space1 == 4)
+        #expect(OpenLoopVisualSystem.space2 == 8)
+        #expect(OpenLoopVisualSystem.space3 == 12)
+        #expect(OpenLoopVisualSystem.space4 == 20)
+        #expect(OpenLoopVisualSystem.space5 == 32)
+        #expect(OpenLoopVisualSystem.sidebarWidth == 224)
+        #expect(OpenLoopVisualSystem.contentMaximumWidth == 660)
+        #expect(OpenLoopVisualSystem.checkboxSize == 16)
+        #expect(OpenLoopVisualSystem.checkboxHitSize == 26)
+        #expect(OpenLoopVisualSystem.taskRowMinimumHeight == 44)
+        #expect(OpenLoopVisualSystem.sidebarSelectionRadius == 6)
+        #expect(OpenLoopVisualSystem.inputRadius == 8)
+        #expect(OpenLoopVisualSystem.editorRadius == 10)
+        #expect(OpenLoopVisualSystem.panelRadius == 10)
+        #expect(OpenLoopVisualSystem.contentTopPadding == 36)
+        #expect(OpenLoopVisualSystem.contentHorizontalPadding == 40)
     }
 }

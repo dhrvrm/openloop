@@ -3,55 +3,81 @@ import SwiftUI
 enum OpenLoopVisualSystem {
     // MARK: Adaptive color language
 
-    static let accent = Color(nsColor: .systemBlue)
-    static let accentSoft = accent.opacity(0.12)
-    static let accentHover = accent.opacity(0.075)
-    static let recording = Color(nsColor: .systemRed)
-    static let today = Color(nsColor: .systemYellow)
-    static let inbox = Color(nsColor: .systemBlue)
-    static let later = Color(nsColor: .systemGreen)
-    static let returnColor = Color(nsColor: .systemGray)
-    static let context = Color(nsColor: .systemTeal)
-    static let emerging = Color(nsColor: .systemPurple)
-    static let ask = Color(nsColor: .systemBlue)
-    static let act = Color(nsColor: .systemOrange)
+    static let accent = adaptive(light: 0x2F73C8, dark: 0x5B9BE6)
+    static let accentSoft = accent.opacity(0.085)
+    static let accentHover = accent.opacity(0.065)
+    static let recording = adaptive(light: 0xD84A4A, dark: 0xFF6666)
 
-    static let canvas = Color(nsColor: .textBackgroundColor)
-    static let sidebar = Color(nsColor: .windowBackgroundColor).opacity(0.96)
-    static let raised = Color(nsColor: .controlBackgroundColor).opacity(0.78)
-    static let selection = Color.primary.opacity(0.075)
-    static let selectionInactive = Color.primary.opacity(0.045)
-    static let hairline = Color.primary.opacity(0.085)
-    static let separator = Color.primary.opacity(0.075)
-    static let muted = Color.primary.opacity(0.52)
-    static let tertiaryText = Color.primary.opacity(0.34)
+    // Category colors are punctuation, not surface fills.
+    static let today = adaptive(light: 0xE5B51B, dark: 0xF5CA3B)
+    static let inbox = accent
+    static let later = adaptive(light: 0x4D9A68, dark: 0x6DBC84)
+    static let returnColor = adaptive(light: 0x7D8790, dark: 0x9CA4AD)
+    static let context = adaptive(light: 0x527B8C, dark: 0x75A4B5)
+    static let emerging = adaptive(light: 0x806AA3, dark: 0xA58CC8)
+    static let ask = accent
+    static let act = adaptive(light: 0xC36B42, dark: 0xE18A63)
+
+    static let canvas = adaptive(light: 0xF8F8F7, dark: 0x252628)
+    static let sidebar = adaptive(light: 0xF0F3F5, dark: 0x1D1E20)
+    static let raised = adaptive(light: 0xFFFFFF, dark: 0x2D2E31)
+    static let selection = adaptive(light: 0xDDE1E5, dark: 0x3B3D41)
+    static let selectionInactive = adaptive(light: 0xE9ECEF, dark: 0x303236)
+    static let pressed = adaptive(light: 0xD4D9DE, dark: 0x45474B)
+    static let hairline = adaptive(light: 0xD9DCE0, dark: 0x45474B)
+    static let separator = adaptive(light: 0xE2E4E7, dark: 0x3A3C40)
+    static let muted = adaptive(light: 0x6F7479, dark: 0xA5A9AE)
+    static let tertiaryText = adaptive(light: 0x92979C, dark: 0x777C82)
+    static let focusRing = accent.opacity(0.34)
 
     // MARK: Geometry
 
-    static let sidebarWidth: CGFloat = 238
-    static let contentMaximumWidth: CGFloat = 720
-    static let inspectorIdealWidth: CGFloat = 348
-    static let checkboxSize: CGFloat = 18
-    static let checkboxHitSize: CGFloat = 28
-    static let taskRowMinimumHeight: CGFloat = 47
-    static let compactRowMinimumHeight: CGFloat = 31
-    static let sidebarSelectionRadius: CGFloat = 7
-    static let inputRadius: CGFloat = 9
-    static let editorRadius: CGFloat = 11
-    static let panelRadius: CGFloat = 11
-    static let contentTopPadding: CGFloat = 43
-    static let contentHorizontalPadding: CGFloat = 48
+    static let space1: CGFloat = 4
+    static let space2: CGFloat = 8
+    static let space3: CGFloat = 12
+    static let space4: CGFloat = 20
+    static let space5: CGFloat = 32
+
+    static let sidebarWidth: CGFloat = 224
+    static let contentMaximumWidth: CGFloat = 660
+    static let inspectorIdealWidth: CGFloat = 320
+    static let checkboxSize: CGFloat = 16
+    static let checkboxHitSize: CGFloat = 26
+    static let taskRowMinimumHeight: CGFloat = 44
+    static let compactRowMinimumHeight: CGFloat = 30
+    static let sidebarSelectionRadius: CGFloat = 6
+    static let inputRadius: CGFloat = 8
+    static let editorRadius: CGFloat = 10
+    static let panelRadius: CGFloat = 10
+    static let contentTopPadding: CGFloat = 36
+    static let contentHorizontalPadding: CGFloat = 40
 
     // MARK: Type
 
-    static let listTitle = Font.system(size: 35, weight: .bold)
-    static let projectTitle = Font.system(size: 30, weight: .semibold)
-    static let sectionTitle = Font.system(size: 16, weight: .semibold)
-    static let rowTitle = Font.system(size: 16, weight: .regular)
-    static let rowTitleEmphasized = Font.system(size: 16, weight: .medium)
+    static let listTitle = Font.system(size: 32, weight: .bold)
+    static let projectTitle = Font.system(size: 28, weight: .semibold)
+    static let sectionTitle = Font.system(size: 15, weight: .semibold)
+    static let rowTitle = Font.system(size: 15.5, weight: .regular)
+    static let rowTitleEmphasized = Font.system(size: 15.5, weight: .medium)
     static let metadata = Font.system(size: 13, weight: .regular)
-    static let sidebarLabel = Font.system(size: 15, weight: .regular)
-    static let sidebarLabelSelected = Font.system(size: 15, weight: .medium)
+    static let sidebarLabel = Font.system(size: 14.5, weight: .regular)
+    static let sidebarLabelSelected = Font.system(size: 14.5, weight: .medium)
+
+    private static func adaptive(light: Int, dark: Int) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            return nsColor(isDark ? dark : light)
+        })
+    }
+
+    private static func nsColor(_ hex: Int) -> NSColor {
+        NSColor(
+            srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1
+        )
+    }
 
     static func tint(for destination: WorkspaceDestination.ID) -> Color {
         switch destination {
