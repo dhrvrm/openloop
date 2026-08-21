@@ -5,6 +5,9 @@
 .swiftpm/
 build/
 DerivedData/
+website/node_modules/
+website/dist/
+*.tsbuildinfo
 
 # Private evaluation inputs must never enter version control.
 Fixtures/audio/
