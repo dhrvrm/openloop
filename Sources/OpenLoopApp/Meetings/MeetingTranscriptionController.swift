@@ -49,6 +49,8 @@ final class MeetingTranscriptionController: ObservableObject {
     private var peakRecordingDecibels: Float?
     private var streamingSession: StreamingVoiceSession?
     private var streamingFramePump: StreamingVoiceFramePump?
+    private var streamingPreparation: Task<Void, Never>?
+    private var streamingGeneration: UUID?
 
     init(
         repository: any ThoughtRepository,
@@ -125,6 +127,7 @@ final class MeetingTranscriptionController: ObservableObject {
             let recordedDuration = recordingStartedAt.map { max(0, Date().timeIntervalSince($0)) }
             let recordedPeak = peakRecordingDecibels
             guard let url = recorder.stop() else {
+                cancelStreamingPreparation()
                 streamingFramePump?.cancel()
                 streamingFramePump = nil
                 streamingSession = nil
@@ -178,7 +181,6 @@ final class MeetingTranscriptionController: ObservableObject {
             let url = stagingDirectory
                 .appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("m4a")
-            await prepareStreamingSession()
             try recorder.start(at: url)
             let startedAt = Date.now
             recordingStartedAt = startedAt
@@ -191,8 +193,10 @@ final class MeetingTranscriptionController: ObservableObject {
                 stagedAudioURL: url
             )
             recordEvent(stage: .recording, message: job.message, fraction: 0)
+            beginStreamingPreparation()
         } catch {
             recorder.cancel()
+            cancelStreamingPreparation()
             recorder.onPCMFrame = nil
             streamingFramePump?.cancel()
             streamingFramePump = nil
@@ -223,6 +227,7 @@ final class MeetingTranscriptionController: ObservableObject {
         recordingStartedAt = nil
         peakRecordingDecibels = nil
         recorder?.onPCMFrame = nil
+        cancelStreamingPreparation()
         streamingFramePump?.cancel()
         streamingFramePump = nil
         streamingSession = nil
@@ -420,9 +425,27 @@ final class MeetingTranscriptionController: ObservableObject {
         }
     }
 
-    private func prepareStreamingSession() async {
+    private func beginStreamingPreparation() {
+        cancelStreamingPreparation()
+        let generation = UUID()
+        streamingGeneration = generation
+        streamingPreparation = Task { [weak self] in
+            await self?.prepareStreamingSession(generation: generation)
+        }
+    }
+
+    private func cancelStreamingPreparation() {
+        streamingGeneration = nil
+        streamingPreparation?.cancel()
+        streamingPreparation = nil
+    }
+
+    private func prepareStreamingSession(generation: UUID) async {
         guard let streamingBuilder, let recorder else { return }
-        job.message = "Preparing local voice activity detection"
+        guard streamingGeneration == generation,
+              job.stage == .recording,
+              recorder.isRecording else { return }
+        job.message = "Recording locally · preparing live captions"
         do {
             let session = try await streamingBuilder.make { [weak self] snapshot in
                 await MainActor.run {
@@ -437,20 +460,31 @@ final class MeetingTranscriptionController: ObservableObject {
                     }
                 }
             }
+            try Task.checkCancellation()
             try await session.start()
+            guard streamingGeneration == generation,
+                  job.stage == .recording,
+                  recorder.isRecording else {
+                await session.cancel()
+                return
+            }
             streamingSession = session
             let pump = StreamingVoiceFramePump(session: session)
             streamingFramePump = pump
             recorder.onPCMFrame = { frame in pump.enqueue(frame) }
         } catch {
+            guard streamingGeneration == generation,
+                  job.stage == .recording else { return }
             recorder.onPCMFrame = nil
             streamingSession = nil
             streamingFramePump = nil
-            job.message = "Live partials are unavailable; the complete recording will still transcribe locally."
+            job.message = "Recording is safe. Live captions are unavailable; the complete audio will still transcribe locally."
         }
+        if streamingGeneration == generation { streamingPreparation = nil }
     }
 
     private func finishStreamingSession() async {
+        cancelStreamingPreparation()
         recorder?.onPCMFrame = nil
         await streamingFramePump?.finish()
         if let streamingSession {

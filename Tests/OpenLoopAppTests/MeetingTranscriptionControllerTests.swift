@@ -213,6 +213,36 @@ import Testing
 }
 
 @MainActor
+@Test func liveRecordingStartsBeforeStreamingModelsFinishPreparing() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let recorder = FakeMeetingRecorder()
+    let builder = GatedControllerStreamingBuilder()
+    let controller = MeetingTranscriptionController(
+        repository: MeetingRepository(),
+        transcriber: SuccessfulMeetingTranscriber(),
+        stagingDirectory: root,
+        recorder: recorder,
+        streamingBuilder: builder
+    )
+
+    await controller.toggleRecording()
+
+    #expect(recorder.isRecording)
+    #expect(controller.job.stage == .recording)
+    #expect(controller.job.stagedAudioURL != nil)
+    await builder.waitUntilRequested()
+    #expect(recorder.isRecording)
+
+    await builder.open()
+    while recorder.onPCMFrame == nil { await Task.yield() }
+    await controller.toggleRecording()
+    await controller.waitUntilSettledForTesting()
+    #expect(controller.job.stage == .ready)
+}
+
+@MainActor
 @Test func liveRecordingPublishesVADGuidedPartialAndStableTranscript() async throws {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -645,6 +675,46 @@ private struct ControllerStreamingBuilder: StreamingVoiceSessionBuilding {
             configuration: StreamingVoiceConfiguration(partialResultInterval: 0.020),
             onUpdate: onUpdate
         )
+    }
+}
+
+private actor GatedControllerStreamingBuilder: StreamingVoiceSessionBuilding {
+    private var requested = false
+    private var requestWaiters: [CheckedContinuation<Void, Never>] = []
+    private var openWaiters: [CheckedContinuation<Void, Never>] = []
+    private var isOpen = false
+
+    func make(
+        onUpdate: @escaping StreamingVoiceSession.UpdateHandler
+    ) async throws -> StreamingVoiceSession {
+        requested = true
+        let waiters = requestWaiters
+        requestWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+        if !isOpen {
+            await withCheckedContinuation { continuation in
+                openWaiters.append(continuation)
+            }
+        }
+        return StreamingVoiceSession(
+            vad: ControllerStreamingVAD(),
+            recognizer: ControllerStreamingRecognizer(),
+            onUpdate: onUpdate
+        )
+    }
+
+    func waitUntilRequested() async {
+        if requested { return }
+        await withCheckedContinuation { continuation in
+            requestWaiters.append(continuation)
+        }
+    }
+
+    func open() {
+        isOpen = true
+        let waiters = openWaiters
+        openWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
     }
 }
 

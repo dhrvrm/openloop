@@ -385,32 +385,52 @@ actor LocalStreamingVoiceSessionBuilder: StreamingVoiceSessionBuilding {
 @MainActor
 final class StreamingVoiceFramePump {
     private let session: StreamingVoiceSession
-    private var tail: Task<Void, Never>?
+    private let maximumPendingFrames: Int
+    private var pendingFrames: [StreamingVoiceFrame] = []
+    private var worker: Task<Void, Never>?
     private var acceptsFrames = true
 
-    init(session: StreamingVoiceSession) {
+    init(session: StreamingVoiceSession, maximumPendingFrames: Int = 32) {
         self.session = session
+        self.maximumPendingFrames = max(1, maximumPendingFrames)
     }
 
     func enqueue(_ frame: StreamingVoiceFrame) {
         guard acceptsFrames else { return }
-        let previous = tail
-        tail = Task {
-            if let previous { await previous.value }
-            try? await session.ingest(frame)
+        pendingFrames.append(frame)
+        if pendingFrames.count > maximumPendingFrames {
+            pendingFrames.removeFirst(pendingFrames.count - maximumPendingFrames)
         }
+        startWorkerIfNeeded()
     }
 
     func finish() async {
         acceptsFrames = false
-        await tail?.value
+        await worker?.value
     }
 
     func cancel() {
         acceptsFrames = false
-        tail?.cancel()
-        tail = nil
+        pendingFrames.removeAll(keepingCapacity: false)
+        worker?.cancel()
+        worker = nil
         Task { await session.cancel() }
+    }
+
+    private func startWorkerIfNeeded() {
+        guard worker == nil else { return }
+        worker = Task { [weak self] in
+            await self?.drain()
+        }
+    }
+
+    private func drain() async {
+        while !pendingFrames.isEmpty, !Task.isCancelled {
+            let frame = pendingFrames.removeFirst()
+            try? await session.ingest(frame)
+        }
+        worker = nil
+        if acceptsFrames, !pendingFrames.isEmpty { startWorkerIfNeeded() }
     }
 }
 
