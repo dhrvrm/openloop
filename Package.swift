@@ -46,6 +46,7 @@ let package = Package(
                 .product(name: "WhisperKit", package: "argmax-oss-swift"),
                 .product(name: "SpeakerKit", package: "argmax-oss-swift"),
                 .product(name: "Qwen3ASR", package: "speech-swift"),
+                .product(name: "SpeechVAD", package: "speech-swift"),
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
