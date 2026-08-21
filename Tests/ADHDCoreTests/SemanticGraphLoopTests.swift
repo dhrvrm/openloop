@@ -85,8 +85,14 @@ private struct SemanticFixtureEmbeddings: EmbeddingProvider {
             secondText: [0.9, 0.1, 0],
         ])
     )
-    let first = try await loop.recordObservation(capture: RawCapture(text: firstText))
-    let second = try await loop.recordObservation(capture: RawCapture(text: secondText))
+    let first = try await loop.recordObservation(capture: RawCapture(
+        createdAt: Date(timeIntervalSince1970: 50),
+        text: firstText
+    ))
+    let second = try await loop.recordObservation(capture: RawCapture(
+        createdAt: Date(timeIntervalSince1970: 51),
+        text: secondText
+    ))
 
     _ = try await loop.enrichVector(nodeID: first.id, text: first.claim)
     _ = try await loop.enrichVector(nodeID: second.id, text: second.claim)
