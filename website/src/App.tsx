@@ -18,7 +18,7 @@ gsap.registerPlugin(ScrollTrigger, useGSAP);
 const repository = "https://github.com/dhrvrm/openloop";
 const version = "1.0.4";
 const download = `${repository}/releases/download/v${version}/OpenLoop-${version}-arm64.dmg`;
-const checksum = "443bcb5116742ac5c4bc2337e6c5f73af1c0df035285f8b076dbe805d046601c";
+const checksum = "0c4edd864736a0fd7d92129833c120eb47cfce917c9c104a5f7abdc85d18fe5f";
 
 const nodes = [
   { label: "Project", x: 13, y: 39, tone: "quiet" },
