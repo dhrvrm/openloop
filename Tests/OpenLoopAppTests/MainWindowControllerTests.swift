@@ -183,6 +183,34 @@ private actor EnabledWindowContextTrail: ContextTrailProviding {
 }
 
 @MainActor
+@Test func appearancePreferencePersistsAcrossAppModels() {
+    let suiteName = "OpenLoopAppTests.Appearance.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let repository = EmptyWindowRepository()
+    let loop = ThoughtLoop(repository: repository, clarifier: WindowUnusedClarifier())
+    let key = "appearance"
+
+    let first = AppModel(
+        loop: loop,
+        readModels: ThoughtReadModels(repository: repository),
+        defaults: defaults,
+        appearanceModeKey: key
+    )
+    #expect(first.appearanceMode == .system)
+
+    first.setAppearanceMode(.light)
+
+    let second = AppModel(
+        loop: loop,
+        readModels: ThoughtReadModels(repository: repository),
+        defaults: defaults,
+        appearanceModeKey: key
+    )
+    #expect(second.appearanceMode == .light)
+}
+
+@MainActor
 @Test func meetingLanguageAlwaysStartsWithAutomaticDetection() {
     let suiteName = "OpenLoopAppTests.MeetingLanguage.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!

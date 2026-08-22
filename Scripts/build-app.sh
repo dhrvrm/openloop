@@ -7,6 +7,7 @@ app_bundle="$artifacts_dir/app/OpenLoop ADHD.app"
 contents_dir="$app_bundle/Contents"
 sign_identity="${OPENLOOP_SIGN_IDENTITY:--}"
 allow_adhoc_release="${OPENLOOP_ALLOW_ADHOC_RELEASE:-0}"
+prebuilt_metallib="${OPENLOOP_PREBUILT_METALLIB:-}"
 
 swift build --package-path "$openloop_root" -c release --arch arm64
 speech_swift_metallib="$openloop_root/.build/checkouts/speech-swift/scripts/build_mlx_metallib.sh"
@@ -14,7 +15,16 @@ if [[ ! -x "$speech_swift_metallib" ]]; then
     print -u2 -- "Missing speech-swift Metal build script: $speech_swift_metallib"
     exit 1
 fi
-BUILD_DIR="$openloop_root/.build" "$speech_swift_metallib" release
+if ! BUILD_DIR="$openloop_root/.build" "$speech_swift_metallib" release; then
+    if [[ -f "$prebuilt_metallib" ]]; then
+        /bin/mkdir -p "$openloop_root/.build/release"
+        /usr/bin/ditto "$prebuilt_metallib" "$openloop_root/.build/release/mlx.metallib"
+        print -r -- "Reused explicitly supplied MLX Metal library: $prebuilt_metallib"
+    else
+        print -u2 -- "Metal compilation failed and OPENLOOP_PREBUILT_METALLIB was not provided."
+        exit 1
+    fi
+fi
 if [[ -e "$app_bundle" ]]; then
     /bin/rm -rf "$app_bundle"
 fi

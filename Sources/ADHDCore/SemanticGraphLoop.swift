@@ -123,7 +123,29 @@ public actor SemanticGraphLoop {
         )
         let root: SemanticNode
         if let existing = current.nodes[transcript.id] {
-            root = existing
+            let expectedClaim = "Meeting: \(transcript.sourceName)"
+            if existing.claim == expectedClaim {
+                root = existing
+            } else {
+                root = try SemanticNode(
+                    id: existing.id,
+                    kind: existing.kind,
+                    claim: expectedClaim,
+                    confidence: existing.confidence,
+                    status: existing.status,
+                    evidence: existing.evidence,
+                    createdAt: existing.createdAt,
+                    supersededBy: existing.supersededBy
+                )
+                let event = SemanticGraphEvent.node(
+                    id: UUID(),
+                    occurredAt: transcript.createdAt,
+                    value: root
+                )
+                try current.apply(event)
+                events.append(event)
+                created.append(root)
+            }
         } else {
             root = try SemanticNode(
                 id: transcript.id,

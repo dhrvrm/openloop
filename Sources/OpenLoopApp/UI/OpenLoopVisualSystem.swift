@@ -3,7 +3,7 @@ import SwiftUI
 enum OpenLoopVisualSystem {
     // MARK: Adaptive color language
 
-    static let accent = adaptive(light: 0x187F73, dark: 0x50C6B4)
+    static let accent = adaptive(light: 0x3973B9, dark: 0x71A5E3)
     static let accentSoft = accent.opacity(0.10)
     static let accentHover = accent.opacity(0.075)
     static let recording = adaptive(light: 0xD84A4A, dark: 0xFF6666)
@@ -11,23 +11,23 @@ enum OpenLoopVisualSystem {
     // Category colors are punctuation, not surface fills.
     static let today = accent
     static let inbox = accent
-    static let later = adaptive(light: 0x61776F, dark: 0x91AAA1)
+    static let later = adaptive(light: 0x6E7885, dark: 0x99A3AF)
     static let returnColor = adaptive(light: 0x7D8790, dark: 0x9CA4AD)
-    static let context = accent
-    static let emerging = adaptive(light: 0x4D766F, dark: 0x82AEA6)
+    static let context = adaptive(light: 0x526FA2, dark: 0x86A4D1)
+    static let emerging = adaptive(light: 0x7D6BA8, dark: 0xA894CD)
     static let ask = accent
     static let act = accent
 
-    static let canvas = adaptive(light: 0xFAF9F6, dark: 0x242523)
-    static let sidebar = adaptive(light: 0xF1F0EC, dark: 0x1D1F1D)
-    static let raised = adaptive(light: 0xFFFFFF, dark: 0x2D2E31)
-    static let selection = adaptive(light: 0xE1E4DF, dark: 0x393D39)
-    static let selectionInactive = adaptive(light: 0xECEDE9, dark: 0x303330)
-    static let pressed = adaptive(light: 0xD9DDD7, dark: 0x444944)
-    static let hairline = adaptive(light: 0xDEDED8, dark: 0x454945)
-    static let separator = adaptive(light: 0xE6E5E0, dark: 0x393D39)
-    static let muted = adaptive(light: 0x706F6A, dark: 0xAAA9A4)
-    static let tertiaryText = adaptive(light: 0x96958F, dark: 0x7E817D)
+    static let canvas = adaptive(light: 0xFBFAF7, dark: 0x202228)
+    static let sidebar = adaptive(light: 0xF3F4F6, dark: 0x191B20)
+    static let raised = adaptive(light: 0xFFFFFF, dark: 0x292C33)
+    static let selection = adaptive(light: 0xE3ECF7, dark: 0x313B49)
+    static let selectionInactive = adaptive(light: 0xF0F2F5, dark: 0x292C33)
+    static let pressed = adaptive(light: 0xD9E3EF, dark: 0x394454)
+    static let hairline = adaptive(light: 0xE3E4E7, dark: 0x3D414A)
+    static let separator = adaptive(light: 0xE9E9E7, dark: 0x34373F)
+    static let muted = adaptive(light: 0x6D7077, dark: 0xA8ABB2)
+    static let tertiaryText = adaptive(light: 0x9699A0, dark: 0x7E828B)
     static let focusRing = accent.opacity(0.34)
 
     // MARK: Geometry
@@ -43,15 +43,15 @@ enum OpenLoopVisualSystem {
     static let inspectorIdealWidth: CGFloat = 320
     static let checkboxSize: CGFloat = 18
     static let checkboxHitSize: CGFloat = 28
-    static let taskRowMinimumHeight: CGFloat = 48
-    static let compactRowMinimumHeight: CGFloat = 34
-    static let sidebarSelectionRadius: CGFloat = 8
-    static let inputRadius: CGFloat = 8
-    static let editorRadius: CGFloat = 10
-    static let panelRadius: CGFloat = 10
-    static let contentTopPadding: CGFloat = 56
-    static let contentBottomPadding: CGFloat = 64
-    static let contentHorizontalPadding: CGFloat = 40
+    static let taskRowMinimumHeight: CGFloat = 56
+    static let compactRowMinimumHeight: CGFloat = 40
+    static let sidebarSelectionRadius: CGFloat = 10
+    static let inputRadius: CGFloat = 12
+    static let editorRadius: CGFloat = 14
+    static let panelRadius: CGFloat = 14
+    static let contentTopPadding: CGFloat = 68
+    static let contentBottomPadding: CGFloat = 92
+    static let contentHorizontalPadding: CGFloat = 48
     static let inspectorTopPadding: CGFloat = 32
     static let inspectorBottomPadding: CGFloat = 40
 
@@ -216,8 +216,9 @@ private struct OpenLoopAccessoryButtonBody: View {
         configuration.label
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(isEnabled ? tint : OpenLoopVisualSystem.tertiaryText)
-            .padding(.horizontal, 9)
-            .frame(minHeight: 28)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 8)
+            .frame(minHeight: 34)
             .background(
                 backgroundColor,
                 in: RoundedRectangle(
@@ -299,6 +300,24 @@ private struct OpenLoopPanelModifier: ViewModifier {
     }
 }
 
+private struct OpenLoopTextFieldModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .textFieldStyle(.plain)
+            .font(OpenLoopVisualSystem.rowTitle)
+            .padding(.horizontal, OpenLoopVisualSystem.space3)
+            .padding(.vertical, 10)
+            .frame(minHeight: 46)
+            .background(
+                OpenLoopVisualSystem.selectionInactive.opacity(0.72),
+                in: RoundedRectangle(
+                    cornerRadius: OpenLoopVisualSystem.inputRadius,
+                    style: .continuous
+                )
+            )
+    }
+}
+
 extension View {
     func openLoopPanel(emphasized: Bool = false) -> some View {
         modifier(OpenLoopPanelModifier(emphasized: emphasized))
@@ -306,5 +325,9 @@ extension View {
 
     func openLoopInteractiveRow(isSelected: Bool = false) -> some View {
         modifier(OpenLoopInteractiveRowModifier(isSelected: isSelected))
+    }
+
+    func openLoopTextField() -> some View {
+        modifier(OpenLoopTextFieldModifier())
     }
 }

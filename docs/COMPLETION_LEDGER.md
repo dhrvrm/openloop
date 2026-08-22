@@ -51,7 +51,7 @@ verification.
 | Requirement | Status | Completion gate |
 | --- | --- | --- |
 | Simple task management | Shipped | Core capture, Now, Inbox, Later, Return, edit, reorder, finish, and release work. |
-| Things-like spacing and hierarchy | Shipped | Native tokens use the documented reading measure, row grammar, warm neutrals, jade accent, and expanded edge spacing. |
+| Things-like spacing and hierarchy | Shipped | Native tokens use the documented reading measure, row grammar, warm neutrals, restrained blue accent, and expanded edge spacing. |
 | Things-like Move and drag/drop | Partial | Add destination moves, sidebar drops, transactional undo, keyboard parity, and multi-selection. |
 | Quick Find and type-to-travel | Shipped | Command-F searches lists and tasks and travels without mouse-only traversal. |
 | Headings, checklists, dates, Upcoming, Someday, Spaces | Partial | Task metadata and time destinations are domain-backed and editable; user-defined Spaces remain. |

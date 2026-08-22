@@ -55,4 +55,6 @@ These images were downloaded from official Cultured Code pages and static-media 
 | Parallel contexts | [Multiple windows](https://culturedcode.com/things/support/articles/2803580/) | Side-by-side Threads with cross-window drag |
 | Time and state philosophy | [Dates and time lists](https://culturedcode.com/things/support/articles/4001304/) | Separate current focus, scheduled future, available later, inactive someday, and history |
 | Detailed historical behavior | [Release notes](https://culturedcode.com/things/support/articles/1100684/) | External drops, tag/date assignment, granular move behavior, native polish |
-
+| Broad iOS screen flows | [Banani Things 3 reference](https://www.banani.co/references/apps/things-3) | Onboarding, home/search, and task-creation flow inventory |
+| Store presentation and current feature language | [Things 3 on the App Store](https://apps.apple.com/in/app/things-3/id904237743) | List hierarchy, large touch rhythm, direct drag placement, light/dark support |
+| Platform component baseline | [macOS 27 community kit](https://www.figma.com/community/file/1651309434229735362/macos-27) | Window, sidebar, toolbar, field, menu, and material calibration for current macOS |

@@ -50,6 +50,22 @@ actor LocalMeetingIntelligenceProvider: MeetingIntelligenceProviding {
     }
 }
 
+extension LocalMeetingIntelligenceProvider: MeetingTitleProviding {
+    func title(for transcript: MeetingTranscript) async -> String {
+        let fallback = MeetingTitleNaming.fallbackTitle(for: transcript)
+        do {
+            let response = try await generator(
+                Self.titleSystemPrompt,
+                Self.titleUserPrompt(for: transcript)
+            )
+            let title = MeetingTitleNaming.displayTitle(response)
+            return title == "Voice note" ? fallback : title
+        } catch {
+            return fallback
+        }
+    }
+}
+
 private actor QwenMeetingIntelligenceRuntime {
     private var model: Qwen35MLXChat?
 
@@ -126,6 +142,17 @@ private extension LocalMeetingIntelligenceProvider {
     {"summary":[{"text":"...","segment_id":"UUID","evidence_excerpt":"exact quote","confidence":0.0}],"questions":[],"decisions":[],"action_candidates":[]}
     Use no more than 4 summary items and 5 items in each other collection.
     """
+
+    static let titleSystemPrompt = """
+    Name a private voice recording from its actual subject. Return only a short title,
+    without quotes, labels, punctuation, dates, or commentary. Use 3 to 8 words when
+    the transcript supports them. Preserve the language and spelling used by the
+    speaker. Never invent a project, person, decision, or topic.
+    """
+
+    static func titleUserPrompt(for transcript: MeetingTranscript) -> String {
+        "TRANSCRIPT:\n\(String(transcript.text.prefix(6_000)))"
+    }
 
     static func userPrompt(for segments: [TranscriptSegment]) -> String {
         let encoded = segments.map { segment in

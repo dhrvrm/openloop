@@ -2,6 +2,20 @@ import ADHDCore
 import Combine
 import Foundation
 
+enum OpenLoopAppearanceMode: String, CaseIterable {
+    case system
+    case light
+    case dark
+
+    var displayName: String {
+        switch self {
+        case .system: "System"
+        case .light: "Light"
+        case .dark: "Dark"
+        }
+    }
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var captureError: String?
@@ -45,6 +59,7 @@ final class AppModel: ObservableObject {
     @Published var recordingDecibels: Float?
     @Published var streamingVoiceSession: VoiceSessionSnapshot?
     @Published var isAdvancedModeEnabled: Bool
+    @Published var appearanceMode: OpenLoopAppearanceMode
     @Published var meetingLanguagePreference: MeetingLanguagePreference
     @Published var semanticNodes: [SemanticNode] = []
     @Published var semanticRelations: [SemanticRelation] = []
@@ -87,6 +102,7 @@ final class AppModel: ObservableObject {
     private var voiceQualityEngineIdentifier: String?
     private let defaults: UserDefaults
     private let advancedModeKey: String
+    private let appearanceModeKey: String
     private let voiceModeKey: String
     private let voiceContextKey: String
     private var recallGeneration = 0
@@ -121,6 +137,7 @@ final class AppModel: ObservableObject {
         semanticGraph: SemanticGraphLoop? = nil,
         defaults: UserDefaults = .standard,
         advancedModeKey: String = "OpenLoopAdvancedMode",
+        appearanceModeKey: String = "OpenLoopAppearanceMode",
         voiceModeKey: String = "OpenLoopVoiceMode",
         voiceContextKey: String = "OpenLoopVoiceContextEnabled"
     ) {
@@ -135,9 +152,12 @@ final class AppModel: ObservableObject {
         self.semanticGraph = semanticGraph
         self.defaults = defaults
         self.advancedModeKey = advancedModeKey
+        self.appearanceModeKey = appearanceModeKey
         self.voiceModeKey = voiceModeKey
         self.voiceContextKey = voiceContextKey
         isAdvancedModeEnabled = defaults.bool(forKey: advancedModeKey)
+        appearanceMode = defaults.string(forKey: appearanceModeKey)
+            .flatMap(OpenLoopAppearanceMode.init(rawValue:)) ?? .system
         meetingLanguagePreference = .automatic
         voiceMode = defaults.string(forKey: voiceModeKey)
             .flatMap(VoiceMode.init(rawValue:)) ?? .polished
@@ -418,6 +438,11 @@ final class AppModel: ObservableObject {
     func setAdvancedModeEnabled(_ enabled: Bool) {
         isAdvancedModeEnabled = enabled
         defaults.set(enabled, forKey: advancedModeKey)
+    }
+
+    func setAppearanceMode(_ mode: OpenLoopAppearanceMode) {
+        appearanceMode = mode
+        defaults.set(mode.rawValue, forKey: appearanceModeKey)
     }
 
     func setVoiceMode(_ mode: VoiceMode) {

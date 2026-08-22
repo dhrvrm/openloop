@@ -12,7 +12,7 @@ final class QuickCaptureController: NSObject, NSTextFieldDelegate {
     init(model: AppModel) {
         self.model = model
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 116),
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 132),
             styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -82,6 +82,8 @@ final class QuickCaptureController: NSObject, NSTextFieldDelegate {
         field.placeholderString = "What do you need to get out of your head?"
         field.font = .systemFont(ofSize: 20)
         field.focusRingType = .none
+        field.isBezeled = false
+        field.drawsBackground = false
         field.delegate = self
         status.textColor = .secondaryLabelColor
         status.font = .systemFont(ofSize: 12)
@@ -90,12 +92,12 @@ final class QuickCaptureController: NSObject, NSTextFieldDelegate {
             content.addSubview(view)
         }
         NSLayoutConstraint.activate([
-            field.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
-            field.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
-            field.topAnchor.constraint(equalTo: content.topAnchor, constant: 30),
-            field.heightAnchor.constraint(equalToConstant: 36),
+            field.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 30),
+            field.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -30),
+            field.topAnchor.constraint(equalTo: content.topAnchor, constant: 34),
+            field.heightAnchor.constraint(equalToConstant: 44),
             status.leadingAnchor.constraint(equalTo: field.leadingAnchor),
-            status.topAnchor.constraint(equalTo: field.bottomAnchor, constant: 8),
+            status.topAnchor.constraint(equalTo: field.bottomAnchor, constant: 10),
         ])
     }
 

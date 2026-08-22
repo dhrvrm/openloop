@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -16,9 +16,9 @@ import {
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
 const repository = "https://github.com/dhrvrm/openloop";
-const version = "1.0.3";
+const version = "1.0.4";
 const download = `${repository}/releases/download/v${version}/OpenLoop-${version}-arm64.dmg`;
-const checksum = "c556d51e2f58099e9acd9d2d1a1e09555f04a2aabd54d565cbdaad0237d55444";
+const checksum = "443bcb5116742ac5c4bc2337e6c5f73af1c0df035285f8b076dbe805d046601c";
 
 const nodes = [
   { label: "Project", x: 13, y: 39, tone: "quiet" },
@@ -64,8 +64,8 @@ function ProductFrame({ className = "", crop = false }: { className?: string; cr
           <h3>Now</h3>
           <p>One useful next step. Everything else stays safe.</p>
           <div className="demo-capture"><span>What should OpenLoop hold for you?</span><b>Record</b></div>
-          <div className="demo-task"><i /><div><b>Release reliability</b><span>Compare the saved audio and final transcript</span></div></div>
-          <div className="demo-task"><i /><div><b>Voice product</b><span>Review the Hindi and English terminology</span></div></div>
+          <div className="demo-task"><i /><div><b>Visitor research</b><span>Send the revised interview guide to Maya</span></div></div>
+          <div className="demo-task"><i /><div><b>Prototype review</b><span>Test the shorter museum-guide introduction</span></div></div>
         </div>
         <aside className="demo-inspector">
           <small>LOCAL SYSTEM</small>
@@ -83,6 +83,84 @@ function AudioMeter() {
   return <div className="audio-meter" aria-label="Live microphone input">
     {bars.map((height, index) => <i key={index} style={{ "--meter": `${height}%`, "--delay": `${index * -43}ms` } as React.CSSProperties} />)}
   </div>;
+}
+
+function AlgorithmicField() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const surface: HTMLCanvasElement = canvas;
+    const drawing: CanvasRenderingContext2D = context;
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let animation = 0;
+    let width = 0;
+    let height = 0;
+    let scale = 1;
+
+    function seededRandom(seed: number) {
+      let value = seed >>> 0;
+      return () => {
+        value = (value * 1664525 + 1013904223) >>> 0;
+        return value / 4294967296;
+      };
+    }
+
+    function resize() {
+      const bounds = surface.getBoundingClientRect();
+      scale = Math.min(window.devicePixelRatio || 1, 2);
+      width = bounds.width;
+      height = bounds.height;
+      surface.width = Math.round(width * scale);
+      surface.height = Math.round(height * scale);
+      drawing.setTransform(scale, 0, 0, scale, 0, 0);
+    }
+
+    function draw(time = 0) {
+      drawing.clearRect(0, 0, width, height);
+      const random = seededRandom(74291);
+      const drift = reduceMotion ? 0 : Math.sin(time * 0.00018) * 0.22;
+      const originX = width * 0.68;
+      const originY = height * 0.46;
+
+      for (let line = 0; line < 68; line += 1) {
+        let x = originX + (random() - 0.5) * width * 0.58;
+        let y = originY + (random() - 0.5) * height * 0.72;
+        drawing.beginPath();
+        drawing.moveTo(x, y);
+        for (let step = 0; step < 34; step += 1) {
+          const dx = (x - originX) / Math.max(width, 1);
+          const dy = (y - originY) / Math.max(height, 1);
+          const angle = Math.atan2(dy, dx) + Math.PI / 2 + Math.sin(dx * 9 + dy * 7) * 0.85 + drift;
+          x += Math.cos(angle) * 9.5;
+          y += Math.sin(angle) * 9.5;
+          drawing.lineTo(x, y);
+        }
+        const blue = line % 7 !== 0;
+        drawing.strokeStyle = blue ? "rgba(73, 106, 157, 0.16)" : "rgba(230, 79, 70, 0.13)";
+        drawing.lineWidth = blue ? 0.8 : 1.15;
+        drawing.stroke();
+      }
+
+      if (!reduceMotion) {
+        animation = window.requestAnimationFrame(draw);
+      }
+    }
+
+    resize();
+    draw();
+    window.addEventListener("resize", resize);
+    return () => {
+      window.removeEventListener("resize", resize);
+      window.cancelAnimationFrame(animation);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="algorithmic-field" aria-hidden="true" />;
 }
 
 function App() {
@@ -174,12 +252,13 @@ function App() {
     </header>
 
     <main id="main">
-      <section id="top" className="hero section-dark" onPointerMove={tiltHero}>
+      <section id="top" className="hero section-light" onPointerMove={tiltHero}>
         <div className="grid-lines" aria-hidden="true" />
+        <AlgorithmicField />
         <div className="hero-copy">
-          <span className="eyebrow"><i /> Local voice + working memory</span>
-          <h1>Lose the thread.<br />Not the thought.</h1>
-          <p>Dictate into any app, keep the raw evidence, and return to the exact context later. The current release runs its speech and memory pipeline on your Mac.</p>
+          <span className="eyebrow"><i /> Voice, context, and memory on your Mac</span>
+          <h1><span>Speak freely.</span><span>Keep the thread.</span></h1>
+          <p>Dictate into the app you are using. OpenLoop keeps the recording, transcript, and useful context together so you can return without reconstructing the thought.</p>
           <div className="action-row">
             <ActionLink href={download}><ArrowDown /> Download {version} for macOS</ActionLink>
             <ActionLink href={repository} kind="secondary"><BracketsAngle /> Steal the code, legally</ActionLink>
@@ -207,10 +286,10 @@ function App() {
           </div>
           <div className="voice-screen voice-screen--front partial-panel">
             <div className="partial-tabs"><b>Stable</b><span>Partial</span></div>
-            <p>I was thinking that the release time—</p>
-            <p lang="hi">वो क्या हम काम कर सकते हैं?</p>
-            <p>Can we reduce the release time for SGLC releases<span className="cursor" /> </p>
-            <small>English + Hindi · detected locally</small>
+            <p>The exhibition guide should feel useful before it feels clever.</p>
+            <p lang="hi">अब onboarding को तीन छोटे steps में रखते हैं।</p>
+            <p>Then we can test it with five first-time visitors<span className="cursor" /> </p>
+            <small>English + Hindi · detected automatically</small>
           </div>
         </div>
       </section>
@@ -248,9 +327,9 @@ function App() {
           <div className="native-titlebar"><i /><i /><i /><b>OpenLoop</b><span>● Local</span></div>
           <div className="return-content">
             <small>ACTIVE THREAD</small>
-            <h3>Release reliability</h3>
-            <div className="context-block"><label>LAST CONTEXT</label><p>Hindi and English detection worked, but final accuracy still needs a reliable correction pass.</p></div>
-            <div className="context-block"><label>UNRESOLVED</label><p>How should confidence be shown without interrupting dictation?</p></div>
+            <h3>Museum guide launch</h3>
+            <div className="context-block"><label>LAST CONTEXT</label><p>The first visit test showed that people found the map quickly but skipped the audio introduction.</p></div>
+            <div className="context-block"><label>UNRESOLVED</label><p>Should the introduction begin automatically or wait for a tap?</p></div>
             <a className="return-action" href={`${repository}/blob/main/docs/VOICE_SEMANTIC_OPERATING_LAYER.md`}>Read the evidence model <ArrowRight /></a>
           </div>
         </div>
@@ -279,8 +358,8 @@ function App() {
 
       <section className="everywhere section-light">
         <div className="app-rail" data-reveal>
-          <div className="dictation-float"><div><span /><b>OpenLoop</b></div><AudioMeter /><p>Use the same context anywhere you work.</p></div>
-          {["Browser", "VS Code", "Terminal", "Slack"].map((app, index) => <div key={app} className={`destination destination--${index}`}><span>{app}</span><p>{index === 1 ? "// Same words, code-aware output" : "Same words, correctly formatted."}<i /></p></div>)}
+          <div className="dictation-float"><div><span /><b>OpenLoop</b></div><AudioMeter /><p>Turn the signup check into a reusable validation function.</p></div>
+          {["Browser", "VS Code", "Terminal", "Slack"].map((app, index) => <div key={app} className={`destination destination--${index}`}><span>{app}</span><p>{index === 1 ? "// Extract signup validation into a reusable function" : index === 2 ? "npm test -- signup-validation" : index === 3 ? "I split the signup check into a reusable function." : "Draft the validation note for the team."}<i /></p></div>)}
           <div className="output-node"><Waveform weight="bold" /></div>
         </div>
         <div className="everywhere-copy" data-reveal>

@@ -27,6 +27,7 @@ import Testing
     #expect(controller.job.message == "Transcript ready below. Source audio is kept locally for retranscription.")
     #expect(controller.transcripts.count == 1)
     #expect(controller.transcripts[0].text == "नमस्ते team")
+    #expect(controller.transcripts[0].sourceName == "नमस्ते team")
     #expect(controller.job.previewText == "नमस्ते team")
     #expect(controller.job.requestedLanguage == .hindiHinglish)
     #expect(await transcriber.latestLanguageCode() == "hi")

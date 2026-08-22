@@ -45,6 +45,7 @@ final class MeetingTranscriptionController: ObservableObject {
     private let recorder: (any MeetingAudioRecording)?
     private let streamingBuilder: (any StreamingVoiceSessionBuilding)?
     private let intelligenceProvider: any MeetingIntelligenceProviding
+    private let titleProvider: any MeetingTitleProviding
     private var work: Task<Void, Never>?
     private var interpretationWork: [UUID: Task<Void, Never>] = [:]
     private var interpretationGeneration: [UUID: UUID] = [:]
@@ -64,7 +65,8 @@ final class MeetingTranscriptionController: ObservableObject {
         stagingDirectory: URL,
         recorder: (any MeetingAudioRecording)? = nil,
         streamingBuilder: (any StreamingVoiceSessionBuilding)? = nil,
-        intelligenceProvider: any MeetingIntelligenceProviding = DeterministicMeetingIntelligenceProvider()
+        intelligenceProvider: any MeetingIntelligenceProviding = DeterministicMeetingIntelligenceProvider(),
+        titleProvider: any MeetingTitleProviding = DeterministicMeetingTitleProvider()
     ) {
         self.repository = repository
         self.transcriber = transcriber
@@ -72,6 +74,7 @@ final class MeetingTranscriptionController: ObservableObject {
         self.recorder = recorder
         self.streamingBuilder = streamingBuilder
         self.intelligenceProvider = intelligenceProvider
+        self.titleProvider = titleProvider
         recorder?.onDecibelUpdate = { [weak self] value in
             self?.recordingDecibels = value
             if let value {
@@ -81,7 +84,12 @@ final class MeetingTranscriptionController: ObservableObject {
     }
 
     func refresh() async {
-        transcripts = (try? await repository.meetingTranscripts()) ?? []
+        let stored = (try? await repository.meetingTranscripts()) ?? []
+        var named: [MeetingTranscript] = []
+        for transcript in stored {
+            named.append(await humanNamedTranscript(transcript))
+        }
+        transcripts = named
         interpretations = Dictionary(uniqueKeysWithValues:
             ((try? await repository.meetingInterpretations()) ?? []).map {
                 ($0.transcriptID, $0)
@@ -108,6 +116,32 @@ final class MeetingTranscriptionController: ObservableObject {
             completedTranscriptID: transcript.id,
             previewText: transcript.text
         )
+    }
+
+    private func humanNamedTranscript(_ transcript: MeetingTranscript) async -> MeetingTranscript {
+        guard MeetingTitleNaming.needsHumanTitle(transcript.sourceName) else { return transcript }
+        let title = await titleProvider.title(for: transcript)
+        let originalURL = sourceAudioURL(for: transcript)
+        let retainedURL = originalURL.flatMap {
+            try? renameStagedAudio($0, title: title, createdAt: transcript.createdAt)
+        }
+        guard let renamed = try? MeetingTranscript(
+            id: transcript.id,
+            sourceName: title,
+            createdAt: transcript.createdAt,
+            duration: transcript.duration,
+            detectedLanguage: transcript.detectedLanguage,
+            modelIdentifier: transcript.modelIdentifier,
+            segments: transcript.segments,
+            sourceAudioFileName: retainedURL?.lastPathComponent ?? transcript.sourceAudioFileName,
+            fusionEvidence: transcript.fusionEvidence
+        ) else { return transcript }
+        do {
+            try await repository.save(meetingTranscript: renamed)
+            return renamed
+        } catch {
+            return transcript
+        }
     }
 
     func importAudio(_ sourceURL: URL) {
@@ -411,10 +445,11 @@ final class MeetingTranscriptionController: ObservableObject {
                 let replacedTranscript = replacingTranscriptID.flatMap { replacementID in
                     transcripts.first { $0.id == replacementID }
                 }
-                let transcript = try MeetingTranscript(
+                let createdAt = replacedTranscript?.createdAt ?? .now
+                let draft = try MeetingTranscript(
                     id: replacingTranscriptID ?? UUID(),
                     sourceName: sourceName,
-                    createdAt: replacedTranscript?.createdAt ?? .now,
+                    createdAt: createdAt,
                     duration: output.duration,
                     detectedLanguage: output.detectedLanguage,
                     modelIdentifier: output.modelIdentifier,
@@ -422,6 +457,25 @@ final class MeetingTranscriptionController: ObservableObject {
                     sourceAudioFileName: stagedURL.lastPathComponent,
                     fusionEvidence: output.fusionEvidence
                 )
+                let humanTitle = await titleProvider.title(for: draft)
+                let retainedURL = (try? renameStagedAudio(
+                    stagedURL,
+                    title: humanTitle,
+                    createdAt: createdAt
+                )) ?? stagedURL
+                let transcript = try MeetingTranscript(
+                    id: draft.id,
+                    sourceName: humanTitle,
+                    createdAt: createdAt,
+                    duration: output.duration,
+                    detectedLanguage: output.detectedLanguage,
+                    modelIdentifier: output.modelIdentifier,
+                    segments: output.segments,
+                    sourceAudioFileName: retainedURL.lastPathComponent,
+                    fusionEvidence: output.fusionEvidence
+                )
+                job.sourceName = humanTitle
+                job.stagedAudioURL = retainedURL
                 job.previewText = transcript.text
                 try await repository.save(meetingTranscript: transcript)
                 job.completedTranscriptID = transcript.id
@@ -580,6 +634,26 @@ final class MeetingTranscriptionController: ObservableObject {
         let accessed = sourceURL.startAccessingSecurityScopedResource()
         defer { if accessed { sourceURL.stopAccessingSecurityScopedResource() } }
         try FileManager.default.copyItem(at: sourceURL, to: destination)
+        return destination
+    }
+
+    private func renameStagedAudio(_ sourceURL: URL, title: String, createdAt: Date) throws -> URL {
+        let requestedName = MeetingTitleNaming.fileName(
+            title: title,
+            createdAt: createdAt,
+            fileExtension: sourceURL.pathExtension
+        )
+        var destination = stagingDirectory.appendingPathComponent(requestedName)
+        if destination.standardizedFileURL == sourceURL.standardizedFileURL { return sourceURL }
+        var copy = 2
+        while FileManager.default.fileExists(atPath: destination.path) {
+            let stem = URL(fileURLWithPath: requestedName).deletingPathExtension().lastPathComponent
+            destination = stagingDirectory
+                .appendingPathComponent("\(stem)-\(copy)")
+                .appendingPathExtension(sourceURL.pathExtension)
+            copy += 1
+        }
+        try FileManager.default.moveItem(at: sourceURL, to: destination)
         return destination
     }
 

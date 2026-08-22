@@ -51,6 +51,7 @@ private struct MainView: View {
         }
         .frame(minWidth: sidebarVisible ? 760 : 520, minHeight: 560)
         .tint(OpenLoopVisualSystem.accent)
+        .preferredColorScheme(preferredColorScheme)
         .inspector(
             isPresented: Binding(
                 get: { model.isAdvancedModeEnabled },
@@ -174,7 +175,7 @@ private struct MainView: View {
                     Label("Quick Find", systemImage: "magnifyingglass")
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, OpenLoopVisualSystem.space2)
-                        .frame(height: 34)
+                        .frame(height: OpenLoopVisualSystem.compactRowMinimumHeight)
                 }
                 .buttonStyle(OpenLoopNavigationButtonStyle())
                 .keyboardShortcut("f", modifiers: .command)
@@ -186,11 +187,39 @@ private struct MainView: View {
                     Label("Hide sidebar", systemImage: "sidebar.left")
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, OpenLoopVisualSystem.space2)
-                        .frame(height: 34)
+                        .frame(height: OpenLoopVisualSystem.compactRowMinimumHeight)
                 }
                 .buttonStyle(OpenLoopNavigationButtonStyle())
                 .keyboardShortcut("/", modifiers: .command)
                 .help("Hide sidebar · ⌘/")
+
+                Menu {
+                    ForEach(OpenLoopAppearanceMode.allCases, id: \.self) { mode in
+                        Button {
+                            model.setAppearanceMode(mode)
+                        } label: {
+                            if model.appearanceMode == mode {
+                                Label(mode.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(mode.displayName)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: OpenLoopVisualSystem.space2) {
+                        Image(systemName: "circle.lefthalf.filled")
+                            .font(.system(size: 13, weight: .medium))
+                        Text("Appearance")
+                        Spacer()
+                        Text(model.appearanceMode.displayName)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, OpenLoopVisualSystem.space2)
+                    .frame(height: OpenLoopVisualSystem.compactRowMinimumHeight)
+                    .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .font(OpenLoopVisualSystem.sidebarLabel)
 
                 Divider().opacity(0.65)
                 Button {
@@ -222,6 +251,14 @@ private struct MainView: View {
         .frame(width: OpenLoopVisualSystem.sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(OpenLoopVisualSystem.sidebar)
+    }
+
+    private var preferredColorScheme: ColorScheme? {
+        switch model.appearanceMode {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
     }
 
     private func sidebarCount(for destination: WorkspaceDestination.ID) -> Int? {
@@ -659,7 +696,7 @@ private struct MainView: View {
 
                 HStack(spacing: OpenLoopVisualSystem.space2) {
                     TextField("Search captures, decisions, return points, and corrections", text: $model.recallQuery)
-                        .textFieldStyle(.roundedBorder)
+                        .openLoopTextField()
                         .font(OpenLoopVisualSystem.rowTitle)
                         .focused($recallFieldFocused)
                         .onSubmit { Task { await model.searchRecall(model.recallQuery) } }
@@ -752,7 +789,7 @@ private struct MainView: View {
             )
             HStack(spacing: OpenLoopVisualSystem.space2) {
                 TextField("What have I been thinking about?", text: $model.semanticQuery)
-                    .textFieldStyle(.roundedBorder)
+                    .openLoopTextField()
                     .onSubmit { Task { await model.askSemanticContext(model.semanticQuery) } }
                 Button("Ask locally") {
                     Task { await model.askSemanticContext(model.semanticQuery) }
@@ -949,7 +986,7 @@ private struct MainView: View {
                             "For example: create a GitHub issue for the release bug",
                             text: $model.toolActionIntent
                         )
-                        .textFieldStyle(.roundedBorder)
+                        .openLoopTextField()
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Values · one key=value per line")
                                 .font(.caption)
@@ -1570,10 +1607,13 @@ private struct QuickAddComposer: View {
                 .help("Capture · Return")
                 .disabled(isSaving || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .padding(.horizontal, OpenLoopVisualSystem.space2)
-            .frame(height: 42)
+            .padding(.horizontal, OpenLoopVisualSystem.space3)
+            .padding(.vertical, 10)
+            .frame(minHeight: 56)
             .background(
-                OpenLoopVisualSystem.raised,
+                isTextFieldFocused
+                    ? OpenLoopVisualSystem.raised
+                    : OpenLoopVisualSystem.selectionInactive.opacity(0.64),
                 in: RoundedRectangle(
                     cornerRadius: OpenLoopVisualSystem.editorRadius,
                     style: .continuous
@@ -1585,10 +1625,8 @@ private struct QuickAddComposer: View {
                     style: .continuous
                 )
                 .stroke(
-                    isTextFieldFocused
-                        ? OpenLoopVisualSystem.focusRing
-                        : OpenLoopVisualSystem.hairline,
-                    lineWidth: isTextFieldFocused ? 1.25 : 0.65
+                    isTextFieldFocused ? OpenLoopVisualSystem.focusRing : .clear,
+                    lineWidth: 1.5
                 )
             }
 
@@ -1657,7 +1695,8 @@ private struct QuickAddComposer: View {
                 .controlSize(.small)
                 .help("Voice output style")
             }
-            .padding(.horizontal, 0)
+            .padding(.top, OpenLoopVisualSystem.space1)
+            .padding(.horizontal, OpenLoopVisualSystem.space1)
             if model.meetingJob.stage == .recording {
                 RecordingLevelMeter(decibels: model.recordingDecibels)
                 if let snapshot = model.streamingVoiceSession,
@@ -1681,7 +1720,7 @@ private struct QuickAddComposer: View {
                 }
             }
         }
-        .padding(.vertical, OpenLoopVisualSystem.space1)
+        .padding(.vertical, OpenLoopVisualSystem.space2)
         .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .leading)
     }
 
@@ -2476,8 +2515,8 @@ private struct ReadyTaskRow: View {
             .frame(width: 24)
             .opacity(isHovered ? 1 : 0.34)
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 2)
+        .padding(.vertical, OpenLoopVisualSystem.space2)
+        .padding(.horizontal, OpenLoopVisualSystem.space1)
         .frame(minHeight: OpenLoopVisualSystem.taskRowMinimumHeight)
         .contentShape(Rectangle())
         .background(
@@ -2776,9 +2815,9 @@ private struct ClarificationReviewRow: View {
 
             if disposition == .action {
                 TextField("What would done look like?", text: $desiredOutcome)
-                    .textFieldStyle(.roundedBorder)
+                    .openLoopTextField()
                 TextField("What is the smallest visible next action?", text: $nextAction)
-                    .textFieldStyle(.roundedBorder)
+                    .openLoopTextField()
             } else if disposition == .release {
                 Text("Release removes this from Later. Its original encrypted capture remains available to Recall.")
                     .font(.caption)
