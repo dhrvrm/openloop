@@ -472,7 +472,8 @@ public actor SemanticGraphLoop {
             ))
         }
 
-        var seen = Set<UUID>()
+        var seenNodes = Set<UUID>()
+        var seenClaims = Set<String>()
         return ranked.sorted {
             if $0.relevance != $1.relevance { return $0.relevance > $1.relevance }
             if $0.node.confidence != $1.node.confidence {
@@ -482,7 +483,15 @@ public actor SemanticGraphLoop {
                 return $0.node.createdAt > $1.node.createdAt
             }
             return $0.node.id.uuidString < $1.node.id.uuidString
-        }.filter { seen.insert($0.node.id).inserted }
+        }.filter { answer in
+            let claim = answer.node.claim.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: nil
+            ).split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+                .joined(separator: " ")
+            return seenNodes.insert(answer.node.id).inserted
+                && seenClaims.insert(claim).inserted
+        }
             .prefix(limit)
             .map { $0 }
     }
