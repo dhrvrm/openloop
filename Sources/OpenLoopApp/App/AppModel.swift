@@ -39,6 +39,7 @@ final class AppModel: ObservableObject {
     @Published var voiceCapture = VoiceCapturePresentation()
     @Published var meetingJob = MeetingJobPresentation()
     @Published var meetingTranscripts: [MeetingTranscript] = []
+    @Published var meetingInterpretations: [UUID: MeetingInterpretationRecord] = [:]
     @Published var meetingEngineDiagnostics = MeetingEngineDiagnostics.checking
     @Published var meetingPipelineEvents: [MeetingPipelineEvent] = []
     @Published var recordingDecibels: Float?
@@ -94,6 +95,7 @@ final class AppModel: ObservableObject {
     private var meetingController: MeetingTranscriptionController?
     private var meetingJobObservation: AnyCancellable?
     private var meetingTranscriptObservation: AnyCancellable?
+    private var meetingInterpretationObservation: AnyCancellable?
     private var meetingDiagnosticsObservation: AnyCancellable?
     private var meetingEventsObservation: AnyCancellable?
     private var meetingMeterObservation: AnyCancellable?
@@ -229,6 +231,9 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             meetingTranscripts = transcripts
             semanticizeNewMeetingTranscripts(transcripts)
+        }
+        meetingInterpretationObservation = controller.$interpretations.sink { [weak self] in
+            self?.meetingInterpretations = $0
         }
         meetingDiagnosticsObservation = controller.$engineDiagnostics.sink { [weak self] in
             self?.meetingEngineDiagnostics = $0

@@ -32,6 +32,7 @@ struct MeetingJobPresentation: Equatable, Sendable {
 final class MeetingTranscriptionController: ObservableObject {
     @Published private(set) var job = MeetingJobPresentation()
     @Published private(set) var transcripts: [MeetingTranscript] = []
+    @Published private(set) var interpretations: [UUID: MeetingInterpretationRecord] = [:]
     @Published private(set) var engineDiagnostics = MeetingEngineDiagnostics.checking
     @Published private(set) var pipelineEvents: [MeetingPipelineEvent] = []
     @Published private(set) var languagePreference = MeetingLanguagePreference.automatic
@@ -43,6 +44,7 @@ final class MeetingTranscriptionController: ObservableObject {
     private let stagingDirectory: URL
     private let recorder: (any MeetingAudioRecording)?
     private let streamingBuilder: (any StreamingVoiceSessionBuilding)?
+    private let intelligenceProvider: any MeetingIntelligenceProviding
     private var work: Task<Void, Never>?
     private var eventHistory = MeetingPipelineEventHistory()
     private var recordingStartedAt: Date?
@@ -59,13 +61,15 @@ final class MeetingTranscriptionController: ObservableObject {
         transcriber: any MeetingTranscribing,
         stagingDirectory: URL,
         recorder: (any MeetingAudioRecording)? = nil,
-        streamingBuilder: (any StreamingVoiceSessionBuilding)? = nil
+        streamingBuilder: (any StreamingVoiceSessionBuilding)? = nil,
+        intelligenceProvider: any MeetingIntelligenceProviding = DeterministicMeetingIntelligenceProvider()
     ) {
         self.repository = repository
         self.transcriber = transcriber
         self.stagingDirectory = stagingDirectory
         self.recorder = recorder
         self.streamingBuilder = streamingBuilder
+        self.intelligenceProvider = intelligenceProvider
         recorder?.onDecibelUpdate = { [weak self] value in
             self?.recordingDecibels = value
             if let value {
@@ -76,6 +80,14 @@ final class MeetingTranscriptionController: ObservableObject {
 
     func refresh() async {
         transcripts = (try? await repository.meetingTranscripts()) ?? []
+        interpretations = Dictionary(uniqueKeysWithValues:
+            ((try? await repository.meetingInterpretations()) ?? []).map {
+                ($0.transcriptID, $0)
+            }
+        )
+        for transcript in transcripts where interpretations[transcript.id] == nil {
+            await updateInterpretation(for: transcript)
+        }
         engineDiagnostics = await transcriber.diagnostics()
         guard job.stage == nil,
               let transcript = transcripts
@@ -271,6 +283,7 @@ final class MeetingTranscriptionController: ObservableObject {
         do {
             try await repository.deleteMeetingTranscript(id: id)
             transcripts.removeAll { $0.id == id }
+            interpretations[id] = nil
             if let sourceURL { try? FileManager.default.removeItem(at: sourceURL) }
             if job.completedTranscriptID == id {
                 job = MeetingJobPresentation()
@@ -330,6 +343,7 @@ final class MeetingTranscriptionController: ObservableObject {
                 meetingTranscript: corrected,
                 transcriptionCorrection: correction
             )
+            await updateInterpretation(for: corrected)
             transcripts[transcriptIndex] = corrected
             if job.completedTranscriptID == transcriptID {
                 job.previewText = corrected.text
@@ -405,6 +419,7 @@ final class MeetingTranscriptionController: ObservableObject {
                 )
                 job.previewText = transcript.text
                 try await repository.save(meetingTranscript: transcript)
+                await updateInterpretation(for: transcript)
                 job.completedTranscriptID = transcript.id
                 try Task.checkCancellation()
                 transcripts = try await repository.meetingTranscripts()
@@ -567,6 +582,17 @@ final class MeetingTranscriptionController: ObservableObject {
         guard let fileName = transcript.sourceAudioFileName else { return nil }
         let url = stagingDirectory.appendingPathComponent(fileName, isDirectory: false)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    private func updateInterpretation(for transcript: MeetingTranscript) async {
+        guard let record = try? await intelligenceProvider.interpret(transcript) else { return }
+        do {
+            try await repository.save(meetingInterpretation: record)
+            interpretations[transcript.id] = record
+        } catch {
+            // The transcript is the durable source of truth. This derived
+            // record can be rebuilt at the next refresh without blocking it.
+        }
     }
 
     private static func title(for stage: MeetingTranscriptionStage) -> String {

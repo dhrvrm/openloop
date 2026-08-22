@@ -2234,7 +2234,8 @@ private struct MeetingTranscriptRow: View {
     }
 
     private var intelligence: MeetingIntelligence {
-        MeetingIntelligenceCompiler().compile(transcript)
+        model.meetingInterpretations[transcript.id]?.intelligence
+            ?? MeetingIntelligenceCompiler().compile(transcript)
     }
 
     @ViewBuilder
@@ -2250,7 +2251,9 @@ private struct MeetingTranscriptRow: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("Local · extractive")
+                Text(model.meetingInterpretations[transcript.id].map {
+                    "Saved · v\($0.schemaVersion)"
+                } ?? "Local · extractive")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(OpenLoopVisualSystem.accent)
                     .padding(.horizontal, 8)

@@ -31,17 +31,106 @@ public struct MeetingInsight: Codable, Equatable, Identifiable, Sendable {
     public let kind: MeetingInsightKind
     public let text: String
     public let evidence: MeetingEvidence
+    public let confidence: Double
 
     public init(
         id: String,
         kind: MeetingInsightKind,
         text: String,
-        evidence: MeetingEvidence
+        evidence: MeetingEvidence,
+        confidence: Double = 1
     ) {
         self.id = id
         self.kind = kind
         self.text = text
         self.evidence = evidence
+        self.confidence = confidence
+    }
+}
+
+public enum MeetingInterpretationError: Error, Equatable {
+    case invalidSchemaVersion(Int)
+    case emptyProvider
+    case emptyModel
+    case invalidInsightKind
+    case invalidInsightConfidence
+    case missingEvidenceSegment(UUID)
+    case ungroundedEvidence(String)
+}
+
+public struct MeetingInterpretationRecord: Codable, Equatable, Identifiable, Sendable {
+    public var id: UUID { transcriptID }
+    public let transcriptID: UUID
+    public let schemaVersion: Int
+    public let providerIdentifier: String
+    public let modelIdentifier: String
+    public let createdAt: Date
+    public let intelligence: MeetingIntelligence
+
+    public init(
+        transcript: MeetingTranscript,
+        schemaVersion: Int = 1,
+        providerIdentifier: String,
+        modelIdentifier: String,
+        createdAt: Date = .now,
+        intelligence: MeetingIntelligence
+    ) throws {
+        guard schemaVersion > 0 else {
+            throw MeetingInterpretationError.invalidSchemaVersion(schemaVersion)
+        }
+        let provider = providerIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !provider.isEmpty else { throw MeetingInterpretationError.emptyProvider }
+        let model = modelIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty else { throw MeetingInterpretationError.emptyModel }
+        let collections: [(MeetingInsightKind, [MeetingInsight])] = [
+            (.summary, intelligence.summary),
+            (.question, intelligence.questions),
+            (.decision, intelligence.decisions),
+            (.actionCandidate, intelligence.actionCandidates),
+        ]
+        let segments = Dictionary(uniqueKeysWithValues: transcript.segments.map { ($0.id, $0) })
+        for (expectedKind, insights) in collections {
+            for insight in insights {
+                guard insight.kind == expectedKind else {
+                    throw MeetingInterpretationError.invalidInsightKind
+                }
+                guard insight.confidence.isFinite, (0...1).contains(insight.confidence) else {
+                    throw MeetingInterpretationError.invalidInsightConfidence
+                }
+                guard let segment = segments[insight.evidence.segmentID] else {
+                    throw MeetingInterpretationError.missingEvidenceSegment(
+                        insight.evidence.segmentID
+                    )
+                }
+                guard segment.text.contains(insight.evidence.excerpt) else {
+                    throw MeetingInterpretationError.ungroundedEvidence(insight.evidence.excerpt)
+                }
+            }
+        }
+        transcriptID = transcript.id
+        self.schemaVersion = schemaVersion
+        self.providerIdentifier = provider
+        self.modelIdentifier = model
+        self.createdAt = createdAt
+        self.intelligence = intelligence
+    }
+}
+
+public protocol MeetingIntelligenceProviding: Sendable {
+    func interpret(_ transcript: MeetingTranscript) async throws -> MeetingInterpretationRecord
+}
+
+public struct DeterministicMeetingIntelligenceProvider: MeetingIntelligenceProviding {
+    public init() {}
+
+    public func interpret(_ transcript: MeetingTranscript) async throws
+        -> MeetingInterpretationRecord {
+        try MeetingInterpretationRecord(
+            transcript: transcript,
+            providerIdentifier: "openloop.extractive",
+            modelIdentifier: "meeting-compiler-v1",
+            intelligence: MeetingIntelligenceCompiler().compile(transcript)
+        )
     }
 }
 

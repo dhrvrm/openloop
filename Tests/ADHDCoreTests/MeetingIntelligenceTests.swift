@@ -125,6 +125,55 @@ import Testing
     #expect(item.evidence.excerpt == "Action item: send the bilingual transcript.")
 }
 
+@Test func versionedMeetingInterpretationAcceptsOnlyGroundedTypedEvidence() async throws {
+    let source = try segment(
+        40,
+        start: 4,
+        text: "We decided to reduce the release time. Dhruv will publish the notes."
+    )
+    let transcript = try MeetingTranscript(
+        sourceName: "release.m4a",
+        duration: 12,
+        modelIdentifier: "local-model",
+        segments: [source]
+    )
+
+    let record = try await DeterministicMeetingIntelligenceProvider().interpret(transcript)
+
+    #expect(record.transcriptID == transcript.id)
+    #expect(record.schemaVersion == 1)
+    #expect(record.providerIdentifier == "openloop.extractive")
+    #expect(record.intelligence.decisions.count == 1)
+    #expect(record.intelligence.actionCandidates.count == 1)
+
+    let unsupported = MeetingInsight(
+        id: "summary:bad",
+        kind: .summary,
+        text: "An invented summary",
+        evidence: MeetingEvidence(
+            segmentID: source.id,
+            start: source.start,
+            speaker: nil,
+            excerpt: "words that were never spoken"
+        ),
+        confidence: 0.9
+    )
+    #expect(throws: MeetingInterpretationError.ungroundedEvidence(
+        "words that were never spoken"
+    )) {
+        try MeetingInterpretationRecord(
+            transcript: transcript,
+            providerIdentifier: "fixture",
+            modelIdentifier: "fixture-v1",
+            intelligence: MeetingIntelligence(
+                summary: [unsupported],
+                decisions: [],
+                actionCandidates: []
+            )
+        )
+    }
+}
+
 private func segment(
     _ suffix: Int,
     start: TimeInterval,

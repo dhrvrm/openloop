@@ -346,14 +346,19 @@ private func encryptedSemanticGraphFixture() throws -> [SemanticGraphEvent] {
             ),
         ]
     )
+    let interpretation = try await DeterministicMeetingIntelligenceProvider()
+        .interpret(transcript)
     let writer = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
     try await writer.save(meetingTranscript: transcript)
+    try await writer.save(meetingInterpretation: interpretation)
 
     let data = try Data(contentsOf: directory.appendingPathComponent("openloop.vault"))
     #expect(data.range(of: Data(transcript.text.utf8)) == nil)
     #expect(data.range(of: Data(transcript.sourceName.utf8)) == nil)
+    #expect(data.range(of: Data(interpretation.providerIdentifier.utf8)) == nil)
     let reader = try EncryptedThoughtRepository(directory: directory, keyData: fixedKey)
     #expect(try await reader.meetingTranscripts() == [transcript])
+    #expect(try await reader.meetingInterpretations() == [interpretation])
 }
 
 @Test func workingMemoryLedgerSurvivesEncryptedRestartWithoutPlaintext() async throws {

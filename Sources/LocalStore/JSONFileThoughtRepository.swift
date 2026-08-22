@@ -13,6 +13,7 @@ private struct Snapshot: Codable {
     var voiceQualityCases: [UUID: VoiceQualityCase] = [:]
     var voiceQualityAttempts: [UUID: VoiceQualityAttempt] = [:]
     var meetingTranscripts: [UUID: MeetingTranscript] = [:]
+    var meetingInterpretations: [UUID: MeetingInterpretationRecord] = [:]
     var memoryRecords: [UUID: MemoryRecord] = [:]
     var contextTrailSettings = ContextTrailSettings()
     var contextTrailEvents: [UUID: ContextTrailEvent] = [:]
@@ -33,6 +34,7 @@ private struct Snapshot: Codable {
         case voiceQualityCases
         case voiceQualityAttempts
         case meetingTranscripts
+        case meetingInterpretations
         case memoryRecords
         case contextTrailSettings
         case contextTrailEvents
@@ -83,6 +85,10 @@ private struct Snapshot: Codable {
         meetingTranscripts = try container.decodeIfPresent(
             [UUID: MeetingTranscript].self,
             forKey: .meetingTranscripts
+        ) ?? [:]
+        meetingInterpretations = try container.decodeIfPresent(
+            [UUID: MeetingInterpretationRecord].self,
+            forKey: .meetingInterpretations
         ) ?? [:]
         memoryRecords = try container.decodeIfPresent(
             [UUID: MemoryRecord].self,
@@ -334,7 +340,21 @@ public actor JSONFileThoughtRepository: ThoughtRepository {
     }
 
     public func deleteMeetingTranscript(id: UUID) async throws {
-        try update { $0.meetingTranscripts[id] = nil }
+        try update {
+            $0.meetingTranscripts[id] = nil
+            $0.meetingInterpretations[id] = nil
+        }
+    }
+
+    public func save(meetingInterpretation: MeetingInterpretationRecord) async throws {
+        try update { $0.meetingInterpretations[meetingInterpretation.transcriptID] = meetingInterpretation }
+    }
+
+    public func meetingInterpretations() async throws -> [MeetingInterpretationRecord] {
+        snapshot.meetingInterpretations.values.sorted {
+            if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
+            return $0.transcriptID.uuidString < $1.transcriptID.uuidString
+        }
     }
 
     public func save(memoryRecords: [MemoryRecord]) async throws {
