@@ -176,3 +176,31 @@ private actor CountingClarifier: ClarificationProvider {
     #expect(closed.state == .closed)
     #expect(try await repository.intention(id: id)?.state == .closed)
 }
+
+@Test func taskOrganizationPersistsThroughTheLoop() async throws {
+    let repository = MemoryRepository()
+    let loop = ThoughtLoop(repository: repository, clarifier: FixedClarifier())
+    let result = try await loop.capture(text: "prepare the release", at: .now)
+    let id = try #require(result.intention?.id)
+    let scheduledAt = Date(timeIntervalSince1970: 1_000)
+    let deadline = Date(timeIntervalSince1970: 2_000)
+
+    let organized = try await loop.organizeIntention(
+        id,
+        heading: "Release",
+        scheduledAt: scheduledAt,
+        deadline: deadline,
+        tags: ["macOS", "Audio"],
+        checklist: [
+            IntentionChecklistItem(text: "Run the fixture corpus"),
+            IntentionChecklistItem(text: "Attach the DMG", isCompleted: true),
+        ]
+    )
+
+    #expect(organized.heading == "Release")
+    #expect(organized.scheduledAt == scheduledAt)
+    #expect(organized.deadline == deadline)
+    #expect(organized.tags == ["macOS", "Audio"])
+    #expect(organized.checklist.count == 2)
+    #expect(try await repository.intention(id: id) == organized)
+}

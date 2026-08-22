@@ -215,6 +215,27 @@ public struct ThoughtLoop: Sendable {
         try await repository.save(intention: intention)
     }
 
+    @discardableResult
+    public func organizeIntention(
+        _ id: UUID,
+        heading: String?,
+        scheduledAt: Date?,
+        deadline: Date?,
+        tags: [String],
+        checklist: [IntentionChecklistItem]
+    ) async throws -> Intention {
+        var intention = try await loadIntention(id)
+        intention.organize(
+            heading: heading,
+            scheduledAt: scheduledAt,
+            deadline: deadline,
+            tags: tags,
+            checklist: checklist
+        )
+        try await repository.save(intention: intention)
+        return intention
+    }
+
     private func loadIntention(_ id: UUID) async throws -> Intention {
         guard let intention = try await repository.intention(id: id) else {
             throw ThoughtLoopError.intentionNotFound(id)

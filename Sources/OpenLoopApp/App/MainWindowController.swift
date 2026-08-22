@@ -2419,19 +2419,31 @@ private struct ReadyTaskRow: View {
     let item: OpenLoopItem
     @State private var isDropTarget = false
     @State private var isHovered = false
+    @State private var isEditing = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             OpenLoopCheckbox(isCompleted: false) {
                 Task { await model.finishOpenLoop(item.id) }
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.desiredOutcome)
-                    .font(OpenLoopVisualSystem.rowTitle)
+            VStack(alignment: .leading, spacing: 3) {
+                Button {
+                    isEditing = true
+                } label: {
+                    Text(item.desiredOutcome)
+                        .font(OpenLoopVisualSystem.rowTitle)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
                 Text(item.nextAction)
                     .font(OpenLoopVisualSystem.metadata)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                if item.heading != nil || !item.tags.isEmpty || item.scheduledAt != nil
+                    || item.deadline != nil || !item.checklist.isEmpty {
+                    TaskMetadataLine(item: item)
+                }
             }
             Spacer(minLength: 14)
             Button {
@@ -2444,6 +2456,8 @@ private struct ReadyTaskRow: View {
             .help("Start focus")
             .opacity(isHovered ? 1 : 0)
             Menu {
+                Button("Open details") { isEditing = true }
+                Divider()
                 Button("Move up") { Task { await model.moveOpenLoop(item.id, by: -1) } }
                 Button("Move down") { Task { await model.moveOpenLoop(item.id, by: 1) } }
                 Divider()
@@ -2497,6 +2511,165 @@ private struct ReadyTaskRow: View {
         }
         .accessibilityAction(named: "Move down") {
             Task { await model.moveOpenLoop(item.id, by: 1) }
+        }
+        .accessibilityAction(named: "Open details") { isEditing = true }
+        .sheet(isPresented: $isEditing) {
+            TaskDetailEditor(model: model, item: item, isPresented: $isEditing)
+        }
+    }
+}
+
+private struct TaskMetadataLine: View {
+    let item: OpenLoopItem
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let heading = item.heading {
+                Label(heading, systemImage: "textformat")
+            }
+            if let date = item.scheduledAt {
+                Label(date.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
+            }
+            if let deadline = item.deadline {
+                Label(deadline.formatted(date: .abbreviated, time: .omitted), systemImage: "flag")
+            }
+            if !item.checklist.isEmpty {
+                let completed = item.checklist.filter(\.isCompleted).count
+                Label("\(completed)/\(item.checklist.count)", systemImage: "checklist")
+            }
+            ForEach(item.tags.prefix(2), id: \.self) { tag in
+                Text("#\(tag)")
+            }
+        }
+        .font(.system(size: 11.5, weight: .regular))
+        .foregroundStyle(OpenLoopVisualSystem.muted)
+        .lineLimit(1)
+    }
+}
+
+private struct TaskDetailEditor: View {
+    @ObservedObject var model: AppModel
+    let item: OpenLoopItem
+    @Binding var isPresented: Bool
+    @State private var heading: String
+    @State private var hasScheduledDate: Bool
+    @State private var scheduledAt: Date
+    @State private var hasDeadline: Bool
+    @State private var deadline: Date
+    @State private var tags: String
+    @State private var checklist: [IntentionChecklistItem]
+    @State private var newChecklistText = ""
+    @State private var isSaving = false
+
+    init(model: AppModel, item: OpenLoopItem, isPresented: Binding<Bool>) {
+        self.model = model
+        self.item = item
+        _isPresented = isPresented
+        _heading = State(initialValue: item.heading ?? "")
+        _hasScheduledDate = State(initialValue: item.scheduledAt != nil)
+        _scheduledAt = State(initialValue: item.scheduledAt ?? .now)
+        _hasDeadline = State(initialValue: item.deadline != nil)
+        _deadline = State(initialValue: item.deadline ?? .now)
+        _tags = State(initialValue: item.tags.joined(separator: ", "))
+        _checklist = State(initialValue: item.checklist)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(item.desiredOutcome)
+                        .font(.system(size: 24, weight: .semibold))
+                    Text(item.nextAction)
+                        .font(OpenLoopVisualSystem.metadata)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 28)
+                Button("Done") { save() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(isSaving)
+            }
+            .padding(.bottom, 28)
+
+            Form {
+                TextField("Heading", text: $heading)
+
+                Toggle("Schedule", isOn: $hasScheduledDate)
+                if hasScheduledDate {
+                    DatePicker(
+                        "Scheduled date",
+                        selection: $scheduledAt,
+                        displayedComponents: [.date]
+                    )
+                }
+
+                Toggle("Deadline", isOn: $hasDeadline)
+                if hasDeadline {
+                    DatePicker("Deadline", selection: $deadline, displayedComponents: [.date])
+                }
+
+                TextField("Tags, separated by commas", text: $tags)
+
+                Section("Checklist") {
+                    ForEach($checklist) { $entry in
+                        HStack(spacing: 8) {
+                            Toggle("", isOn: $entry.isCompleted)
+                                .labelsHidden()
+                                .toggleStyle(.checkbox)
+                            TextField("Checklist item", text: $entry.text)
+                            Button(role: .destructive) {
+                                checklist.removeAll { $0.id == entry.id }
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    HStack {
+                        TextField("Add a checklist item", text: $newChecklistText)
+                            .onSubmit(addChecklistItem)
+                        Button("Add", action: addChecklistItem)
+                            .disabled(newChecklistText.trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            ).isEmpty)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+
+            if let error = model.commandError {
+                Text(error)
+                    .font(OpenLoopVisualSystem.metadata)
+                    .foregroundStyle(.red)
+                    .padding(.top, 12)
+            }
+        }
+        .padding(.top, 34)
+        .padding(.horizontal, 36)
+        .padding(.bottom, 38)
+        .frame(width: 560, height: 600, alignment: .top)
+    }
+
+    private func addChecklistItem() {
+        let text = newChecklistText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        checklist.append(IntentionChecklistItem(text: text))
+        newChecklistText = ""
+    }
+
+    private func save() {
+        isSaving = true
+        Task {
+            let saved = await model.organizeOpenLoop(
+                item.id,
+                heading: heading,
+                scheduledAt: hasScheduledDate ? scheduledAt : nil,
+                deadline: hasDeadline ? deadline : nil,
+                tags: tags.split(separator: ",").map(String.init),
+                checklist: checklist
+            )
+            isSaving = false
+            if saved { isPresented = false }
         }
     }
 }

@@ -3,31 +3,31 @@ import SwiftUI
 enum OpenLoopVisualSystem {
     // MARK: Adaptive color language
 
-    static let accent = adaptive(light: 0x2F73C8, dark: 0x5B9BE6)
-    static let accentSoft = accent.opacity(0.085)
-    static let accentHover = accent.opacity(0.065)
+    static let accent = adaptive(light: 0x187F73, dark: 0x50C6B4)
+    static let accentSoft = accent.opacity(0.10)
+    static let accentHover = accent.opacity(0.075)
     static let recording = adaptive(light: 0xD84A4A, dark: 0xFF6666)
 
     // Category colors are punctuation, not surface fills.
-    static let today = adaptive(light: 0xE5B51B, dark: 0xF5CA3B)
+    static let today = accent
     static let inbox = accent
-    static let later = adaptive(light: 0x4D9A68, dark: 0x6DBC84)
+    static let later = adaptive(light: 0x61776F, dark: 0x91AAA1)
     static let returnColor = adaptive(light: 0x7D8790, dark: 0x9CA4AD)
-    static let context = adaptive(light: 0x527B8C, dark: 0x75A4B5)
-    static let emerging = adaptive(light: 0x806AA3, dark: 0xA58CC8)
+    static let context = accent
+    static let emerging = adaptive(light: 0x4D766F, dark: 0x82AEA6)
     static let ask = accent
-    static let act = adaptive(light: 0xC36B42, dark: 0xE18A63)
+    static let act = accent
 
-    static let canvas = adaptive(light: 0xF8F8F7, dark: 0x252628)
-    static let sidebar = adaptive(light: 0xF0F3F5, dark: 0x1D1E20)
+    static let canvas = adaptive(light: 0xFAF9F6, dark: 0x242523)
+    static let sidebar = adaptive(light: 0xF1F0EC, dark: 0x1D1F1D)
     static let raised = adaptive(light: 0xFFFFFF, dark: 0x2D2E31)
-    static let selection = adaptive(light: 0xDDE1E5, dark: 0x3B3D41)
-    static let selectionInactive = adaptive(light: 0xE9ECEF, dark: 0x303236)
-    static let pressed = adaptive(light: 0xD4D9DE, dark: 0x45474B)
-    static let hairline = adaptive(light: 0xD9DCE0, dark: 0x45474B)
-    static let separator = adaptive(light: 0xE2E4E7, dark: 0x3A3C40)
-    static let muted = adaptive(light: 0x6F7479, dark: 0xA5A9AE)
-    static let tertiaryText = adaptive(light: 0x92979C, dark: 0x777C82)
+    static let selection = adaptive(light: 0xE1E4DF, dark: 0x393D39)
+    static let selectionInactive = adaptive(light: 0xECEDE9, dark: 0x303330)
+    static let pressed = adaptive(light: 0xD9DDD7, dark: 0x444944)
+    static let hairline = adaptive(light: 0xDEDED8, dark: 0x454945)
+    static let separator = adaptive(light: 0xE6E5E0, dark: 0x393D39)
+    static let muted = adaptive(light: 0x706F6A, dark: 0xAAA9A4)
+    static let tertiaryText = adaptive(light: 0x96958F, dark: 0x7E817D)
     static let focusRing = accent.opacity(0.34)
 
     // MARK: Geometry
@@ -43,25 +43,25 @@ enum OpenLoopVisualSystem {
     static let inspectorIdealWidth: CGFloat = 320
     static let checkboxSize: CGFloat = 18
     static let checkboxHitSize: CGFloat = 28
-    static let taskRowMinimumHeight: CGFloat = 44
-    static let compactRowMinimumHeight: CGFloat = 30
-    static let sidebarSelectionRadius: CGFloat = 6
+    static let taskRowMinimumHeight: CGFloat = 48
+    static let compactRowMinimumHeight: CGFloat = 34
+    static let sidebarSelectionRadius: CGFloat = 8
     static let inputRadius: CGFloat = 8
     static let editorRadius: CGFloat = 10
     static let panelRadius: CGFloat = 10
-    static let contentTopPadding: CGFloat = 52
-    static let contentBottomPadding: CGFloat = 48
+    static let contentTopPadding: CGFloat = 56
+    static let contentBottomPadding: CGFloat = 64
     static let contentHorizontalPadding: CGFloat = 40
     static let inspectorTopPadding: CGFloat = 32
     static let inspectorBottomPadding: CGFloat = 40
 
     // MARK: Type
 
-    static let listTitle = Font.system(size: 32, weight: .bold)
-    static let projectTitle = Font.system(size: 28, weight: .semibold)
+    static let listTitle = Font.system(size: 34, weight: .semibold)
+    static let projectTitle = Font.system(size: 30, weight: .semibold)
     static let sectionTitle = Font.system(size: 15, weight: .semibold)
-    static let rowTitle = Font.system(size: 15.5, weight: .regular)
-    static let rowTitleEmphasized = Font.system(size: 15.5, weight: .medium)
+    static let rowTitle = Font.system(size: 16, weight: .regular)
+    static let rowTitleEmphasized = Font.system(size: 16, weight: .medium)
     static let metadata = Font.system(size: 13, weight: .regular)
     static let sidebarLabel = Font.system(size: 14.5, weight: .regular)
     static let sidebarLabelSelected = Font.system(size: 14.5, weight: .medium)
@@ -90,7 +90,7 @@ enum OpenLoopVisualSystem {
         case .inbox: inbox
         case .later: later
         case .return: returnColor
-        case .transcripts: recording
+        case .transcripts: accent
         case .context: context
         case .emerging: emerging
         case .ask: ask
@@ -123,7 +123,7 @@ enum OpenLoopVisualSystem {
         case "Inbox": inbox
         case "Later": later
         case "Return": returnColor
-        case "Transcripts": recording
+        case "Transcripts": accent
         case "Context": context
         case "Emerging": emerging
         case "Ask your context": ask

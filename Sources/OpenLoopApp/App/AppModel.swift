@@ -1031,6 +1031,27 @@ final class AppModel: ObservableObject {
     }
 
     @discardableResult
+    func organizeOpenLoop(
+        _ intentionID: UUID,
+        heading: String?,
+        scheduledAt: Date?,
+        deadline: Date?,
+        tags: [String],
+        checklist: [IntentionChecklistItem]
+    ) async -> Bool {
+        await runThoughtCommand {
+            try await self.loop.organizeIntention(
+                intentionID,
+                heading: heading,
+                scheduledAt: scheduledAt,
+                deadline: deadline,
+                tags: tags,
+                checklist: checklist
+            )
+        }
+    }
+
+    @discardableResult
     func chooseNext(_ intentionID: UUID) async -> Bool {
         guard let index = openLoops.firstIndex(where: { $0.id == intentionID }) else { return false }
         var ids = openLoops.map(\.id)
