@@ -92,7 +92,7 @@ struct V1ReliabilityTests {
         #expect(VoiceRecordButtonPresentation.isDisabled(.idle) == false)
     }
 
-    @Test func nativeWorkspaceGeometryKeepsOneCompactVisualRhythm() {
+    @Test func nativeWorkspaceGeometryKeepsOneCalmSpaciousVisualRhythm() {
         #expect(OpenLoopVisualSystem.space1 == 4)
         #expect(OpenLoopVisualSystem.space2 == 8)
         #expect(OpenLoopVisualSystem.space3 == 12)
@@ -102,13 +102,13 @@ struct V1ReliabilityTests {
         #expect(OpenLoopVisualSystem.contentMaximumWidth == 760)
         #expect(OpenLoopVisualSystem.checkboxSize == 18)
         #expect(OpenLoopVisualSystem.checkboxHitSize == 28)
-        #expect(OpenLoopVisualSystem.taskRowMinimumHeight == 44)
-        #expect(OpenLoopVisualSystem.sidebarSelectionRadius == 6)
+        #expect(OpenLoopVisualSystem.taskRowMinimumHeight == 48)
+        #expect(OpenLoopVisualSystem.sidebarSelectionRadius == 8)
         #expect(OpenLoopVisualSystem.inputRadius == 8)
         #expect(OpenLoopVisualSystem.editorRadius == 10)
         #expect(OpenLoopVisualSystem.panelRadius == 10)
-        #expect(OpenLoopVisualSystem.contentTopPadding == 52)
-        #expect(OpenLoopVisualSystem.contentBottomPadding == 48)
+        #expect(OpenLoopVisualSystem.contentTopPadding == 56)
+        #expect(OpenLoopVisualSystem.contentBottomPadding == 64)
         #expect(OpenLoopVisualSystem.contentHorizontalPadding == 40)
         #expect(OpenLoopVisualSystem.inspectorTopPadding == 32)
         #expect(OpenLoopVisualSystem.inspectorBottomPadding == 40)
