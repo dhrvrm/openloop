@@ -46,6 +46,8 @@ final class MeetingTranscriptionController: ObservableObject {
     private let streamingBuilder: (any StreamingVoiceSessionBuilding)?
     private let intelligenceProvider: any MeetingIntelligenceProviding
     private var work: Task<Void, Never>?
+    private var interpretationWork: [UUID: Task<Void, Never>] = [:]
+    private var interpretationGeneration: [UUID: UUID] = [:]
     private var eventHistory = MeetingPipelineEventHistory()
     private var recordingStartedAt: Date?
     private var peakRecordingDecibels: Float?
@@ -86,7 +88,7 @@ final class MeetingTranscriptionController: ObservableObject {
             }
         )
         for transcript in transcripts where interpretations[transcript.id] == nil {
-            await updateInterpretation(for: transcript)
+            scheduleInterpretation(for: transcript)
         }
         engineDiagnostics = await transcriber.diagnostics()
         guard job.stage == nil,
@@ -273,6 +275,9 @@ final class MeetingTranscriptionController: ObservableObject {
     }
 
     func deleteTranscript(id: UUID) async {
+        interpretationWork[id]?.cancel()
+        interpretationWork[id] = nil
+        interpretationGeneration[id] = nil
         if job.isActive,
            job.completedTranscriptID == id,
            let activeWork = work {
@@ -343,11 +348,11 @@ final class MeetingTranscriptionController: ObservableObject {
                 meetingTranscript: corrected,
                 transcriptionCorrection: correction
             )
-            await updateInterpretation(for: corrected)
             transcripts[transcriptIndex] = corrected
             if job.completedTranscriptID == transcriptID {
                 job.previewText = corrected.text
             }
+            scheduleInterpretation(for: corrected)
             return true
         } catch VoiceLearningError.unchangedText {
             return true
@@ -357,7 +362,7 @@ final class MeetingTranscriptionController: ObservableObject {
     }
 
     func waitUntilSettledForTesting() async {
-        while job.isActive || work != nil {
+        while job.isActive || work != nil || !interpretationWork.isEmpty {
             await Task.yield()
         }
     }
@@ -419,7 +424,6 @@ final class MeetingTranscriptionController: ObservableObject {
                 )
                 job.previewText = transcript.text
                 try await repository.save(meetingTranscript: transcript)
-                await updateInterpretation(for: transcript)
                 job.completedTranscriptID = transcript.id
                 try Task.checkCancellation()
                 transcripts = try await repository.meetingTranscripts()
@@ -429,6 +433,7 @@ final class MeetingTranscriptionController: ObservableObject {
                 engineDiagnostics = await transcriber.diagnostics()
                 recordEvent(stage: .ready, message: job.message, fraction: 1)
                 work = nil
+                scheduleInterpretation(for: transcript)
             } catch is CancellationError {
                 job.stage = .cancelled
                 job.message = "Cancelled. The local audio copy is available to retry."
@@ -592,6 +597,19 @@ final class MeetingTranscriptionController: ObservableObject {
         } catch {
             // The transcript is the durable source of truth. This derived
             // record can be rebuilt at the next refresh without blocking it.
+        }
+    }
+
+    private func scheduleInterpretation(for transcript: MeetingTranscript) {
+        interpretationWork[transcript.id]?.cancel()
+        let generation = UUID()
+        interpretationGeneration[transcript.id] = generation
+        interpretationWork[transcript.id] = Task { [weak self] in
+            guard let self else { return }
+            await updateInterpretation(for: transcript)
+            guard interpretationGeneration[transcript.id] == generation else { return }
+            interpretationWork[transcript.id] = nil
+            interpretationGeneration[transcript.id] = nil
         }
     }
 

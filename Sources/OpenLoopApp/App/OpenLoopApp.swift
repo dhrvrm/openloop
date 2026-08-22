@@ -266,7 +266,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                     context: {
                         (try? await voiceLearning.vocabulary(limit: 80)) ?? []
                     }
-                )
+                ),
+                intelligenceProvider: LocalMeetingIntelligenceProvider()
             )
             model.attachMeetingTranscription(meetingController)
             let mainWindow = MainWindowController(model: model)
