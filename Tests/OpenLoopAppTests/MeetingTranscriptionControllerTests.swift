@@ -161,7 +161,14 @@ import Testing
     #expect(controller.job.stage == .ready)
     #expect(controller.job.canRetry)
     #expect(controller.job.completedTranscriptID == transcript.id)
-    #expect(controller.job.stagedAudioURL == sourceURL)
+    let renamedURL = try #require(controller.job.stagedAudioURL)
+    #expect(renamedURL != sourceURL)
+    #expect(renamedURL.lastPathComponent.hasSuffix("-saved-transcript.m4a"))
+    #expect(FileManager.default.fileExists(atPath: renamedURL.path))
+    #expect(!FileManager.default.fileExists(atPath: sourceURL.path))
+    let refreshedTranscript = try #require(controller.transcripts.first)
+    #expect(refreshedTranscript.sourceName == "saved transcript")
+    #expect(refreshedTranscript.sourceAudioFileName == renamedURL.lastPathComponent)
     #expect(controller.job.previewText == "saved transcript")
 }
 
