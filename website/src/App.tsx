@@ -16,9 +16,9 @@ import {
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
 const repository = "https://github.com/dhrvrm/openloop";
-const version = "1.0.2";
+const version = "1.0.3";
 const download = `${repository}/releases/download/v${version}/OpenLoop-${version}-arm64.dmg`;
-const checksum = "b3ea163218e952716f5eb641910e01da869669de9c1c9d352007f927a592b862";
+const checksum = "c556d51e2f58099e9acd9d2d1a1e09555f04a2aabd54d565cbdaad0237d55444";
 
 const nodes = [
   { label: "Project", x: 13, y: 39, tone: "quiet" },
@@ -184,7 +184,7 @@ function App() {
             <ActionLink href={download}><ArrowDown /> Download {version} for macOS</ActionLink>
             <ActionLink href={repository} kind="secondary"><BracketsAngle /> Steal the code, legally</ActionLink>
           </div>
-          <span className="hero-note">Apple silicon · macOS 15+ · 49.2 MB · MIT licensed</span>
+          <span className="hero-note">Apple silicon · macOS 15+ · 49.3 MB · MIT licensed</span>
         </div>
         <div ref={heroObject} className="hero-object">
           <ProductFrame />
@@ -311,8 +311,8 @@ function App() {
         </div>
         <div className="release-ledger" data-reveal>
           <dl>
-            <div><dt>Version</dt><dd>{version} (15)</dd></div>
-            <div><dt>Download</dt><dd>49.2 MB · arm64</dd></div>
+            <div><dt>Version</dt><dd>{version} (16)</dd></div>
+            <div><dt>Download</dt><dd>49.3 MB · arm64</dd></div>
             <div><dt>Requires</dt><dd>macOS 15+ · Apple silicon</dd></div>
             <div><dt>Signing</dt><dd>Ad-hoc community build</dd></div>
             <div><dt>SHA-256</dt><dd><code>{checksum}</code></dd></div>
