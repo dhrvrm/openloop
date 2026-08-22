@@ -67,6 +67,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var toolCapabilities: [ToolCapability] = []
     @Published private(set) var toolActionAudit: [ToolActionAuditRecord] = []
     @Published var capabilityRuntimeError: String?
+    @Published var toolActionIntent = ""
+    @Published var toolActionParameters = ""
+    @Published private(set) var preparedToolAction: PreparedMCPAction?
+    @Published private(set) var toolActionResult: String?
+    @Published private(set) var isRunningToolAction = false
 
     private let loop: ThoughtLoop
     private let readModels: ThoughtReadModels
@@ -98,6 +103,9 @@ final class AppModel: ObservableObject {
     private var semanticizedMeetingTranscriptIDs: Set<UUID> = []
     private var capabilityRegistry: CapabilityRegistry?
     private var actionRepository: (any ThoughtRepository)?
+    private var mcpInvoker: (any MCPToolInvoking)?
+    private var mcpRouter: MCPRouter?
+    private var actionExecutor: ActionExecutor?
 
     init(
         loop: ThoughtLoop,
@@ -278,10 +286,19 @@ final class AppModel: ObservableObject {
 
     func attachCapabilityRuntime(
         registry: CapabilityRegistry,
-        repository: any ThoughtRepository
+        repository: any ThoughtRepository,
+        invoker: (any MCPToolInvoking)? = nil
     ) {
         capabilityRegistry = registry
         actionRepository = repository
+        mcpInvoker = invoker
+        if let invoker {
+            mcpRouter = MCPRouter(registry: registry)
+            actionExecutor = ActionExecutor(repository: repository, invoker: invoker)
+        } else {
+            mcpRouter = nil
+            actionExecutor = nil
+        }
         Task { await refreshCapabilityRuntime() }
     }
 
@@ -307,6 +324,78 @@ final class AppModel: ObservableObject {
         } catch {
             capabilityRuntimeError = "That permission change could not be saved."
         }
+    }
+
+    func prepareToolAction() async {
+        let intent = toolActionIntent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !intent.isEmpty, let mcpRouter, let actionExecutor else { return }
+        capabilityRuntimeError = nil
+        toolActionResult = nil
+        do {
+            let parameters = try Self.toolParameters(from: toolActionParameters)
+            let action = try await mcpRouter.prepare(
+                intent: intent,
+                parameters: parameters,
+                summary: intent
+            )
+            try await actionExecutor.propose(action)
+            preparedToolAction = action
+            await refreshCapabilityRuntime()
+        } catch CapabilityRuntimeError.invalidParameters(let missing) {
+            capabilityRuntimeError = "Add the required values: \(missing.joined(separator: ", "))."
+        } catch CapabilityRuntimeError.noRoute {
+            capabilityRuntimeError = "No permitted tool matched that request. Check the wording and tool permission."
+        } catch {
+            capabilityRuntimeError = "That action could not be prepared. Nothing was run."
+        }
+    }
+
+    func executePreparedToolAction() async {
+        guard var action = preparedToolAction,
+              let actionExecutor,
+              !isRunningToolAction else { return }
+        isRunningToolAction = true
+        capabilityRuntimeError = nil
+        toolActionResult = nil
+        defer { isRunningToolAction = false }
+        do {
+            if action.route.requiresConfirmation {
+                action = try await actionExecutor.confirm(action)
+            }
+            let result = try await actionExecutor.execute(action)
+            preparedToolAction = nil
+            toolActionResult = result
+            await refreshCapabilityRuntime()
+        } catch {
+            capabilityRuntimeError = "The tool failed. Its error is recorded; no retry was started."
+            await refreshCapabilityRuntime()
+        }
+    }
+
+    func cancelPreparedToolAction() async {
+        guard let action = preparedToolAction, let actionExecutor else { return }
+        try? await actionExecutor.cancel(action)
+        preparedToolAction = nil
+        await refreshCapabilityRuntime()
+    }
+
+    private static func toolParameters(from text: String) throws -> [String: String] {
+        var result: [String: String] = [:]
+        for rawLine in text.split(whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty else { continue }
+            let parts = line.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2 else {
+                throw CapabilityRuntimeError.invalidParameters([line])
+            }
+            let key = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty, !value.isEmpty else {
+                throw CapabilityRuntimeError.invalidParameters([key.isEmpty ? line : key])
+            }
+            result[key] = value
+        }
+        return result
     }
 
     func refreshVoiceQualityAudit() async {

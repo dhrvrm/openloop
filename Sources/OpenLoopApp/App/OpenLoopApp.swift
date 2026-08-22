@@ -176,12 +176,21 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 ? "OpenLoop recovered your saved work after an unexpected exit."
                 : nil
             model.capabilitySummary = .current()
+            let mcpRuntime = MCPRuntime(
+                configurationURL: directory.appendingPathComponent("MCP/servers.json")
+            )
             let capabilityRegistry = CapabilityRegistry(repository: repository)
             _ = try await capabilityRegistry.discover([])
             model.attachCapabilityRuntime(
                 registry: capabilityRegistry,
-                repository: repository
+                repository: repository,
+                invoker: mcpRuntime
             )
+            Task { [weak model] in
+                let capabilities = await mcpRuntime.discoverCapabilities()
+                _ = try? await capabilityRegistry.discover(capabilities)
+                await model?.refreshCapabilityRuntime()
+            }
             _ = try await DevelopmentStoreMigrator().migrateIfNeeded(
                 from: directory,
                 to: repository

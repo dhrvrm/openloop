@@ -139,8 +139,7 @@ public struct CapabilityGraph: Codable, Equatable, Sendable {
             return CapabilityRoute(
                 capability: capability,
                 score: score,
-                requiresConfirmation: permission == .act
-                    && capability.risk != .readOnly
+                requiresConfirmation: capability.risk != .readOnly
             )
         }.sorted {
             if $0.score != $1.score { return $0.score > $1.score }
@@ -165,7 +164,9 @@ public struct ProposedToolAction: Equatable, Sendable {
     }
 
     public var canExecute: Bool {
-        route.capability.grantedPermission == .act
+        route.capability.grantedPermission >= (
+            route.capability.risk == .readOnly ? .observe : .act
+        )
             && (!route.requiresConfirmation || confirmed)
     }
 }

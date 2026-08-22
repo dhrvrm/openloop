@@ -52,7 +52,7 @@ private struct SemanticUnusedClarifier: ClarificationProvider {
         "Checkout is slower after PostHog", "Checkout is slower after PostHog",
     ])
     #expect(Set(model.semanticNodes.map(\.kind)) == [.observation, .problem])
-    #expect(model.semanticAnswers.map(\.claim) == ["Checkout is slower after PostHog"])
+    #expect(model.semanticAnswers.map(\.node.claim) == ["Checkout is slower after PostHog"])
     #expect(model.semanticError == nil)
 }
 

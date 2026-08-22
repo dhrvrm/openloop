@@ -939,6 +939,87 @@ private struct MainView: View {
     private var capabilityRuntimeView: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: OpenLoopVisualSystem.space5) {
+                if !model.toolCapabilities.isEmpty {
+                    VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space2) {
+                        OpenLoopSectionHeading(
+                            title: "Ask a connected tool",
+                            detail: "OpenLoop shows the route before anything can change"
+                        )
+                        TextField(
+                            "For example: create a GitHub issue for the release bug",
+                            text: $model.toolActionIntent
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Values · one key=value per line")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextEditor(text: $model.toolActionParameters)
+                                .font(.system(.callout, design: .monospaced))
+                                .frame(minHeight: 58, maxHeight: 96)
+                                .padding(6)
+                                .background(
+                                    OpenLoopVisualSystem.raised,
+                                    in: RoundedRectangle(cornerRadius: OpenLoopVisualSystem.inputRadius)
+                                )
+                        }
+                        HStack {
+                            Button("Prepare") {
+                                Task { await model.prepareToolAction() }
+                            }
+                            .buttonStyle(OpenLoopAccessoryButtonStyle(tint: OpenLoopVisualSystem.accent))
+                            .disabled(model.toolActionIntent.trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            ).isEmpty || model.isRunningToolAction)
+                            if let result = model.toolActionResult {
+                                Label(result, systemImage: "checkmark.circle.fill")
+                                    .font(.callout)
+                                    .foregroundStyle(OpenLoopVisualSystem.later)
+                                    .lineLimit(2)
+                            }
+                        }
+                        if let action = model.preparedToolAction {
+                            VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space1) {
+                                Label(
+                                    action.route.capability.tool.replacingOccurrences(
+                                        of: "_",
+                                        with: " "
+                                    ),
+                                    systemImage: action.route.requiresConfirmation
+                                        ? "exclamationmark.shield"
+                                        : "eye"
+                                )
+                                .font(OpenLoopVisualSystem.rowTitleEmphasized)
+                                Text(action.route.requiresConfirmation
+                                    ? "This will change data through \(action.route.capability.server). Review the values, then confirm."
+                                    : "This reads through \(action.route.capability.server). It will not change data.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                HStack {
+                                    Button(action.route.requiresConfirmation ? "Confirm and run" : "Run") {
+                                        Task { await model.executePreparedToolAction() }
+                                    }
+                                    .buttonStyle(OpenLoopAccessoryButtonStyle(
+                                        tint: action.route.requiresConfirmation
+                                            ? OpenLoopVisualSystem.recording
+                                            : OpenLoopVisualSystem.accent
+                                    ))
+                                    .disabled(model.isRunningToolAction)
+                                    Button("Cancel") {
+                                        Task { await model.cancelPreparedToolAction() }
+                                    }
+                                    .buttonStyle(.borderless)
+                                }
+                            }
+                            .padding(OpenLoopVisualSystem.space2)
+                            .background(
+                                OpenLoopVisualSystem.accentSoft,
+                                in: RoundedRectangle(cornerRadius: OpenLoopVisualSystem.editorRadius)
+                            )
+                        }
+                    }
+                }
+
                 VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space1) {
                     OpenLoopSectionHeading(
                         title: "Connected tools",

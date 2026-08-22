@@ -71,3 +71,14 @@ private let capabilityFixture = CapabilityGraph(capabilities: [
         confirmed: true
     ).canExecute)
 }
+
+@Test func observedReadOnlyCapabilityCanRunWithoutWriteConfirmation() throws {
+    let route = try #require(capabilityFixture.routes(
+        intent: "inspect github repository code",
+        requiring: .observe
+    ).first)
+
+    #expect(route.capability.risk == .readOnly)
+    #expect(!route.requiresConfirmation)
+    #expect(ProposedToolAction(route: route, summary: "Inspect repository").canExecute)
+}

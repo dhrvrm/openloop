@@ -43,9 +43,12 @@ actor MCPRouter {
     ) async throws -> PreparedMCPAction {
         guard let route = await registry.graph().routes(
             intent: intent,
-            requiring: .act,
-            limit: 1
-        ).first else { throw CapabilityRuntimeError.noRoute }
+            requiring: .observe,
+            limit: 8
+        ).first(where: {
+            $0.capability.risk == .readOnly
+                || $0.capability.grantedPermission >= .act
+        }) else { throw CapabilityRuntimeError.noRoute }
         let required = Set(route.capability.inputSchema.keys)
         let missing = required.subtracting(parameters.keys).sorted()
         guard missing.isEmpty else {
