@@ -81,6 +81,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private var hotKey: GlobalHotKey?
     private var voiceHotKey: GlobalHotKey?
     private var recallHotKey: GlobalHotKey?
+    private var meetingRecordHotKey: GlobalHotKey?
     private var voiceCaptureWindow: VoiceCaptureWindowController?
     private var model: AppModel?
     private var pauseMenuItem: NSMenuItem?
@@ -294,7 +295,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             await model.refreshContextTrail()
             mainWindow.show(tab: 0)
             do {
-                hotKey = try GlobalHotKey { [weak quickCapture] startedAt in
+                hotKey = try GlobalHotKey { [weak quickCapture, weak model] startedAt in
+                    model?.showShortcutFeedback(ShortcutFeedback(
+                        kind: .capture,
+                        title: "Quick Capture opened",
+                        shortcut: "⌘⇧Space"
+                    ))
                     quickCapture?.show(startedAt: startedAt)
                 }
                 model.capabilitySummary.quickCapture = .ready
@@ -309,6 +315,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                     modifiers: binding.modifiers,
                     id: binding.id
                 ) { [weak model] _ in
+                    model?.showShortcutFeedback(ShortcutFeedback(
+                        kind: .dictation,
+                        title: model?.isSystemDictationActive == true
+                            ? "Finishing dictation"
+                            : "Dictation started",
+                        shortcut: "⌃⌥Space"
+                    ))
                     model?.toggleSystemDictation()
                 }
             } catch {
@@ -321,10 +334,34 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                     modifiers: binding.modifiers,
                     id: binding.id
                 ) { [weak self] _ in
+                    self?.model?.showShortcutFeedback(ShortcutFeedback(
+                        kind: .search,
+                        title: "Ask opened",
+                        shortcut: "⌘⇧F"
+                    ))
                     self?.mainWindow?.show(tab: 3)
                 }
             } catch {
                 model.recallError = "Ask shortcut is unavailable. Use Ask in the menu."
+            }
+            do {
+                let binding = GlobalHotKeyBinding.meetingRecord
+                meetingRecordHotKey = try GlobalHotKey(
+                    keyCode: binding.keyCode,
+                    modifiers: binding.modifiers,
+                    id: binding.id
+                ) { [weak model] _ in
+                    model?.showShortcutFeedback(ShortcutFeedback(
+                        kind: .recording,
+                        title: model?.meetingJob.stage == .recording
+                            ? "Finishing recording"
+                            : "Recording started",
+                        shortcut: "⌃⌥R"
+                    ))
+                    model?.toggleVoiceCapture()
+                }
+            } catch {
+                model.commandError = "Record shortcut is unavailable. Use Record in the capture bar."
             }
         } catch {
             NSApp.presentError(error)
@@ -400,10 +437,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 modifiers: recallBinding.modifiers,
                 id: recallBinding.id
             ) { _ in }
-            withExtendedLifetime((captureHotKey, voiceHotKey, recallHotKey)) {
+            let recordBinding = GlobalHotKeyBinding.meetingRecord
+            let recordHotKey = try GlobalHotKey(
+                keyCode: recordBinding.keyCode,
+                modifiers: recordBinding.modifiers,
+                id: recordBinding.id
+            ) { _ in }
+            withExtendedLifetime((captureHotKey, voiceHotKey, recallHotKey, recordHotKey)) {
                 print("hotkey-registration=passed")
                 print("voice-hotkey-registration=passed")
                 print("recall-hotkey-registration=passed")
+                print("record-hotkey-registration=passed")
             }
             return true
 

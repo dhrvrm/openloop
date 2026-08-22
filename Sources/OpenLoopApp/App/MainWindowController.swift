@@ -30,23 +30,30 @@ private struct MainView: View {
                 if sidebarVisible {
                     workspaceSidebar
                     Divider().opacity(0.55)
-                } else {
-                    Button {
-                        sidebarVisible = true
-                    } label: {
-                        Image(systemName: "sidebar.left")
-                            .frame(width: 40, height: 40)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Show sidebar · ⌘/")
-                    .frame(maxHeight: .infinity, alignment: .top)
                 }
-                selectedSurface
-                    .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .topLeading)
-                    .padding(.horizontal, OpenLoopVisualSystem.contentHorizontalPadding)
-                    .padding(.top, OpenLoopVisualSystem.contentTopPadding)
-                    .padding(.bottom, OpenLoopVisualSystem.contentBottomPadding)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                VStack(spacing: 0) {
+                    WorkspaceTopBar(
+                        model: model,
+                        destination: WorkspaceOrientation.destination(selection),
+                        sidebarVisible: $sidebarVisible
+                    )
+                    Divider().opacity(0.6)
+                    ZStack(alignment: .bottom) {
+                        selectedSurface
+                            .frame(maxWidth: OpenLoopVisualSystem.contentMaximumWidth, alignment: .topLeading)
+                            .padding(.horizontal, OpenLoopVisualSystem.contentHorizontalPadding)
+                            .padding(.top, OpenLoopVisualSystem.contentTopPadding)
+                            .padding(.bottom, OpenLoopVisualSystem.contentBottomPadding)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+                        OpenLoopCaptureDock(model: model, text: $quickAddText) {
+                            let captured = await model.submitCapture(quickAddText)
+                            if captured { quickAddText = "" }
+                        }
+                        .padding(.horizontal, 28)
+                        .padding(.bottom, 22)
+                    }
+                }
             }
         }
         .frame(minWidth: sidebarVisible ? 760 : 520, minHeight: 560)
@@ -134,7 +141,27 @@ private struct MainView: View {
 
     private var workspaceSidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Spacer().frame(height: OpenLoopVisualSystem.space5)
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(OpenLoopVisualSystem.accent)
+                    Image(systemName: "circle.hexagongrid.fill")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 34, height: 34)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("OpenLoop")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text("Private working memory")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(OpenLoopVisualSystem.muted)
+                }
+            }
+            .padding(.horizontal, OpenLoopVisualSystem.space2)
+            .padding(.top, 22)
+            .padding(.bottom, 24)
+
             VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space4) {
                 ForEach(WorkspaceOrientation.sections) { section in
                     VStack(alignment: .leading, spacing: 1) {
@@ -181,70 +208,15 @@ private struct MainView: View {
                 .keyboardShortcut("f", modifiers: .command)
                 .help("Travel to any list or task · ⌘F")
 
-                Button {
-                    sidebarVisible.toggle()
-                } label: {
-                    Label("Hide sidebar", systemImage: "sidebar.left")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, OpenLoopVisualSystem.space2)
-                        .frame(height: OpenLoopVisualSystem.compactRowMinimumHeight)
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("⌘⇧Space  Quick Capture", systemImage: "keyboard")
+                    Label("⌃⌥R  Record", systemImage: "record.circle")
+                    Label("⌃⌥Space  Dictate", systemImage: "waveform")
                 }
-                .buttonStyle(OpenLoopNavigationButtonStyle())
-                .keyboardShortcut("/", modifiers: .command)
-                .help("Hide sidebar · ⌘/")
-
-                Menu {
-                    ForEach(OpenLoopAppearanceMode.allCases, id: \.self) { mode in
-                        Button {
-                            model.setAppearanceMode(mode)
-                        } label: {
-                            if model.appearanceMode == mode {
-                                Label(mode.displayName, systemImage: "checkmark")
-                            } else {
-                                Text(mode.displayName)
-                            }
-                        }
-                    }
-                } label: {
-                    HStack(spacing: OpenLoopVisualSystem.space2) {
-                        Image(systemName: "circle.lefthalf.filled")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("Appearance")
-                        Spacer()
-                        Text(model.appearanceMode.displayName)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, OpenLoopVisualSystem.space2)
-                    .frame(height: OpenLoopVisualSystem.compactRowMinimumHeight)
-                    .contentShape(Rectangle())
-                }
-                .menuStyle(.borderlessButton)
-                .font(OpenLoopVisualSystem.sidebarLabel)
-
-                Divider().opacity(0.65)
-                Button {
-                    model.setAdvancedModeEnabled(!model.isAdvancedModeEnabled)
-                } label: {
-                    HStack(spacing: OpenLoopVisualSystem.space2) {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("Advanced")
-                        Spacer()
-                        Circle()
-                            .fill(model.isAdvancedModeEnabled
-                                ? OpenLoopVisualSystem.accent
-                                : Color.secondary.opacity(0.35))
-                            .frame(width: 6, height: 6)
-                    }
-                    .padding(.horizontal, OpenLoopVisualSystem.space2)
-                    .frame(height: 38)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(OpenLoopNavigationButtonStyle())
-                .font(OpenLoopVisualSystem.sidebarLabel)
-                .foregroundStyle(model.isAdvancedModeEnabled ? OpenLoopVisualSystem.accent : .secondary)
-                .help("Show system details · ⌥⌘I")
-                .accessibilityValue(model.isAdvancedModeEnabled ? "Shown" : "Hidden")
+                .font(.system(size: 10.5, weight: .medium).monospaced())
+                .foregroundStyle(OpenLoopVisualSystem.tertiaryText)
+                .padding(.horizontal, OpenLoopVisualSystem.space2)
+                .padding(.vertical, OpenLoopVisualSystem.space3)
             }
         }
         .padding(.horizontal, OpenLoopVisualSystem.space2)
@@ -311,20 +283,6 @@ private struct MainView: View {
                     StatusBanner(text: notice, icon: "checkmark.shield")
                 }
 
-                QuickAddComposer(model: model, text: $quickAddText) {
-                    let captured = await model.submitCapture(quickAddText)
-                    if captured { quickAddText = "" }
-                }
-                if model.isDeliveringDictation
-                    || model.lastDictationDelivery != nil
-                    || model.dictationActionNotice != nil {
-                    DictationDeliveryPanel(model: model)
-                }
-                if model.meetingJob.stage != nil {
-                    MeetingJobPanel(model: model)
-                }
-                CaptureCapabilityNote(summary: model.capabilitySummary)
-
                 if let item = model.now, item.focus != nil {
                     currentIntention(item)
                 } else if model.openLoops.contains(where: {
@@ -347,6 +305,15 @@ private struct MainView: View {
                 }
 
                 if model.now?.focus != nil { contextTrailPanel }
+
+                if model.isDeliveringDictation
+                    || model.lastDictationDelivery != nil
+                    || model.dictationActionNotice != nil {
+                    DictationDeliveryPanel(model: model)
+                }
+                if model.meetingJob.stage != nil && !model.meetingJob.isActive {
+                    MeetingJobPanel(model: model)
+                }
 
                 if model.suggestions.isEmpty == false {
                     VStack(alignment: .leading, spacing: 5) {
@@ -593,10 +560,6 @@ private struct MainView: View {
                     title: "Inbox",
                     detail: "New notes and recordings wait here until you decide where they belong."
                 )
-                QuickAddComposer(model: model, text: $quickAddText) {
-                    let captured = await model.submitCapture(quickAddText)
-                    if captured { quickAddText = "" }
-                }
                 if needsDecision.isEmpty {
                     ContentUnavailableView(
                         "Inbox is clear",
@@ -1386,21 +1349,23 @@ private struct ScreenHeader: View {
 
     var body: some View {
         let tint = OpenLoopVisualSystem.tint(forSurfaceTitle: title)
-        return VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .center, spacing: OpenLoopVisualSystem.space2) {
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: OpenLoopVisualSystem.space3) {
                 Image(systemName: OpenLoopVisualSystem.icon(forSurfaceTitle: title))
-                    .font(.system(size: 23, weight: .semibold))
+                    .font(.system(size: 28, weight: .semibold))
                     .foregroundStyle(tint)
-                    .frame(width: 27)
+                    .frame(width: 34)
                 Text(title)
                     .font(OpenLoopVisualSystem.listTitle)
-                    .tracking(-0.8)
+                    .tracking(-1.25)
             }
             Text(detail)
-                .font(.system(size: 12.5))
+                .font(.system(size: 14))
                 .foregroundStyle(OpenLoopVisualSystem.muted)
-                .frame(maxWidth: 560, alignment: .leading)
+                .frame(maxWidth: 620, alignment: .leading)
+                .padding(.leading, 46)
         }
+        .padding(.bottom, 18)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(eyebrow), \(title). \(detail)")
     }

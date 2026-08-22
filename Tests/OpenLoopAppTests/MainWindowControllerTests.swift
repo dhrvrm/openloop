@@ -111,9 +111,12 @@ private actor EnabledWindowContextTrail: ContextTrailProviding {
     #expect(GlobalHotKeyBinding.quickCapture.id == 1)
     #expect(GlobalHotKeyBinding.voiceCapture.id == 2)
     #expect(GlobalHotKeyBinding.recall.id == 3)
+    #expect(GlobalHotKeyBinding.meetingRecord.id == 4)
     #expect(GlobalHotKeyBinding.voiceCapture.keyCode == GlobalHotKeyBinding.quickCapture.keyCode)
     #expect(GlobalHotKeyBinding.voiceCapture.modifiers != GlobalHotKeyBinding.quickCapture.modifiers)
     #expect(GlobalHotKeyBinding.recall.modifiers == GlobalHotKeyBinding.quickCapture.modifiers)
+    #expect(GlobalHotKeyBinding.meetingRecord.keyCode != GlobalHotKeyBinding.voiceCapture.keyCode)
+    #expect(GlobalHotKeyBinding.meetingRecord.modifiers == GlobalHotKeyBinding.voiceCapture.modifiers)
 }
 
 @Test func contextTrailMenuCopyMakesTheActivePrivacyModeExplicit() {

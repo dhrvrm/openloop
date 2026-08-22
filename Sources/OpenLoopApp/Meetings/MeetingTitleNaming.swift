@@ -12,6 +12,19 @@ struct DeterministicMeetingTitleProvider: MeetingTitleProviding {
 }
 
 enum MeetingTitleNaming {
+    static func provisionalTitle(
+        createdAt: Date,
+        calendar: Calendar = .current,
+        locale: Locale = .current
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.setLocalizedDateFormatFromTemplate("EEE d MMM, h:mm a")
+        return "Voice note · \(formatter.string(from: createdAt))"
+    }
+
     static func displayTitle(_ value: String) -> String {
         var title = value
             .replacingOccurrences(of: "\n", with: " ")

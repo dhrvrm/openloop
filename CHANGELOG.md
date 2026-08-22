@@ -6,6 +6,24 @@ All notable changes are recorded here. Releases follow semantic versioning.
 
 - Nothing yet.
 
+## [1.0.5] — 2026-08-22
+
+- Added a global record-and-transcribe shortcut with visible status in the workspace top bar.
+- Added explicit System, Light, and Dark appearance controls shared by the native app and product site.
+- Replaced generic recording labels with timestamped voice-note names before semantic title generation.
+- Reworked the main workspace around an open list canvas and a persistent bottom capture dock.
+- Updated the product site mockup to reflect the native workspace and capture behavior.
+
+## [1.0.4] — 2026-08-22
+
+- Added local title generation and semantic context naming for recorded evidence.
+- Improved the native visual tokens and public product presentation.
+
+## [1.0.3] — 2026-08-22
+
+- Hardened multilingual local transcription and recording recovery.
+- Added semantic summaries, action candidates, and connected-memory presentation.
+
 ## [1.0.2] — 2026-08-22
 
 - Made community DMG signing an explicit, verified release mode.
@@ -28,7 +46,10 @@ All notable changes are recorded here. Releases follow semantic versioning.
 - Added encrypted local storage, permission-aware capture and advanced diagnostics.
 - Established the native visual system and global capture shortcuts.
 
-[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.5...HEAD
+[1.0.5]: https://github.com/dhrvrm/openloop/compare/v1.0.4...v1.0.5
+[1.0.4]: https://github.com/dhrvrm/openloop/compare/v1.0.3...v1.0.4
+[1.0.3]: https://github.com/dhrvrm/openloop/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/dhrvrm/openloop/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/dhrvrm/openloop/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/dhrvrm/openloop/releases/tag/v1.0.0

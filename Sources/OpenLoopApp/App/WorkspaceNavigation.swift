@@ -66,7 +66,8 @@ enum WorkspaceOrientation {
     static let legacyTabOrder: [WorkspaceDestination.ID] = [.now, .context, .emerging, .ask, .act]
     static let quickCaptureShortcut = "⌘⇧Space  Quick Capture"
     static let voiceCaptureShortcut = "⌃⌥Space  Dictate & insert"
-    static let emptyCaptureGuidance = "Type a thought or press Command-Shift-Space from anywhere."
+    static let meetingRecordShortcut = "⌃⌥R  Record & transcribe"
+    static let emptyCaptureGuidance = "Use the capture bar below, or press Command-Shift-Space from anywhere."
 
     static func destination(_ id: WorkspaceDestination.ID) -> WorkspaceDestination {
         destinations.first(where: { $0.id == id })

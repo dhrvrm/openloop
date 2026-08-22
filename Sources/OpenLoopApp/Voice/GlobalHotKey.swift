@@ -20,6 +20,9 @@ struct GlobalHotKeyBinding: Equatable {
     static let recall = GlobalHotKeyBinding(
         keyCode: UInt32(kVK_ANSI_F), modifiers: UInt32(cmdKey | shiftKey), id: 3
     )
+    static let meetingRecord = GlobalHotKeyBinding(
+        keyCode: UInt32(kVK_ANSI_R), modifiers: UInt32(controlKey | optionKey), id: 4
+    )
 }
 
 final class GlobalHotKey: @unchecked Sendable {

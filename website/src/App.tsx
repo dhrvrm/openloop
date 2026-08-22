@@ -9,6 +9,8 @@ import {
   GithubLogo,
   List,
   Microphone,
+  Moon,
+  Sun,
   Waveform,
   X,
 } from "@phosphor-icons/react";
@@ -16,9 +18,9 @@ import {
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
 const repository = "https://github.com/dhrvrm/openloop";
-const version = "1.0.4";
+const version = "1.0.5";
 const download = `${repository}/releases/download/v${version}/OpenLoop-${version}-arm64.dmg`;
-const checksum = "0c4edd864736a0fd7d92129833c120eb47cfce917c9c104a5f7abdc85d18fe5f";
+const checksum = "4ac1b90292c216c7f4686c71f608159f27875aed5345fc177c371711bb50dca2";
 
 const nodes = [
   { label: "Project", x: 13, y: 39, tone: "quiet" },
@@ -52,27 +54,23 @@ function ProductFrame({ className = "", crop = false }: { className?: string; cr
   return (
     <div className={`product-frame ${className}`}>
       <div className="frame-bar"><i /><i /><i /><span>OpenLoop ADHD</span></div>
-      <div className={`product-demo${crop ? " product-demo--crop" : ""}`} role="img" aria-label="OpenLoop interface illustration showing task lists and local voice capture">
+      <div className={`product-demo${crop ? " product-demo--crop" : ""}`} role="img" aria-label="OpenLoop interface illustration showing an open task list and bottom voice capture bar">
         <aside className="demo-sidebar">
-          <b><span className="demo-logo" />OpenLoop</b>
+          <b><span className="demo-logo" /><span>OpenLoop<small>Private working memory</small></span></b>
           {[["Now", "4"], ["Upcoming", ""], ["Someday", ""], ["Inbox", "2"], ["Transcripts", "3"]].map(([label, count], index) => (
             <span className={index === 0 ? "is-current" : ""} key={label}><i />{label}<small>{count}</small></span>
           ))}
         </aside>
-        <div className="demo-content">
-          <small>FOCUS</small>
-          <h3>Now</h3>
-          <p>One useful next step. Everything else stays safe.</p>
-          <div className="demo-capture"><span>What should OpenLoop hold for you?</span><b>Record</b></div>
-          <div className="demo-task"><i /><div><b>Visitor research</b><span>Send the revised interview guide to Maya</span></div></div>
-          <div className="demo-task"><i /><div><b>Prototype review</b><span>Test the shorter museum-guide introduction</span></div></div>
+        <div className="demo-workspace">
+          <div className="demo-toolbar"><span>☰</span><b>Now</b><em>⌃⌥R · Recording started</em><span>◐</span><span>☷</span></div>
+          <div className="demo-content">
+            <h3><i>★</i>Now</h3>
+            <p>Pick one useful next step. Everything else stays safe.</p>
+            <div className="demo-task"><i /><div><b>Visitor research</b><span>Send the revised interview guide to Maya</span></div></div>
+            <div className="demo-task"><i /><div><b>Prototype review</b><span>Test the shorter museum-guide introduction</span></div></div>
+          </div>
+          <div className="demo-capture"><span>＋</span><p>Capture a thought…</p><b>●&nbsp; Record</b><i>≋</i><i>•••</i></div>
         </div>
-        <aside className="demo-inspector">
-          <small>LOCAL SYSTEM</small>
-          <b><i /> Listening</b>
-          <AudioMeter />
-          <dl><div><dt>Language</dt><dd>Auto</dd></div><div><dt>Model</dt><dd>Local</dd></div><div><dt>Storage</dt><dd>Encrypted</dd></div></dl>
-        </aside>
       </div>
     </div>
   );
@@ -167,6 +165,19 @@ function App() {
   const root = useRef<HTMLDivElement>(null);
   const heroObject = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    const requested = new URLSearchParams(window.location.search).get("theme");
+    if (requested === "light" || requested === "dark") return requested;
+    const saved = window.localStorage.getItem("openloop-site-theme");
+    if (saved === "light" || saved === "dark") return saved;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    window.localStorage.setItem("openloop-site-theme", theme);
+  }, [theme]);
 
   useGSAP(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -248,7 +259,17 @@ function App() {
       <button className="nav-menu" type="button" aria-expanded={menuOpen} aria-label="Toggle navigation" onClick={() => setMenuOpen(!menuOpen)}>
         {menuOpen ? <X /> : <List />}
       </button>
-      <a className="nav-download" href={download}>Download {version}<ArrowDown /></a>
+      <div className="nav-actions">
+        <button
+          className="theme-toggle"
+          type="button"
+          aria-label={`Use ${theme === "light" ? "dark" : "light"} theme`}
+          onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+        >
+          {theme === "light" ? <Moon /> : <Sun />}
+        </button>
+        <a className="nav-download" href={download}>Download {version}<ArrowDown /></a>
+      </div>
     </header>
 
     <main id="main">

@@ -200,7 +200,8 @@ final class MeetingTranscriptionController: ObservableObject {
             recordingStartedAt = nil
             start(
                 stagedURL: url,
-                sourceName: "OpenLoop recording.m4a",
+                sourceName: job.sourceName
+                    ?? MeetingTitleNaming.provisionalTitle(createdAt: job.startedAt ?? .now),
                 recordingDuration: recordedDuration,
                 recordingPeakDecibels: recordedPeak,
                 initialPreviewText: streamingSnapshot?.transcript.visibleText
@@ -243,7 +244,7 @@ final class MeetingTranscriptionController: ObservableObject {
             recordingStartedAt = startedAt
             job = MeetingJobPresentation(
                 stage: .recording,
-                sourceName: "Live recording",
+                sourceName: MeetingTitleNaming.provisionalTitle(createdAt: startedAt),
                 message: "Recording locally. Press Stop to transcribe.",
                 startedAt: startedAt,
                 modelIdentifier: transcriber.modelIdentifier,

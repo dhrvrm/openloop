@@ -21,6 +21,19 @@ struct MeetingTitleNamingTests {
         ) == "1970-01-01_0000-checkout-latency.m4a")
     }
 
+    @Test func provisionalTitleNamesTheMomentWithoutBrandFiller() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let title = MeetingTitleNaming.provisionalTitle(
+            createdAt: Date(timeIntervalSince1970: 0),
+            calendar: calendar,
+            locale: Locale(identifier: "en_US_POSIX")
+        )
+        #expect(title.contains("Voice note"))
+        #expect(title.contains("OpenLoop") == false)
+        #expect(title.contains("recording") == false)
+    }
+
     @Test func fallbackUsesTheFirstGroundedThought() throws {
         let transcript = try MeetingTranscript(
             sourceName: "recording.m4a",

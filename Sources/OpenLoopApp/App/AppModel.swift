@@ -60,6 +60,7 @@ final class AppModel: ObservableObject {
     @Published var streamingVoiceSession: VoiceSessionSnapshot?
     @Published var isAdvancedModeEnabled: Bool
     @Published var appearanceMode: OpenLoopAppearanceMode
+    @Published var shortcutFeedback: ShortcutFeedback?
     @Published var meetingLanguagePreference: MeetingLanguagePreference
     @Published var semanticNodes: [SemanticNode] = []
     @Published var semanticRelations: [SemanticRelation] = []
@@ -158,6 +159,7 @@ final class AppModel: ObservableObject {
         isAdvancedModeEnabled = defaults.bool(forKey: advancedModeKey)
         appearanceMode = defaults.string(forKey: appearanceModeKey)
             .flatMap(OpenLoopAppearanceMode.init(rawValue:)) ?? .system
+        shortcutFeedback = nil
         meetingLanguagePreference = .automatic
         voiceMode = defaults.string(forKey: voiceModeKey)
             .flatMap(VoiceMode.init(rawValue:)) ?? .polished
@@ -193,6 +195,15 @@ final class AppModel: ObservableObject {
             return
         }
         Task { await voiceController.toggle() }
+    }
+
+    func showShortcutFeedback(_ feedback: ShortcutFeedback) {
+        shortcutFeedback = feedback
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2.4))
+            guard self?.shortcutFeedback?.id == feedback.id else { return }
+            self?.shortcutFeedback = nil
+        }
     }
 
     func attachVoiceDictation(_ coordinator: any VoiceDictationCoordinating) {

@@ -16,17 +16,17 @@ The implementation source of truth is `Sources/OpenLoopApp/UI/OpenLoopVisualSyst
 
 | Role | Light | Dark | Use |
 |---|---:|---:|---|
-| Canvas | `#FBFAF7` | `#202228` | Main reading surface |
-| Sidebar | `#F3F4F6` | `#191B20` | Navigation plane |
+| Canvas | `#FEFEFE` | `#1E2024` | Main reading surface |
+| Sidebar | `#F4F5F7` | `#191B1F` | Navigation plane |
 | Raised | `#FFFFFF` | `#292C33` | Editors, recording, movable panels |
 | Selection | `#E3ECF7` | `#313B49` | Current row or destination |
-| Accent | `#3973B9` | `#71A5E3` | Primary action and navigation |
+| Accent | `#2F78D0` | `#6FA8EA` | Primary action and navigation |
 | Recording | `#D84A4A` | `#FF6666` | Live microphone and stop action |
 
 Spacing follows `4 / 8 / 12 / 20 / 32`, with deliberate larger edge space:
 
-- Main content: `48` horizontal, `68` top, `92` bottom.
-- Task row: at least `56` high.
+- Main content: `56` horizontal, `58` top, `154` bottom so the capture dock never crowds the list.
+- Task row: at least `60` high.
 - Sidebar row: at least `40` high.
 - Text input: at least `46` high; quick capture: `56` high.
 - Checkbox: `18` visual inside a `28` hit target.
@@ -74,6 +74,20 @@ Spacing follows `4 / 8 / 12 / 20 / 32`, with deliberate larger edge space:
 - Nodes display concepts and human recording titles, never raw storage filenames.
 - File paths, vector identifiers, and model routes are Advanced-only facts.
 - Selecting a node opens its evidence in the adjacent list; the graph is navigation, not the sole reading view.
+
+### Workspace top bar
+
+- The current destination stays at the leading edge, beside the sidebar control.
+- Every global shortcut produces a short-lived status pill in this bar, even when invoked from another application.
+- Appearance is an explicit three-way control: System, Light, or Dark.
+- Advanced diagnostics are opened from the trailing inspector control and never occupy the default workspace.
+
+### Capture dock
+
+- Capture remains visible at the bottom of every primary workspace rather than competing with the list header.
+- Text entry, red Record, dictation, import, and mode selection share one stable surface.
+- While recording, the dock expands to show the human recording name, elapsed state, live decibel waveform, partial words, and processing progress.
+- Recording starts globally with `Control–Option–R`; dictation and insertion uses `Control–Option–Space`; quick capture uses `Command–Shift–Space`; Ask uses `Command–Shift–F`.
 
 ## macOS composition
 
