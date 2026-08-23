@@ -20,7 +20,7 @@ gsap.registerPlugin(ScrollTrigger, useGSAP);
 const repository = "https://github.com/dhrvrm/openloop";
 const version = "1.0.6";
 const download = `${repository}/releases/download/v${version}/OpenLoop-${version}-arm64.dmg`;
-const checksum = "fbe00422d8c7c62b6566401dd51b3e27a9ccb28541766aaa6271e09c27087500";
+const checksum = "c14c58bc1079c7bd43b60d5aadfa3bc2a7daae9b197a2ab195837531287ae461";
 
 const nodes = [
   { label: "Project", x: 13, y: 39, tone: "quiet" },
@@ -411,7 +411,7 @@ function App() {
         </div>
         <div className="release-ledger" data-reveal>
           <dl>
-            <div><dt>Version</dt><dd>{version} (16)</dd></div>
+            <div><dt>Version</dt><dd>{version} (19)</dd></div>
             <div><dt>Download</dt><dd>49.3 MB · arm64</dd></div>
             <div><dt>Requires</dt><dd>macOS 15+ · Apple silicon</dd></div>
             <div><dt>Signing</dt><dd>Ad-hoc community build</dd></div>
