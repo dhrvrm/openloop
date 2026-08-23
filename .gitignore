@@ -1,6 +1,7 @@
 .DS_Store
 .worktrees/
 .artifacts/
+.eval-data/
 .build/
 .swiftpm/
 build/
@@ -8,6 +9,8 @@ DerivedData/
 website/node_modules/
 website/dist/
 *.tsbuildinfo
+__pycache__/
+*.pyc
 
 # Private evaluation inputs must never enter version control.
 Fixtures/audio/

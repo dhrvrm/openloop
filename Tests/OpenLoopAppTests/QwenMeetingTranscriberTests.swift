@@ -15,6 +15,22 @@ import Testing
         == "Vocabulary and names: one, two")
 }
 
+@Test func qwenWindowContextCarriesOnlyABoundedStableTranscriptTail() {
+    let prior = (1...80).map { "word\($0)" }.joined(separator: " ")
+    let value = QwenMeetingTranscriber.context(
+        from: ["SGLC", "Dhruv"],
+        priorTranscript: prior,
+        priorWordLimit: 4
+    )
+
+    #expect(value == "Vocabulary and names: SGLC, Dhruv\nPrior transcript context — continue after this; do not repeat it: word77 word78 word79 word80")
+    #expect(QwenMeetingTranscriber.context(
+        from: [],
+        priorTranscript: " previous stable words ",
+        priorWordLimit: 3
+    ) == "Prior transcript context — continue after this; do not repeat it: previous stable words")
+}
+
 @Test func qwenTokenBudgetTracksDurationWithinModelLimits() {
     #expect(QwenMeetingTranscriber.maximumTokens(for: 0) == 64)
     #expect(QwenMeetingTranscriber.maximumTokens(for: 10) == 180)

@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "storage_root": ".eval-data",
+  "corpora": [
+    {
+      "id": "common-voice-25-en-hi",
+      "purpose": ["clean", "accent", "english", "hindi"],
+      "official_url": "https://commonvoice.mozilla.org/en/datasets",
+      "license": "CC0-1.0",
+      "recommended_slice": "A speaker-disjoint sample from the English and Hindi test splits; do not train on the evaluation speakers.",
+      "access": "Download after accepting the Mozilla Data Collective terms. Store archives under .eval-data/common-voice/."
+    },
+    {
+      "id": "indicvoices-conversational-hi",
+      "purpose": ["spontaneous", "hindi", "indian-accents", "conversation"],
+      "official_url": "https://github.com/AI4Bharat/IndicVoices",
+      "license": "See the current IndicVoices dataset card and release terms before downloading audio.",
+      "recommended_slice": "Hindi conversational and extempore test examples, held out by speaker and district.",
+      "access": "The metadata bootstrap clones the official repository; audio access follows AI4Bharat's current dataset instructions."
+    },
+    {
+      "id": "fleurs-en-us-hi-in",
+      "purpose": ["clean", "english", "hindi", "language-identification"],
+      "official_url": "https://research.google/pubs/fleurs-few-shot-learning-evaluation-of-universal-representations-of-speech/",
+      "license": "CC-BY-4.0 dataset release; verify the current dataset card.",
+      "recommended_slice": "en_us and hi_in test splits only.",
+      "access": "Use the official Hugging Face/TFDS distribution referenced by the FLEURS project."
+    },
+    {
+      "id": "dns-challenge-5",
+      "purpose": ["noise", "reverberation", "speakerphone", "interfering-speaker"],
+      "official_url": "https://github.com/microsoft/DNS-Challenge",
+      "license": "Dataset components retain their documented licenses; inspect each downloaded component.",
+      "recommended_slice": "Use dev noise and impulse responses to generate deterministic 20, 10, 5, 0, and -5 dB SNR copies of held-out speech.",
+      "access": "The metadata bootstrap clones Microsoft's synthesizer and download manifests. Full training data is hundreds of gigabytes and is never downloaded by default."
+    },
+    {
+      "id": "voxconverse-0.3",
+      "purpose": ["diarization", "overlap", "speaker-count", "in-the-wild"],
+      "official_url": "https://github.com/joonson/voxconverse",
+      "license": "CC-BY-4.0 for research use; original video copyright remains with its owners.",
+      "recommended_slice": "Version 0.3 dev set with corrected RTTM labels.",
+      "access": "The metadata bootstrap clones official RTTM annotations. Follow the repository's current audio links."
+    }
+  ]
+}

@@ -11,10 +11,12 @@ final class SpeechAudioConditioner: @unchecked Sendable {
     private let targetRMSDecibels: Double
     private let silenceFloorDecibels: Double
     private let maximumGainDecibels: Double
+    private let presenceBoost: Float
 
     private var activeSampleRate: Int?
     private var previousInput: Float = 0
     private var previousOutput: Float = 0
+    private var previousPresenceInput: Float = 0
     private var smoothedGain: Float = 1
 
     init(
@@ -22,13 +24,15 @@ final class SpeechAudioConditioner: @unchecked Sendable {
         highPassCutoff: Double = 80,
         targetRMSDecibels: Double = -20,
         silenceFloorDecibels: Double = -52,
-        maximumGainDecibels: Double = 12
+        maximumGainDecibels: Double = 12,
+        presenceBoost: Float = 0.18
     ) {
         self.frameLength = max(1, frameLength)
         self.highPassCutoff = max(1, highPassCutoff)
         self.targetRMSDecibels = min(-6, targetRMSDecibels)
         self.silenceFloorDecibels = min(-30, silenceFloorDecibels)
         self.maximumGainDecibels = max(0, maximumGainDecibels)
+        self.presenceBoost = min(0.35, max(0, presenceBoost))
     }
 
     func process(_ samples: [Float], sampleRate: Int) -> [Float] {
@@ -71,7 +75,9 @@ final class SpeechAudioConditioner: @unchecked Sendable {
             let value = alpha * (previousOutput + cleanSample - previousInput)
             previousInput = cleanSample
             previousOutput = value
-            filtered.append(value)
+            let presence = value - previousPresenceInput
+            previousPresenceInput = value
+            filtered.append(value + presenceBoost * presence)
         }
 
         let meanSquare = filtered.reduce(0.0) { partial, sample in
@@ -99,6 +105,7 @@ final class SpeechAudioConditioner: @unchecked Sendable {
         activeSampleRate = sampleRate
         previousInput = 0
         previousOutput = 0
+        previousPresenceInput = 0
         smoothedGain = 1
     }
 }

@@ -6,6 +6,16 @@ All notable changes are recorded here. Releases follow semantic versioning.
 
 - Nothing yet.
 
+## [1.0.6] — 2026-08-23
+
+- Routed all Whisper decoding paths through the same conditioned 16 kHz signal.
+- Added conservative presence recovery for quiet and muffled speech.
+- Added VAD-aware Whisper chunking and low-energy Qwen boundaries for long recordings.
+- Carried bounded prior transcript context across Qwen windows without forcing a language.
+- Preserved Whisper word timestamps and SpeakerKit labels as the canonical meeting timeline.
+- Prevented broad witness spans from overwriting short speaker turns during transcript fusion.
+- Added public-corpus provenance, safe metadata bootstrapping, private gold-set guidance, and condition-level voice evaluation metrics.
+
 ## [1.0.5] — 2026-08-22
 
 - Added a global record-and-transcribe shortcut with visible status in the workspace top bar.
@@ -46,7 +56,8 @@ All notable changes are recorded here. Releases follow semantic versioning.
 - Added encrypted local storage, permission-aware capture and advanced diagnostics.
 - Established the native visual system and global capture shortcuts.
 
-[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.5...HEAD
+[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.6...HEAD
+[1.0.6]: https://github.com/dhrvrm/openloop/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/dhrvrm/openloop/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/dhrvrm/openloop/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/dhrvrm/openloop/compare/v1.0.2...v1.0.3

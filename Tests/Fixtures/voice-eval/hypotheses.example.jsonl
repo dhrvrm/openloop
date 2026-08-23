@@ -1,0 +1,2 @@
+{"id":"clean-en-001","hypothesis":"Ship the SGLC release on Friday.","languages":["en"],"latency_ms":780,"segments":[{"speaker":"Speaker 1","start":0.0,"end":2.0,"text":"Ship the SGLC release on Friday."}]}
+{"id":"noisy-hinglish-001","hypothesis":"I was thinking कि release time कम कर सकते हैं for SGLC releases.","languages":["en","hi","en","hi","en"],"latency_ms":1180,"segments":[{"speaker":"Speaker 1","start":0.0,"end":3.1,"text":"I was thinking कि release time"},{"speaker":"Speaker 2","start":3.1,"end":6.0,"text":"कम कर सकते हैं for SGLC releases."}]}

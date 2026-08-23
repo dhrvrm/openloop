@@ -145,7 +145,6 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
         guard !audio.isEmpty else { throw MeetingTranscriptionError.emptyTranscript }
         let duration = Double(audio.count) / Double(WhisperKit.sampleRate)
         let vocabulary = await contextProvider()
-        let context = Self.context(from: vocabulary)
 
         await progress(.init(
             stage: .transcribing,
@@ -158,12 +157,16 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
             try Task.checkCancellation()
             let windowAudio = Array(audio[window.startSample..<window.endSample])
             let windowDuration = Double(window.sampleCount) / Double(WhisperKit.sampleRate)
+            let priorTranscript = segments.map(\.text).joined(separator: " ")
             let text = model.transcribe(
                 audio: windowAudio,
                 sampleRate: WhisperKit.sampleRate,
                 language: languageCode,
                 maxTokens: Self.maximumTokens(for: windowDuration),
-                context: context
+                context: Self.context(
+                    from: vocabulary,
+                    priorTranscript: priorTranscript
+                )
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
                 segments.append(try TranscriptSegment(
@@ -238,6 +241,15 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
     }
 
     static func context(from phrases: [String], limit: Int = 80) -> String? {
+        context(from: phrases, priorTranscript: "", limit: limit)
+    }
+
+    static func context(
+        from phrases: [String],
+        priorTranscript: String,
+        limit: Int = 80,
+        priorWordLimit: Int = 48
+    ) -> String? {
         var seen = Set<String>()
         let normalized = phrases.compactMap { phrase -> String? in
             let value = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -248,8 +260,18 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
             )
             return seen.insert(key).inserted ? value : nil
         }.prefix(max(0, limit))
-        guard !normalized.isEmpty else { return nil }
-        return "Vocabulary and names: " + normalized.joined(separator: ", ")
+        var parts: [String] = []
+        if !normalized.isEmpty {
+            parts.append("Vocabulary and names: " + normalized.joined(separator: ", "))
+        }
+        let priorWords = priorTranscript.split(whereSeparator: \.isWhitespace)
+        if priorWordLimit > 0, !priorWords.isEmpty {
+            let tail = priorWords.suffix(priorWordLimit).joined(separator: " ")
+            parts.append(
+                "Prior transcript context — continue after this; do not repeat it: \(tail)"
+            )
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n")
     }
 
     static func maximumTokens(for duration: TimeInterval) -> Int {

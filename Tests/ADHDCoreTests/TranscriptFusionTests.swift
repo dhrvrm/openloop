@@ -104,3 +104,23 @@ private func evidence(
     #expect(result.spans[1].resolution == .reviewRequired)
     #expect(result.selectedText == "one\ntwo")
 }
+
+@Test func fusionDoesNotReplaceASpeakerTurnWithAWholeMeetingWindow() {
+    let speakerTurn = evidence(engine: "whisper", text: "Ship the SGVC release", start: 4, end: 7)
+    let broadWitness = evidence(
+        engine: "qwen",
+        text: "Earlier context. Ship the SGLC release. Later context.",
+        start: 0,
+        end: 18
+    )
+
+    let result = TranscriptFusionPolicy().fuse(
+        primary: [speakerTurn],
+        secondary: [broadWitness],
+        expectedDomainTerms: ["SGLC"]
+    )
+
+    #expect(result.spans[0].selectedText == speakerTurn.text)
+    #expect(result.spans[0].secondary == nil)
+    #expect(result.spans[0].resolution == .reviewRequired)
+}

@@ -93,9 +93,14 @@ public struct TranscriptFusionResult: Codable, Equatable, Sendable {
 
 public struct TranscriptFusionPolicy: Equatable, Sendable {
     public let lowConfidenceThreshold: Double
+    public let minimumTemporalCoverage: Double
 
-    public init(lowConfidenceThreshold: Double = 0.72) {
+    public init(
+        lowConfidenceThreshold: Double = 0.72,
+        minimumTemporalCoverage: Double = 0.5
+    ) {
         self.lowConfidenceThreshold = lowConfidenceThreshold
+        self.minimumTemporalCoverage = min(1, max(0, minimumTemporalCoverage))
     }
 
     public func reasonsToRequestSecondary(
@@ -128,7 +133,8 @@ public struct TranscriptFusionPolicy: Equatable, Sendable {
             )
             let secondaryIndex = Self.bestMatchIndex(
                 for: primaryEvidence,
-                candidates: unusedSecondary
+                candidates: unusedSecondary,
+                minimumTemporalCoverage: minimumTemporalCoverage
             )
             let secondaryEvidence = secondaryIndex.map { unusedSecondary.remove(at: $0) }
 
@@ -176,15 +182,29 @@ public struct TranscriptFusionPolicy: Equatable, Sendable {
 
     private static func bestMatchIndex(
         for primary: TranscriptEvidence,
-        candidates: [TranscriptEvidence]
+        candidates: [TranscriptEvidence],
+        minimumTemporalCoverage: Double
     ) -> Int? {
         candidates.indices.max { lhs, rhs in
             overlap(primary, candidates[lhs]) < overlap(primary, candidates[rhs])
-        }.flatMap { overlap(primary, candidates[$0]) > 0 ? $0 : nil }
+        }.flatMap { index in
+            temporalCoverage(primary, candidates[index]) >= minimumTemporalCoverage
+                ? index
+                : nil
+        }
     }
 
     private static func overlap(_ lhs: TranscriptEvidence, _ rhs: TranscriptEvidence) -> Double {
         max(0, min(lhs.end, rhs.end) - max(lhs.start, rhs.start))
+    }
+
+    private static func temporalCoverage(
+        _ lhs: TranscriptEvidence,
+        _ rhs: TranscriptEvidence
+    ) -> Double {
+        let longestDuration = max(lhs.end - lhs.start, rhs.end - rhs.start)
+        guard longestDuration > 0 else { return 0 }
+        return overlap(lhs, rhs) / longestDuration
     }
 
     private static func normalized(_ text: String) -> String {

@@ -12,17 +12,20 @@ struct LongFormAudioSegmenter: Sendable {
     let maximumWindowDuration: TimeInterval
     let maximumSilenceDuration: TimeInterval
     let paddingDuration: TimeInterval
+    let boundarySearchDuration: TimeInterval
 
     init(
         frameDuration: TimeInterval = 0.030,
         maximumWindowDuration: TimeInterval = 18,
         maximumSilenceDuration: TimeInterval = 0.45,
-        paddingDuration: TimeInterval = 0.20
+        paddingDuration: TimeInterval = 0.20,
+        boundarySearchDuration: TimeInterval = 1.5
     ) {
         self.frameDuration = frameDuration
         self.maximumWindowDuration = maximumWindowDuration
         self.maximumSilenceDuration = maximumSilenceDuration
         self.paddingDuration = paddingDuration
+        self.boundarySearchDuration = max(0, boundarySearchDuration)
     }
 
     func windows(samples: [Float], sampleRate: Int) -> [SpeechAudioWindow] {
@@ -64,10 +67,14 @@ struct LongFormAudioSegmenter: Sendable {
         return frameRanges.flatMap { range -> [SpeechAudioWindow] in
             let start = max(0, range.lowerBound * frameSize - paddingSamples)
             let end = min(samples.count, (range.upperBound + 1) * frameSize + paddingSamples)
-            return Self.fixedWindows(
+            return Self.quietBoundaryWindows(
+                samples: samples,
                 startSample: start,
                 endSample: end,
-                maximumSamples: maximumSamples
+                maximumSamples: maximumSamples,
+                sampleRate: sampleRate,
+                searchDuration: boundarySearchDuration,
+                frameDuration: frameDuration
             )
         }
     }
@@ -92,6 +99,66 @@ struct LongFormAudioSegmenter: Sendable {
             start = end
         }
         return result
+    }
+
+    private static func quietBoundaryWindows(
+        samples: [Float],
+        startSample: Int,
+        endSample: Int,
+        maximumSamples: Int,
+        sampleRate: Int,
+        searchDuration: TimeInterval,
+        frameDuration: TimeInterval
+    ) -> [SpeechAudioWindow] {
+        var result: [SpeechAudioWindow] = []
+        var start = startSample
+        let searchSamples = max(0, Int(searchDuration * Double(sampleRate)))
+        let frameSamples = max(1, Int(frameDuration * Double(sampleRate)))
+
+        while endSample - start > maximumSamples {
+            let ideal = start + maximumSamples
+            let searchLower = max(start + maximumSamples / 2, ideal - searchSamples)
+            let boundary = quietestBoundary(
+                samples: samples,
+                range: searchLower..<ideal,
+                frameSamples: frameSamples
+            )
+            let safeBoundary = min(ideal, max(start + 1, boundary))
+            result.append(SpeechAudioWindow(startSample: start, endSample: safeBoundary))
+            start = safeBoundary
+        }
+        if start < endSample {
+            result.append(SpeechAudioWindow(startSample: start, endSample: endSample))
+        }
+        return result
+    }
+
+    private static func quietestBoundary(
+        samples: [Float],
+        range: Range<Int>,
+        frameSamples: Int
+    ) -> Int {
+        guard !range.isEmpty else { return range.lowerBound }
+        var bestBoundary = range.upperBound
+        var bestEnergy = Double.greatestFiniteMagnitude
+        var candidate = range.lowerBound
+        while candidate <= range.upperBound {
+            let lower = max(0, candidate - frameSamples / 2)
+            let upper = min(samples.count, candidate + frameSamples / 2)
+            guard lower < upper else {
+                candidate += frameSamples
+                continue
+            }
+            let energy = samples[lower..<upper].reduce(0.0) {
+                $0 + Double($1 * $1)
+            } / Double(upper - lower)
+            if energy < bestEnergy || (energy == bestEnergy && candidate > bestBoundary) {
+                bestEnergy = energy
+                bestBoundary = candidate
+            }
+            candidate += frameSamples
+        }
+        return bestBoundary
     }
 
     private static func decibels(_ samples: [Float]) -> Float {

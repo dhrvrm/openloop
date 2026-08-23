@@ -105,7 +105,17 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         languageCode: String?,
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
     ) async throws -> LocalTranscriptionOutput {
-        let duration = await Self.audioDuration(audioURL)
+        audioConditioner.reset()
+        let audio = audioConditioner.process(
+            try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path),
+            sampleRate: WhisperKit.sampleRate
+        )
+        guard !audio.isEmpty else { throw MeetingTranscriptionError.emptyTranscript }
+        let assetDuration = await Self.audioDuration(audioURL)
+        let duration = max(
+            assetDuration,
+            Double(audio.count) / Double(WhisperKit.sampleRate)
+        )
         let pipeline = try await loadPipeline(progress: progress)
         await progress(.init(
             stage: .preparingAudio,
@@ -118,11 +128,6 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         let options = Self.decodingOptions(languageCode: languageCode)
         let windows: [TranscriptionResult]
         if languageCode == nil, duration > 0, duration <= 45 {
-            audioConditioner.reset()
-            let audio = audioConditioner.process(
-                try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path),
-                sampleRate: WhisperKit.sampleRate
-            )
             let ranges = UtteranceAudioChunker.ranges(in: audio)
             let chunks = try await plannedAutomaticChunks(
                 audio: audio,
@@ -147,8 +152,8 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                             fraction: 0.1,
                             message: "Rechecking the complete recording locally"
                         ))
-                        windows = try await transcribeFile(
-                            audioURL: audioURL,
+                        windows = try await transcribeAudio(
+                            audio: audio,
                             pipeline: pipeline,
                             options: options,
                             duration: duration,
@@ -163,8 +168,8 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                         fraction: 0.1,
                         message: "A language chunk failed; rechecking the complete recording locally"
                     ))
-                    windows = try await transcribeFile(
-                        audioURL: audioURL,
+                    windows = try await transcribeAudio(
+                        audio: audio,
                         pipeline: pipeline,
                         options: options,
                         duration: duration,
@@ -173,8 +178,8 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                     )
                 }
             } else {
-                windows = try await transcribeFile(
-                    audioURL: audioURL,
+                windows = try await transcribeAudio(
+                    audio: audio,
                     pipeline: pipeline,
                     options: options,
                     duration: duration,
@@ -183,8 +188,8 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                 )
             }
         } else {
-            windows = try await transcribeFile(
-                audioURL: audioURL,
+            windows = try await transcribeAudio(
+                audio: audio,
                 pipeline: pipeline,
                 options: options,
                 duration: duration,
@@ -198,7 +203,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         if speakerDiarizationEnabled {
             do {
                 mapped = try await diarize(
-                    audioURL: audioURL,
+                    audio: audio,
                     transcription: windows,
                     progress: progress
                 )
@@ -289,8 +294,8 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         return chunks
     }
 
-    private func transcribeFile(
-        audioURL: URL,
+    private func transcribeAudio(
+        audio: [Float],
         pipeline: WhisperKit,
         options: DecodingOptions,
         duration: TimeInterval,
@@ -318,17 +323,11 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             }
             return scheduled && !Task.isCancelled
         }
-        let input = AudioInputOptions(audioLoadingMode: .incremental)
-        let results = await pipeline.transcribeWithResults(
-            audioPaths: [audioURL.path],
-            audioInputOptions: input,
+        return try await pipeline.transcribe(
+            audioArray: audio,
             decodeOptions: options,
             callback: callback
         )
-        guard let first = results.first else {
-            throw MeetingTranscriptionError.emptyTranscript
-        }
-        return try first.get()
     }
 
     private func transcribeUtterances(
@@ -389,7 +388,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
     }
 
     private func diarize(
-        audioURL: URL,
+        audio: [Float],
         transcription: [TranscriptionResult],
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
     ) async throws -> (segments: [TranscriptSegment], language: String?) {
@@ -398,7 +397,6 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             fraction: 0,
             message: "Separating speakers locally"
         ))
-        let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path)
         let speakerKit: SpeakerKit
         if let loaded = self.speakerKit {
             speakerKit = loaded
@@ -592,7 +590,8 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             withoutTimestamps: false,
             wordTimestamps: true,
             promptTokens: nil,
-            concurrentWorkerCount: 4
+            concurrentWorkerCount: 4,
+            chunkingStrategy: .vad
         )
     }
 

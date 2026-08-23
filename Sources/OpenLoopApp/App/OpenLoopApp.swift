@@ -254,8 +254,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
             let meetingController = MeetingTranscriptionController(
                 repository: repository,
                 transcriber: AccuracyFirstTranscriber(
-                    primary: qwenTranscriber,
-                    witness: whisperTranscriber,
+                    primary: whisperTranscriber,
+                    witness: qwenTranscriber,
                     expectedDomainTerms: {
                         (try? await voiceLearning.vocabulary(limit: 80)) ?? []
                     }

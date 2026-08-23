@@ -29,6 +29,21 @@ private actor FusionTestTranscriber: MeetingTranscribing {
         }
     }
 
+    init(
+        modelIdentifier: String,
+        segments: [TranscriptSegment],
+        detectedLanguage: String? = nil
+    ) {
+        self.modelIdentifier = modelIdentifier
+        failure = false
+        output = LocalTranscriptionOutput(
+            duration: segments.last?.end ?? 0,
+            detectedLanguage: detectedLanguage,
+            modelIdentifier: modelIdentifier,
+            segments: segments
+        )
+    }
+
     func transcribe(
         audioURL: URL,
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
@@ -115,4 +130,42 @@ private actor FusionTestTranscriber: MeetingTranscribing {
 
     #expect(output.segments.map(\.text) == ["fallback text"])
     #expect(await witness.callCount() == 1)
+}
+
+@Test func accuracyFirstPreservesCanonicalSpeakerTimelineWhenWitnessCorrectsText() async throws {
+    let canonicalID = UUID()
+    let primary = FusionTestTranscriber(
+        modelIdentifier: "whisper-large-v3",
+        segments: [try TranscriptSegment(
+            id: canonicalID,
+            start: 4,
+            end: 7,
+            text: "Ship the SGVC release",
+            speaker: "Speaker 2"
+        )]
+    )
+    let witness = FusionTestTranscriber(
+        modelIdentifier: "qwen",
+        segments: [try TranscriptSegment(
+            start: 4,
+            end: 7,
+            text: "Ship the SGLC release"
+        )]
+    )
+    let transcriber = AccuracyFirstTranscriber(
+        primary: primary,
+        witness: witness,
+        expectedDomainTerms: { ["SGLC"] }
+    )
+
+    let output = try await transcriber.transcribe(
+        audioURL: URL(fileURLWithPath: "/tmp/test.wav")
+    ) { _ in }
+
+    let segment = try #require(output.segments.first)
+    #expect(segment.id == canonicalID)
+    #expect(segment.start == 4)
+    #expect(segment.end == 7)
+    #expect(segment.speaker == "Speaker 2")
+    #expect(segment.text == "Ship the SGLC release")
 }
