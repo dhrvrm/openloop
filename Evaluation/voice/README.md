@@ -53,6 +53,33 @@ Public corpora will not reproduce your microphone, room, vocabulary, pace, or Hi
 
 Copy [`manifest.example.jsonl`](manifest.example.jsonl) and add one JSON object per line. Audio is identified by path for local runs; third-party or private audio is never committed.
 
+## Run OpenLoop's engines without opening the app
+
+Build the native executable, then run its headless evaluation command from the repository root:
+
+```bash
+swift build -c release --product OpenLoopADHD
+
+.build/release/OpenLoopADHD --voice-eval \
+  --manifest .eval-data/private/release.jsonl \
+  --output .eval-data/results/openloop-local.jsonl \
+  --engine dictation \
+  --language auto
+```
+
+This command is intercepted before AppKit, the vault, global shortcuts, or any window is initialized. It does not activate OpenLoop or ask for microphone/keychain access. Audio files are read locally from the paths in the manifest. The first run may download the selected local speech models; later rows in the same run reuse the resident models.
+
+Engine choices mirror the product paths:
+
+- `dictation` — quality Qwen primary, Whisper cross-check; the default for global voice typing.
+- `meeting` — timestamped Whisper primary, quality Qwen cross-check; the default for imported meetings.
+- `qwen` — isolate the quality multilingual recognizer.
+- `whisper` — isolate the timestamped recognizer and diarization path.
+
+`--language auto` is the default and is the correct setting for mixed Hindi and English. A manifest row may set `"language_hint":"hi"` or `"language_hint":"en"` only when the recording is intentionally single-language. `--data-directory` can point at an isolated model cache; otherwise the command reuses `~/Library/Application Support/OpenLoopADHD`.
+
+The output is one JSON object per case. It contains the literal hypothesis, ordered language-script runs, speaker segments, model identifier, error text, and full-call latency. The first row is marked `cold_start`; warm percentile metrics exclude it.
+
 ## Score a candidate
 
 Export one hypothesis row per reference using the shape in `Tests/Fixtures/voice-eval/hypotheses.example.jsonl`, then run:
@@ -68,12 +95,15 @@ For a release gate:
 ```bash
 python3 Scripts/evals/voice_quality_eval.py \
   --manifest .eval-data/private/release.jsonl \
-  --hypotheses .eval-data/results/openloop-1.0.6.jsonl \
-  --max-wer 0.12 \
+  --hypotheses .eval-data/results/openloop-local.jsonl \
+  --max-wer 0.10 \
   --max-devanagari-cer 0.08 \
   --max-diarization-error 0.15 \
+  --max-dropped-span-rate 0.01 \
+  --max-empty-hypothesis-rate 0.005 \
+  --max-warm-p95-ms 900 \
   --min-language-sequence-accuracy 0.95 \
-  --output .eval-data/results/openloop-1.0.6-report.json
+  --output .eval-data/results/openloop-local-report.json
 ```
 
 Treat those values as internal targets, not proof of market leadership. A “better than” claim additionally needs the same frozen audio, transcription convention, and scoring code applied to the competitor output.

@@ -967,6 +967,17 @@ enum ContextTrailMenuPresentation {
 @main
 struct OpenLoopApplication {
     static func main() {
+        let arguments = Array(CommandLine.arguments.dropFirst())
+        if VoiceEvaluationCommand.isRequested(arguments) {
+            do {
+                VoiceEvaluationCommandExecutor.execute(
+                    try VoiceEvaluationCommand(arguments: arguments)
+                )
+            } catch {
+                FileHandle.standardError.write(Data("voice-eval-error: \(error)\n".utf8))
+                exit(EXIT_FAILURE)
+            }
+        }
         let application = NSApplication.shared
         let delegate = AppDelegate()
         application.delegate = delegate

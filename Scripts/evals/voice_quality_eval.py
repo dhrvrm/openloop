@@ -208,6 +208,14 @@ def safe_rate(numerator: float, denominator: float) -> float | None:
     return numerator / denominator if denominator > 0 else None
 
 
+def percentile(values: Iterable[float], fraction: float) -> float | None:
+    ordered = sorted(value for value in values if math.isfinite(value) and value >= 0)
+    if not ordered:
+        return None
+    rank = max(1, math.ceil(min(max(fraction, 0), 1) * len(ordered)))
+    return ordered[rank - 1]
+
+
 def report_from_counts(counts: dict[str, float]) -> dict[str, Any]:
     cases = counts.get("cases", 0)
     language_error = safe_rate(
@@ -232,7 +240,73 @@ def report_from_counts(counts: dict[str, float]) -> dict[str, Any]:
         "diarization_error_rate": safe_rate(
             counts.get("diarization_errors", 0), counts.get("diarization_reference", 0)
         ),
-        "mean_latency_ms": safe_rate(counts.get("latency_total_ms", 0), cases),
+    }
+
+
+def report_for_cases(
+    cases: list[tuple[dict[str, float], dict[str, Any]]]
+) -> dict[str, Any]:
+    report = report_from_counts(merge_counts(counts for counts, _ in cases))
+    latencies = [
+        float(hypothesis["latency_ms"])
+        for _, hypothesis in cases
+        if isinstance(hypothesis.get("latency_ms"), (int, float))
+    ]
+    warm_latencies = [
+        float(hypothesis["latency_ms"])
+        for _, hypothesis in cases
+        if isinstance(hypothesis.get("latency_ms"), (int, float))
+        and not bool(hypothesis.get("cold_start", False))
+    ]
+    case_count = len(cases)
+    empty_count = sum(
+        not str(hypothesis.get("hypothesis", "")).strip()
+        for _, hypothesis in cases
+    )
+    report.update({
+        "mean_latency_ms": safe_rate(sum(latencies), len(latencies)),
+        "latency_p50_ms": percentile(latencies, 0.50),
+        "latency_p95_ms": percentile(latencies, 0.95),
+        "warm_latency_p50_ms": percentile(warm_latencies, 0.50),
+        "warm_latency_p95_ms": percentile(warm_latencies, 0.95),
+        "transcription_failures": sum(
+            bool(str(hypothesis.get("error", "")).strip())
+            for _, hypothesis in cases
+        ),
+        "empty_hypothesis_rate": safe_rate(empty_count, case_count),
+    })
+    return report
+
+
+def build_report(
+    references: list[dict[str, Any]],
+    hypotheses: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    case_results: list[tuple[str, dict[str, float], dict[str, Any]]] = []
+    for reference in references:
+        hypothesis = hypotheses.get(str(reference["id"]), {"id": reference["id"]})
+        case_results.append((
+            str(reference.get("condition", "unspecified")),
+            case_counts(reference, hypothesis),
+            hypothesis,
+        ))
+
+    grouped: dict[str, list[tuple[dict[str, float], dict[str, Any]]]] = defaultdict(list)
+    for condition, counts, hypothesis in case_results:
+        grouped[condition].append((counts, hypothesis))
+    return {
+        "schema_version": 2,
+        "overall": report_for_cases([
+            (counts, hypothesis) for _, counts, hypothesis in case_results
+        ]),
+        "conditions": {
+            condition: report_for_cases(values)
+            for condition, values in sorted(grouped.items())
+        },
+        "missing_hypotheses": [
+            reference["id"] for reference in references
+            if str(reference["id"]) not in hypotheses
+        ],
     }
 
 
@@ -244,6 +318,9 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--max-wer", type=float)
     parser.add_argument("--max-devanagari-cer", type=float)
     parser.add_argument("--max-diarization-error", type=float)
+    parser.add_argument("--max-dropped-span-rate", type=float)
+    parser.add_argument("--max-empty-hypothesis-rate", type=float)
+    parser.add_argument("--max-warm-p95-ms", type=float)
     parser.add_argument("--min-language-sequence-accuracy", type=float)
     return parser.parse_args()
 
@@ -251,26 +328,8 @@ def parse_arguments() -> argparse.Namespace:
 def main() -> int:
     arguments = parse_arguments()
     references = read_jsonl(arguments.manifest)
-    hypotheses = {row["id"]: row for row in read_jsonl(arguments.hypotheses)}
-    case_results: list[tuple[str, dict[str, float]]] = []
-    for reference in references:
-        hypothesis = hypotheses.get(reference["id"], {"id": reference["id"]})
-        case_results.append((str(reference.get("condition", "unspecified")), case_counts(reference, hypothesis)))
-
-    grouped: dict[str, list[dict[str, float]]] = defaultdict(list)
-    for condition, counts in case_results:
-        grouped[condition].append(counts)
-    report = {
-        "schema_version": 1,
-        "overall": report_from_counts(merge_counts(counts for _, counts in case_results)),
-        "conditions": {
-            condition: report_from_counts(merge_counts(values))
-            for condition, values in sorted(grouped.items())
-        },
-        "missing_hypotheses": [
-            reference["id"] for reference in references if reference["id"] not in hypotheses
-        ],
-    }
+    hypotheses = {str(row["id"]): row for row in read_jsonl(arguments.hypotheses)}
+    report = build_report(references, hypotheses)
     rendered = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True)
     if arguments.output:
         arguments.output.parent.mkdir(parents=True, exist_ok=True)
@@ -281,6 +340,9 @@ def main() -> int:
         (arguments.max_wer, report["overall"]["wer"], lambda actual, limit: actual <= limit),
         (arguments.max_devanagari_cer, report["overall"]["devanagari_cer"], lambda actual, limit: actual <= limit),
         (arguments.max_diarization_error, report["overall"]["diarization_error_rate"], lambda actual, limit: actual <= limit),
+        (arguments.max_dropped_span_rate, report["overall"]["dropped_span_rate"], lambda actual, limit: actual <= limit),
+        (arguments.max_empty_hypothesis_rate, report["overall"]["empty_hypothesis_rate"], lambda actual, limit: actual <= limit),
+        (arguments.max_warm_p95_ms, report["overall"]["warm_latency_p95_ms"], lambda actual, limit: actual <= limit),
         (arguments.min_language_sequence_accuracy, report["overall"]["language_sequence_accuracy"], lambda actual, limit: actual >= limit),
     ]
     return 2 if any(limit is not None and (actual is None or not check(actual, limit)) for limit, actual, check in gates) else 0
