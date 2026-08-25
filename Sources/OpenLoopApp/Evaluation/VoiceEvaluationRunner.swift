@@ -77,6 +77,7 @@ enum VoiceEvaluationLanguageDetector {
     static func sequence(in text: String) -> [String] {
         var result: [String] = []
         for scalar in text.unicodeScalars {
+            guard isLanguageBearing(scalar) else { continue }
             let language: String?
             switch scalar.value {
             case 0x0041...0x005A, 0x0061...0x007A, 0x00C0...0x024F:
@@ -91,6 +92,17 @@ enum VoiceEvaluationLanguageDetector {
             }
         }
         return result
+    }
+
+    private static func isLanguageBearing(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.properties.generalCategory {
+        case .uppercaseLetter, .lowercaseLetter, .titlecaseLetter,
+             .modifierLetter, .otherLetter, .nonspacingMark,
+             .spacingMark, .enclosingMark:
+            true
+        default:
+            false
+        }
     }
 }
 
