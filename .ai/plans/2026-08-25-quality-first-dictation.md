@@ -44,7 +44,7 @@ enum AudioCapturePurpose: Equatable, Sendable {
 
 Store `activeCapturePurpose` when recording starts, select `dictationTranscriber ?? transcriber` when finalization begins, and pass `.dictation` from `AppModel.toggleSystemDictation()` and `.meeting` from ordinary recording.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run the command from Step 2. Expected: all controller tests pass.
 
@@ -85,7 +85,7 @@ let dictationTranscriber = AccuracyFirstTranscriber(
 
 Inject both into the controller. This makes dictation text quality independent from meeting diarization without loading duplicate Qwen models.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run the command from Step 2. Expected: pass.
 
@@ -109,7 +109,7 @@ xcodebuild test -scheme OpenLoopADHD-Package -destination 'platform=macOS' -only
 
 Render a top-center non-activating panel with a 20-point continuous corner radius, material-backed neutral surface, red recording state, symmetric dB waveform, live partial text, and explicit `Listening`, `Improving accuracy`, `Inserted`, and failure states. Keep cancel/stop actions keyboard accessible and size the window from its fitting content after each state change.
 
-- [ ] **Step 4: Run the HUD tests**
+- [x] **Step 4: Run the HUD tests**
 
 Run the command from Step 2. Expected: pass.
 
@@ -118,7 +118,7 @@ Run the command from Step 2. Expected: pass.
 **Files:**
 - Modify: `.ai/plans/2026-08-25-quality-first-dictation.md`
 
-- [ ] **Step 1: Run only affected suites together**
+- [x] **Step 1: Run only affected suites together**
 
 ```bash
 xcodebuild test -scheme OpenLoopADHD-Package -destination 'platform=macOS' \
@@ -138,7 +138,7 @@ xcodebuild build -scheme OpenLoopADHD-Package -configuration Release -destinatio
 
 Expected: `BUILD SUCCEEDED`.
 
-- [ ] **Step 3: Record evidence and commit**
+- [x] **Step 3: Record evidence and commit**
 
 Mark completed checkboxes, record the exact selected-test and build results below the task list, then commit the focused change as `feat: add quality-first global dictation`.
 
@@ -149,3 +149,4 @@ Mark completed checkboxes, record the exact selected-test and build results belo
 - `git diff --check` — passed on 2026-08-25.
 - Focused `xcodebuild test` — unavailable because `xcode-select` points to Command Line Tools rather than Xcode.
 - Focused `swift test` — unavailable because this Command Line Tools installation does not provide the Swift `Testing` module. The regression tests are committed for Xcode/CI execution; they are not represented as passing locally.
+- GitHub Actions CI run `32811316603` — passed on 2026-08-25. The native Xcode build and complete native test target passed in 4 minutes 20 seconds; the website build passed in 16 seconds.
