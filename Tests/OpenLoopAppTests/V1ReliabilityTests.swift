@@ -78,6 +78,39 @@ struct V1ReliabilityTests {
         ) == .failure)
     }
 
+    @Test func globalVoiceHUDMorphsFromListeningToAccuracyPassAndInsertion() {
+        let recording = VoiceHUDPresentation.content(
+            phase: .recording,
+            statusText: "Speech detected",
+            hasLiveTranscript: true
+        )
+        #expect(recording.title == "Listening")
+        #expect(recording.tone == .recording)
+        #expect(recording.showsMeter)
+        #expect(recording.showsTranscript)
+        #expect(VoiceHUDPresentation.panelSize(for: .recording).height > 150)
+
+        let processing = VoiceHUDPresentation.content(
+            phase: .processing,
+            statusText: "Cross-checking uncertain multilingual spans locally",
+            hasLiveTranscript: true
+        )
+        #expect(processing.title == "Improving accuracy")
+        #expect(processing.detail.contains("Cross-checking"))
+        #expect(!processing.showsMeter)
+        #expect(processing.showsTranscript)
+
+        let success = VoiceHUDPresentation.content(
+            phase: .success,
+            statusText: "Inserted with Accessibility",
+            hasLiveTranscript: false
+        )
+        #expect(success.title == "Inserted")
+        #expect(success.tone == .success)
+        #expect(VoiceHUDPresentation.panelSize(for: .success).width
+            < VoiceHUDPresentation.panelSize(for: .recording).width)
+    }
+
     @Test func visibleRecordControlNamesEveryVoiceState() {
         #expect(VoiceRecordButtonPresentation.title(for: VoiceCapturePresentation()) == "Record")
         #expect(VoiceRecordButtonPresentation.title(for: VoiceCapturePresentation(

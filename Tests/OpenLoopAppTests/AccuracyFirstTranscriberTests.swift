@@ -169,3 +169,34 @@ private actor FusionTestTranscriber: MeetingTranscribing {
     #expect(segment.speaker == "Speaker 2")
     #expect(segment.text == "Ship the SGLC release")
 }
+
+@Test func accuracyFirstAggregatesTimedWitnessForOneSpanDictationConsensus() async throws {
+    let primary = FusionTestTranscriber(
+        modelIdentifier: "qwen-large",
+        segments: [try TranscriptSegment(
+            start: 0,
+            end: 6,
+            text: "Can we reduce SGVC release time?"
+        )]
+    )
+    let witness = FusionTestTranscriber(
+        modelIdentifier: "whisper-large-v3",
+        segments: [
+            try TranscriptSegment(start: 0, end: 2.5, text: "Can we reduce"),
+            try TranscriptSegment(start: 2.5, end: 6, text: "SGLC release time?"),
+        ]
+    )
+    let transcriber = AccuracyFirstTranscriber(
+        primary: primary,
+        witness: witness,
+        expectedDomainTerms: { ["SGLC"] }
+    )
+
+    let output = try await transcriber.transcribe(
+        audioURL: URL(fileURLWithPath: "/tmp/test.wav")
+    ) { _ in }
+
+    #expect(output.segments.map(\.text) == ["Can we reduce SGLC release time?"])
+    #expect(output.fusionEvidence?.spans[0].secondary?.text
+        == "Can we reduce SGLC release time?")
+}

@@ -3,6 +3,12 @@ import Foundation
 import Testing
 @testable import OpenLoopApp
 
+@Test func qwenAccuracyProfileUsesTheLargestSupportedLocalASR() {
+    #expect(QwenMeetingTranscriber.accuracyModelID == "aufklarer/Qwen3-ASR-1.7B-MLX-8bit")
+    #expect(QwenMeetingTranscriber.accuracyModelID.contains("1.7B"))
+    #expect(QwenMeetingTranscriber.streamingModelID == "aufklarer/Qwen3-ASR-0.6B-MLX-4bit")
+}
+
 @Test func qwenVocabularyContextIsBoundedDeduplicatedAndOptional() {
     #expect(QwenMeetingTranscriber.context(from: []) == nil)
     #expect(QwenMeetingTranscriber.context(from: [

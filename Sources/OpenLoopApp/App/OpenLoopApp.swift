@@ -238,32 +238,56 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 )
             )
             model.attachVoiceDictation(dictationCoordinator)
-            let qwenTranscriber = QwenMeetingTranscriber(
-                modelStorageURL: directory.appendingPathComponent("Models/Qwen3-ASR", isDirectory: true),
+            let qualityQwenTranscriber = QwenMeetingTranscriber(
+                modelStorageURL: directory.appendingPathComponent(
+                    "Models/Qwen3-ASR-1.7B-8bit",
+                    isDirectory: true
+                ),
                 fallback: whisperTranscriber,
                 fallbackEnabled: false,
                 contextProvider: {
                     (try? await voiceLearning.vocabulary(limit: 80)) ?? []
                 }
             )
+            let streamingQwenTranscriber = QwenMeetingTranscriber(
+                qwenModelID: QwenMeetingTranscriber.streamingModelID,
+                modelStorageURL: directory.appendingPathComponent(
+                    "Models/Qwen3-ASR",
+                    isDirectory: true
+                ),
+                fallback: whisperTranscriber,
+                fallbackEnabled: false,
+                contextProvider: {
+                    (try? await voiceLearning.vocabulary(limit: 80)) ?? []
+                }
+            )
+            let meetingTranscriber = AccuracyFirstTranscriber(
+                primary: whisperTranscriber,
+                witness: qualityQwenTranscriber,
+                expectedDomainTerms: {
+                    (try? await voiceLearning.vocabulary(limit: 80)) ?? []
+                }
+            )
+            let dictationTranscriber = AccuracyFirstTranscriber(
+                primary: qualityQwenTranscriber,
+                witness: whisperTranscriber,
+                expectedDomainTerms: {
+                    (try? await voiceLearning.vocabulary(limit: 80)) ?? []
+                }
+            )
             model.attachVoiceQualityAudit(
                 VoiceQualityCorpusAuditor(repository: repository),
-                engineIdentifier: qwenTranscriber.modelIdentifier
+                engineIdentifier: qualityQwenTranscriber.modelIdentifier
             )
             let meetingIntelligence = LocalMeetingIntelligenceProvider()
             let meetingController = MeetingTranscriptionController(
                 repository: repository,
-                transcriber: AccuracyFirstTranscriber(
-                    primary: whisperTranscriber,
-                    witness: qwenTranscriber,
-                    expectedDomainTerms: {
-                        (try? await voiceLearning.vocabulary(limit: 80)) ?? []
-                    }
-                ),
+                transcriber: meetingTranscriber,
+                dictationTranscriber: dictationTranscriber,
                 stagingDirectory: directory.appendingPathComponent("Meeting Staging", isDirectory: true),
                 recorder: MeetingAudioRecorder(),
                 streamingBuilder: LocalStreamingVoiceSessionBuilder(
-                    recognizer: qwenTranscriber,
+                    recognizer: streamingQwenTranscriber,
                     vadStorageURL: directory.appendingPathComponent("Models/Silero-VAD", isDirectory: true),
                     context: {
                         (try? await voiceLearning.vocabulary(limit: 80)) ?? []

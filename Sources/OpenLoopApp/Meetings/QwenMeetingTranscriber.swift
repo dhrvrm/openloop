@@ -21,6 +21,9 @@ extension Qwen3ASRModel: QwenSpeechRecognizing {}
 /// fallback while the native Qwen model is downloading, unavailable, or
 /// returns an empty result. The actor keeps Qwen resident after its first load.
 actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
+    static let accuracyModelID = ASRModelSize.large.defaultModelId
+    static let streamingModelID = ASRModelSize.small.defaultModelId
+
     typealias ModelLoader = @Sendable (
         String,
         URL,
@@ -40,7 +43,7 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
     private var model: (any QwenSpeechRecognizing)?
 
     init(
-        qwenModelID: String = ASRModelSize.small.defaultModelId,
+        qwenModelID: String = accuracyModelID,
         modelStorageURL: URL,
         fallback: any MeetingTranscribing,
         fallbackEnabled: Bool = true,

@@ -221,6 +221,61 @@ import Testing
 }
 
 @MainActor
+@Test func dictationRecordingUsesDedicatedQualityTranscriber() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let recorder = FakeMeetingRecorder()
+    let meeting = PurposeMeetingTranscriber(text: "meeting transcript")
+    let dictation = PurposeMeetingTranscriber(text: "higher quality dictation")
+    let controller = MeetingTranscriptionController(
+        repository: MeetingRepository(),
+        transcriber: meeting,
+        dictationTranscriber: dictation,
+        stagingDirectory: root,
+        recorder: recorder
+    )
+
+    await controller.toggleRecording(purpose: .dictation)
+    await controller.toggleRecording(purpose: .dictation)
+    await controller.waitUntilSettledForTesting()
+
+    #expect(await meeting.transcriptionCount() == 0)
+    #expect(await dictation.transcriptionCount() == 1)
+    #expect(controller.transcripts.first?.text == "higher quality dictation")
+}
+
+@MainActor
+@Test func meetingRecordingAndImportKeepCanonicalMeetingTranscriber() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let recorder = FakeMeetingRecorder()
+    let meeting = PurposeMeetingTranscriber(text: "speaker-timed meeting")
+    let dictation = PurposeMeetingTranscriber(text: "dictation text")
+    let controller = MeetingTranscriptionController(
+        repository: MeetingRepository(),
+        transcriber: meeting,
+        dictationTranscriber: dictation,
+        stagingDirectory: root.appendingPathComponent("staging"),
+        recorder: recorder
+    )
+
+    await controller.toggleRecording(purpose: .meeting)
+    await controller.toggleRecording(purpose: .meeting)
+    await controller.waitUntilSettledForTesting()
+    controller.clearFinishedJob()
+    let imported = root.appendingPathComponent("imported.m4a")
+    try Data("audio fixture".utf8).write(to: imported)
+    controller.importAudio(imported)
+    await controller.waitUntilSettledForTesting()
+
+    #expect(await meeting.transcriptionCount() == 2)
+    #expect(await dictation.transcriptionCount() == 0)
+}
+
+@MainActor
 @Test func liveRecordingStartsBeforeStreamingModelsFinishPreparing() async throws {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -486,6 +541,32 @@ private actor SuccessfulMeetingTranscriber: MeetingTranscribing {
     func latestLanguageCode() -> String? {
         languageCodes.last ?? nil
     }
+}
+
+private actor PurposeMeetingTranscriber: MeetingTranscribing {
+    nonisolated let modelIdentifier: String
+    private let text: String
+    private var count = 0
+
+    init(text: String) {
+        self.text = text
+        modelIdentifier = "purpose-\(text)"
+    }
+
+    func transcribe(
+        audioURL: URL,
+        progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
+    ) async throws -> LocalTranscriptionOutput {
+        count += 1
+        return LocalTranscriptionOutput(
+            duration: 2,
+            detectedLanguage: "en",
+            modelIdentifier: modelIdentifier,
+            segments: [try TranscriptSegment(start: 0, end: 2, text: text)]
+        )
+    }
+
+    func transcriptionCount() -> Int { count }
 }
 
 private actor EmptyMeetingTranscriber: MeetingTranscribing {

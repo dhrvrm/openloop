@@ -187,7 +187,7 @@ final class AppModel: ObservableObject {
 
     func toggleVoiceCapture() {
         if let meetingController {
-            Task { await meetingController.toggleRecording() }
+            Task { await meetingController.toggleRecording(purpose: .meeting) }
             return
         }
         guard let voiceController else {
@@ -217,7 +217,7 @@ final class AppModel: ObservableObject {
         }
         if meetingJob.stage == .recording {
             if isSystemDictationActive {
-                Task { await meetingController.toggleRecording() }
+                Task { await meetingController.toggleRecording(purpose: .dictation) }
             } else {
                 commandError = "A meeting recording is already active. Stop it from Now before dictating."
             }
@@ -237,7 +237,7 @@ final class AppModel: ObservableObject {
         dictationActionNotice = nil
         dictationProcessingMessage = "Listening for system-wide dictation"
         commandError = nil
-        Task { await meetingController.toggleRecording() }
+        Task { await meetingController.toggleRecording(purpose: .dictation) }
     }
 
     func cancelVoiceCapture() {

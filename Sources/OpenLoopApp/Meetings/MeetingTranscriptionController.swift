@@ -2,6 +2,11 @@ import ADHDCore
 import Combine
 import Foundation
 
+enum AudioCapturePurpose: Equatable, Sendable {
+    case meeting
+    case dictation
+}
+
 struct MeetingJobPresentation: Equatable, Sendable {
     var stage: MeetingTranscriptionStage?
     var fraction = 0.0
@@ -15,6 +20,7 @@ struct MeetingJobPresentation: Equatable, Sendable {
     var requestedLanguage = MeetingLanguagePreference.automatic
     var recordingDuration: TimeInterval?
     var recordingPeakDecibels: Float?
+    var capturePurpose = AudioCapturePurpose.meeting
 
     var isActive: Bool {
         guard let stage else { return false }
@@ -41,6 +47,7 @@ final class MeetingTranscriptionController: ObservableObject {
 
     private let repository: any ThoughtRepository
     private let transcriber: any MeetingTranscribing
+    private let dictationTranscriber: (any MeetingTranscribing)?
     private let stagingDirectory: URL
     private let recorder: (any MeetingAudioRecording)?
     private let streamingBuilder: (any StreamingVoiceSessionBuilding)?
@@ -62,6 +69,7 @@ final class MeetingTranscriptionController: ObservableObject {
     init(
         repository: any ThoughtRepository,
         transcriber: any MeetingTranscribing,
+        dictationTranscriber: (any MeetingTranscribing)? = nil,
         stagingDirectory: URL,
         recorder: (any MeetingAudioRecording)? = nil,
         streamingBuilder: (any StreamingVoiceSessionBuilding)? = nil,
@@ -70,6 +78,7 @@ final class MeetingTranscriptionController: ObservableObject {
     ) {
         self.repository = repository
         self.transcriber = transcriber
+        self.dictationTranscriber = dictationTranscriber
         self.stagingDirectory = stagingDirectory
         self.recorder = recorder
         self.streamingBuilder = streamingBuilder
@@ -164,7 +173,7 @@ final class MeetingTranscriptionController: ObservableObject {
         languagePreference = preference
     }
 
-    func toggleRecording() async {
+    func toggleRecording(purpose: AudioCapturePurpose = .meeting) async {
         guard let recorder else {
             job = MeetingJobPresentation(
                 stage: .failed,
@@ -204,7 +213,8 @@ final class MeetingTranscriptionController: ObservableObject {
                     ?? MeetingTitleNaming.provisionalTitle(createdAt: job.startedAt ?? .now),
                 recordingDuration: recordedDuration,
                 recordingPeakDecibels: recordedPeak,
-                initialPreviewText: streamingSnapshot?.transcript.visibleText
+                initialPreviewText: streamingSnapshot?.transcript.visibleText,
+                purpose: job.capturePurpose
             )
             return
         }
@@ -217,7 +227,8 @@ final class MeetingTranscriptionController: ObservableObject {
             stage: .requestingMicrophone,
             message: "Requesting microphone access",
             startedAt: .now,
-            modelIdentifier: transcriber.modelIdentifier
+            modelIdentifier: transcriber(for: purpose).modelIdentifier,
+            capturePurpose: purpose
         )
         recordEvent(stage: .requestingMicrophone, message: job.message, fraction: 0)
         guard await recorder.requestPermission() else {
@@ -247,8 +258,9 @@ final class MeetingTranscriptionController: ObservableObject {
                 sourceName: MeetingTitleNaming.provisionalTitle(createdAt: startedAt),
                 message: "Recording locally. Press Stop to transcribe.",
                 startedAt: startedAt,
-                modelIdentifier: transcriber.modelIdentifier,
-                stagedAudioURL: url
+                modelIdentifier: transcriber(for: purpose).modelIdentifier,
+                stagedAudioURL: url,
+                capturePurpose: purpose
             )
             recordEvent(stage: .recording, message: job.message, fraction: 0)
             beginStreamingPreparation()
@@ -273,7 +285,8 @@ final class MeetingTranscriptionController: ObservableObject {
             sourceName: job.sourceName ?? stagedURL.lastPathComponent,
             recordingDuration: job.recordingDuration,
             recordingPeakDecibels: job.recordingPeakDecibels,
-            replacingTranscriptID: job.completedTranscriptID
+            replacingTranscriptID: job.completedTranscriptID,
+            purpose: job.capturePurpose
         )
     }
 
@@ -408,28 +421,31 @@ final class MeetingTranscriptionController: ObservableObject {
         recordingDuration: TimeInterval? = nil,
         recordingPeakDecibels: Float? = nil,
         replacingTranscriptID: UUID? = nil,
-        initialPreviewText: String? = nil
+        initialPreviewText: String? = nil,
+        purpose: AudioCapturePurpose = .meeting
     ) {
+        let activeTranscriber = transcriber(for: purpose)
         job = MeetingJobPresentation(
             stage: .waitingForModel,
             fraction: 0,
             sourceName: sourceName,
             message: "Starting the local transcription engine",
             startedAt: .now,
-            modelIdentifier: transcriber.modelIdentifier,
+            modelIdentifier: activeTranscriber.modelIdentifier,
             stagedAudioURL: stagedURL,
             completedTranscriptID: replacingTranscriptID,
             requestedLanguage: languagePreference,
             recordingDuration: recordingDuration,
-            recordingPeakDecibels: recordingPeakDecibels
+            recordingPeakDecibels: recordingPeakDecibels,
+            capturePurpose: purpose
         )
         job.previewText = initialPreviewText?.isEmpty == false ? initialPreviewText : nil
         recordEvent(stage: .waitingForModel, message: job.message, fraction: 0)
         work = Task { [weak self] in
             guard let self else { return }
-            engineDiagnostics = await transcriber.diagnostics()
+            engineDiagnostics = await activeTranscriber.diagnostics()
             do {
-                let output = try await transcriber.transcribe(
+                let output = try await activeTranscriber.transcribe(
                     audioURL: stagedURL,
                     languageCode: job.requestedLanguage.languageCode
                 ) { [weak self] value in
@@ -485,7 +501,7 @@ final class MeetingTranscriptionController: ObservableObject {
                 job.stage = .ready
                 job.fraction = 1
                 job.message = "Transcript ready below. Source audio is kept locally for retranscription."
-                engineDiagnostics = await transcriber.diagnostics()
+                engineDiagnostics = await activeTranscriber.diagnostics()
                 recordEvent(stage: .ready, message: job.message, fraction: 1)
                 work = nil
                 scheduleInterpretation(for: transcript)
@@ -508,6 +524,10 @@ final class MeetingTranscriptionController: ObservableObject {
                 work = nil
             }
         }
+    }
+
+    private func transcriber(for purpose: AudioCapturePurpose) -> any MeetingTranscribing {
+        purpose == .dictation ? (dictationTranscriber ?? transcriber) : transcriber
     }
 
     private func beginStreamingPreparation() {

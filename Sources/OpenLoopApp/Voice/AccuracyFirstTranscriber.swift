@@ -104,9 +104,10 @@ actor AccuracyFirstTranscriber: MeetingTranscribing {
             )
             return Self.output(primaryOutput, fusion: fusion, modelIdentifier: modelIdentifier)
         }
-        let witnessEvidence = Self.evidence(
+        let witnessEvidence = Self.witnessEvidence(
             output: witnessOutput,
-            engineIdentifier: witness.modelIdentifier
+            engineIdentifier: witness.modelIdentifier,
+            alignedTo: primaryEvidence
         )
         let fusion = policy.fuse(
             primary: primaryEvidence,
@@ -130,6 +131,27 @@ actor AccuracyFirstTranscriber: MeetingTranscribing {
                 detectedLanguage: output.detectedLanguage
             )
         }
+    }
+
+    private static func witnessEvidence(
+        output: LocalTranscriptionOutput,
+        engineIdentifier: String,
+        alignedTo primary: [TranscriptEvidence]
+    ) -> [TranscriptEvidence] {
+        let evidence = evidence(output: output, engineIdentifier: engineIdentifier)
+        guard primary.count == 1, evidence.count > 1,
+              let start = evidence.map(\.start).min(),
+              let end = evidence.map(\.end).max()
+        else { return evidence }
+        let text = evidence.map(\.text).filter { !$0.isEmpty }.joined(separator: " ")
+        guard !text.isEmpty else { return evidence }
+        return [TranscriptEvidence(
+            engineIdentifier: engineIdentifier,
+            text: text,
+            start: start,
+            end: end,
+            detectedLanguage: output.detectedLanguage
+        )]
     }
 
     private static func output(
