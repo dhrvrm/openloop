@@ -22,5 +22,8 @@ fi
     -ov \
     -format UDZO \
     "$dmg_path"
-/usr/bin/shasum -a 256 "$dmg_path" > "$dmg_path.sha256"
+(
+    cd "$artifacts_dir"
+    /usr/bin/shasum -a 256 "${dmg_path:t}" > "${dmg_path:t}.sha256"
+)
 print -r -- "$dmg_path"
