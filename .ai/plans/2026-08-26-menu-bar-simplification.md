@@ -99,6 +99,6 @@ Run the existing release scripts with ad-hoc community signing and the explicitl
 
 Replace `/Applications/OpenLoop ADHD.app` using `ditto`, verify its version and signature on disk, and do not terminate or relaunch the old process.
 
-- [ ] **Step 5: Commit, tag, push, and publish the DMG**
+- [x] **Step 5: Commit, tag, push, and publish the DMG**
 
 Commit the focused change, fast-forward `main`, push both branches and tag `v1.0.10`, then confirm the GitHub release exposes the DMG and checksum.
