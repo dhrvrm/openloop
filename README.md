@@ -20,7 +20,7 @@ OpenLoop keeps suggestions separate from commitments. A sentence can be an obser
 
 ## Install
 
-Download the latest DMG from [GitHub Releases](https://github.com/dhrvrm/openloop/releases/latest), drag **OpenLoop ADHD** to Applications, and grant microphone or accessibility access only when you use the corresponding feature.
+Download the latest DMG from [GitHub Releases](https://github.com/dhrvrm/openloop/releases/latest), drag **OpenLoop ADHD** to Applications, and grant access only when you use the matching feature. Microphone powers voice notes and voice typing, Screen Recording captures audio playing on this Mac, and Accessibility writes finished dictation into another app.
 
 The current build targets Apple silicon and macOS 15 or newer.
 

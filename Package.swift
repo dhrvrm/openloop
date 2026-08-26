@@ -55,6 +55,7 @@ let package = Package(
                 .linkedFramework("Carbon"),
                 .linkedFramework("NaturalLanguage"),
                 .linkedFramework("Security"),
+                .linkedFramework("ScreenCaptureKit"),
                 .linkedFramework("Speech"),
             ]
         ),

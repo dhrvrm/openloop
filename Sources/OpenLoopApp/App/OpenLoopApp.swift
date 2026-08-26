@@ -293,7 +293,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 transcriber: meetingTranscriber,
                 dictationTranscriber: dictationTranscriber,
                 stagingDirectory: directory.appendingPathComponent("Meeting Staging", isDirectory: true),
-                recorder: MeetingAudioRecorder(),
+                recorder: MeetingAudioRecorderRouter(),
                 streamingBuilder: LocalStreamingVoiceSessionBuilder(
                     recognizer: streamingQwenTranscriber,
                     vadStorageURL: directory.appendingPathComponent("Models/Silero-VAD", isDirectory: true),
@@ -330,7 +330,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 hotKey = try GlobalHotKey { [weak quickCapture, weak model] startedAt in
                     model?.showShortcutFeedback(ShortcutFeedback(
                         kind: .capture,
-                        title: "Quick Capture opened",
+                        title: "Write a note opened",
                         shortcut: "⌘⇧Space"
                     ))
                     quickCapture?.show(startedAt: startedAt)
@@ -338,7 +338,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 model.capabilitySummary.quickCapture = .ready
             } catch {
                 model.capabilitySummary.quickCapture = .unavailable
-                model.commandError = "Quick Capture shortcut is unavailable. Use Capture in the menu."
+                model.commandError = "The note shortcut is unavailable. Choose Write a Note from the menu."
             }
             do {
                 let binding = GlobalHotKeyBinding.voiceCapture
@@ -350,14 +350,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                     model?.showShortcutFeedback(ShortcutFeedback(
                         kind: .dictation,
                         title: model?.isSystemDictationActive == true
-                            ? "Finishing dictation"
-                            : "Dictation started",
+                            ? "Finishing voice typing"
+                            : "Voice typing started",
                         shortcut: "⌃⌥Space"
                     ))
                     model?.toggleSystemDictation()
                 }
             } catch {
-                model.resurfacingError = "Voice shortcut is unavailable. Use Dictate & Insert in the menu."
+                model.resurfacingError = "The voice-typing shortcut is unavailable. Choose Type by Voice from the menu."
             }
             do {
                 let binding = GlobalHotKeyBinding.recall
@@ -386,14 +386,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                     model?.showShortcutFeedback(ShortcutFeedback(
                         kind: .recording,
                         title: model?.meetingJob.stage == .recording
-                            ? "Finishing recording"
-                            : "Recording started",
+                            ? "Finishing voice note"
+                            : "Listening started",
                         shortcut: "⌃⌥R"
                     ))
                     model?.toggleVoiceCapture()
                 }
             } catch {
-                model.commandError = "Record shortcut is unavailable. Use Record in the capture bar."
+                model.commandError = "The voice-note shortcut is unavailable. Use Voice note in the app."
             }
         } catch {
             NSApp.presentError(error)
@@ -893,14 +893,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         item.button?.image = NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "OpenLoop")
         let menu = NSMenu()
         menu.delegate = self
-        menu.addItem(withTitle: "Capture", action: #selector(showCapture), keyEquivalent: "")
+        menu.addItem(withTitle: "Write a Note", action: #selector(showCapture), keyEquivalent: "")
         let voiceItem = menu.addItem(
-            withTitle: "Dictate & Insert",
+            withTitle: "Type by Voice",
             action: #selector(toggleVoiceCapture),
             keyEquivalent: " "
         )
         voiceItem.keyEquivalentModifierMask = [.control, .option]
-        menu.addItem(withTitle: "Now", action: #selector(showLive), keyEquivalent: "")
+        menu.addItem(withTitle: "Home", action: #selector(showLive), keyEquivalent: "")
         let pauseItem = menu.addItem(
             withTitle: "Pause",
             action: #selector(pauseOrContinue),
@@ -908,15 +908,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         )
         pauseItem.isEnabled = false
         pauseMenuItem = pauseItem
-        menu.addItem(withTitle: "Context", action: #selector(showContext), keyEquivalent: "")
-        menu.addItem(withTitle: "Emerging", action: #selector(showEmerging), keyEquivalent: "")
+        menu.addItem(withTitle: "Connections", action: #selector(showContext), keyEquivalent: "")
+        menu.addItem(withTitle: "Patterns", action: #selector(showEmerging), keyEquivalent: "")
         let recallItem = menu.addItem(
-            withTitle: "Ask",
+            withTitle: "Ask OpenLoop",
             action: #selector(showAsk),
             keyEquivalent: "f"
         )
         recallItem.keyEquivalentModifierMask = [.command, .shift]
-        menu.addItem(withTitle: "Act", action: #selector(showAct), keyEquivalent: "")
+        menu.addItem(withTitle: "Tasks", action: #selector(showAct), keyEquivalent: "")
         menu.addItem(.separator())
         let privateMode = NSMenuItem(
             title: ContextTrailMenuPresentation.title(for: .privateMode),

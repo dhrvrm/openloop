@@ -297,6 +297,52 @@ import Testing
 }
 
 @MainActor
+@Test func recordingCarriesTheSelectedMacAudioSourceThroughThePipeline() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let recorder = FakeMeetingRecorder()
+    let controller = MeetingTranscriptionController(
+        repository: MeetingRepository(),
+        transcriber: SuccessfulMeetingTranscriber(),
+        stagingDirectory: root,
+        recorder: recorder
+    )
+
+    await controller.toggleRecording(source: .microphoneAndMac)
+
+    #expect(recorder.requestedSource == .microphoneAndMac)
+    #expect(recorder.startedSource == .microphoneAndMac)
+    #expect(controller.job.captureSource == .microphoneAndMac)
+    #expect(controller.job.message.contains("Mic + Mac"))
+
+    await controller.toggleRecording(source: .microphoneAndMac)
+    await controller.waitUntilSettledForTesting()
+    #expect(controller.job.captureSource == .microphoneAndMac)
+}
+
+@MainActor
+@Test func recorderRouterUsesSystemRecorderForMacAudio() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let microphone = FakeMeetingRecorder()
+    let system = FakeMeetingRecorder()
+    let router = MeetingAudioRecorderRouter(
+        microphoneRecorder: microphone,
+        systemRecorder: system
+    )
+    let output = root.appendingPathComponent("capture.m4a")
+
+    #expect(await router.requestPermission(for: .thisMac))
+    try await router.start(at: output, source: .thisMac)
+
+    #expect(microphone.startedSource == nil)
+    #expect(system.startedSource == .thisMac)
+    #expect(await router.stop() == output)
+}
+
+@MainActor
 @Test func dictationRecordingUsesDedicatedQualityTranscriber() async throws {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -794,18 +840,24 @@ private final class FakeMeetingRecorder: MeetingAudioRecording {
     var onDecibelUpdate: ((Float?) -> Void)?
     var onPCMFrame: (@MainActor @Sendable (StreamingVoiceFrame) -> Void)?
     var shouldFailStop = false
+    private(set) var requestedSource: AudioCaptureSource?
+    private(set) var startedSource: AudioCaptureSource?
 
-    func requestPermission() async -> Bool { true }
-    func start(at url: URL) throws {
+    func requestPermission(for source: AudioCaptureSource) async -> Bool {
+        requestedSource = source
+        return true
+    }
+    func start(at url: URL, source: AudioCaptureSource) async throws {
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
         try Data("recording".utf8).write(to: url)
         self.url = url
+        startedSource = source
         isRecording = true
     }
-    func stop() -> URL? {
+    func stop() async -> URL? {
         isRecording = false
         if shouldFailStop { return nil }
         return url

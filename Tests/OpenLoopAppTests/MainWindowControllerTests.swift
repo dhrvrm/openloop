@@ -214,6 +214,40 @@ private actor EnabledWindowContextTrail: ContextTrailProviding {
 }
 
 @MainActor
+@Test func audioSourceAndContinuousListeningPreferencesPersist() {
+    let suiteName = "OpenLoopAppTests.AudioSource.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let repository = EmptyWindowRepository()
+    let loop = ThoughtLoop(repository: repository, clarifier: WindowUnusedClarifier())
+    let sourceKey = "audio-source"
+    let listeningKey = "keep-listening"
+
+    let first = AppModel(
+        loop: loop,
+        readModels: ThoughtReadModels(repository: repository),
+        defaults: defaults,
+        audioCaptureSourceKey: sourceKey,
+        keepListeningKey: listeningKey
+    )
+    #expect(first.audioCaptureSource == .microphone)
+    #expect(first.keepListeningEnabled == false)
+
+    first.setAudioCaptureSource(.microphoneAndMac)
+    defaults.set(true, forKey: listeningKey)
+
+    let second = AppModel(
+        loop: loop,
+        readModels: ThoughtReadModels(repository: repository),
+        defaults: defaults,
+        audioCaptureSourceKey: sourceKey,
+        keepListeningKey: listeningKey
+    )
+    #expect(second.audioCaptureSource == .microphoneAndMac)
+    #expect(second.keepListeningEnabled)
+}
+
+@MainActor
 @Test func meetingLanguageAlwaysStartsWithAutomaticDetection() {
     let suiteName = "OpenLoopAppTests.MeetingLanguage.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!

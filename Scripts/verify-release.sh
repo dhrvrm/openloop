@@ -8,6 +8,8 @@ actual_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString'
 
 [[ -d "$app_bundle" ]]
 [[ -x "$app_bundle/Contents/MacOS/OpenLoopADHD" ]]
+screen_capture_copy="$(/usr/libexec/PlistBuddy -c 'Print :NSScreenCaptureUsageDescription' "$info_plist")"
+[[ "$screen_capture_copy" == *"audio playing on this Mac"* ]]
 expected_version="${OPENLOOP_EXPECTED_VERSION#v}"
 if [[ -n "$expected_version" && "$actual_version" != "$expected_version" ]]; then
     print -u2 -- "Expected version $expected_version, found $actual_version."

@@ -9,20 +9,26 @@ struct WorkspaceTopBar: View {
     @Binding var sidebarVisible: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Button {
                 sidebarVisible.toggle()
             } label: {
                 Image(systemName: "sidebar.left")
-                    .frame(width: 28, height: 28)
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: 32, height: 32)
+                    .background(OpenLoopVisualSystem.selectionInactive, in: RoundedRectangle(cornerRadius: 9))
             }
             .buttonStyle(.plain)
             .keyboardShortcut("/", modifiers: .command)
             .help(sidebarVisible ? "Hide sidebar · ⌘/" : "Show sidebar · ⌘/")
 
-            Text(destination.title)
-                .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(OpenLoopVisualSystem.muted)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(destination.title)
+                    .font(.system(size: 14, weight: .semibold))
+                Text(destinationDetail)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(OpenLoopVisualSystem.muted)
+            }
 
             Spacer(minLength: 16)
 
@@ -33,52 +39,148 @@ struct WorkspaceTopBar: View {
 
             Spacer(minLength: 16)
 
+            ListeningTopBarControl(model: model)
+
             Menu {
-                ForEach(OpenLoopAppearanceMode.allCases, id: \.self) { mode in
-                    Button {
-                        model.setAppearanceMode(mode)
-                    } label: {
-                        if model.appearanceMode == mode {
-                            Label(mode.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(mode.displayName)
+                Section("Listen from") {
+                    ForEach(AudioCaptureSource.allCases, id: \.self) { source in
+                        Button {
+                            model.setAudioCaptureSource(source)
+                        } label: {
+                            Label(
+                                source.title,
+                                systemImage: model.audioCaptureSource == source
+                                    ? "checkmark"
+                                    : source.systemImage
+                            )
+                        }
+                        .disabled(model.meetingJob.isActive)
+                    }
+                }
+                Divider()
+                Button {
+                    model.setKeepListeningEnabled(!model.keepListeningEnabled)
+                } label: {
+                    Label(
+                        "Keep listening until I stop",
+                        systemImage: model.keepListeningEnabled ? "checkmark" : "ear"
+                    )
+                }
+                .disabled(model.meetingJob.isActive && !model.keepListeningEnabled)
+                Divider()
+                Menu("Appearance") {
+                    ForEach(OpenLoopAppearanceMode.allCases, id: \.self) { mode in
+                        Button {
+                            model.setAppearanceMode(mode)
+                        } label: {
+                            Label(
+                                mode.displayName,
+                                systemImage: model.appearanceMode == mode ? "checkmark" : appearanceIcon(for: mode)
+                            )
                         }
                     }
                 }
+                Button {
+                    model.setAdvancedModeEnabled(!model.isAdvancedModeEnabled)
+                } label: {
+                    Label(
+                        "Advanced views",
+                        systemImage: model.isAdvancedModeEnabled ? "checkmark" : "slider.horizontal.3"
+                    )
+                }
+                .keyboardShortcut("i", modifiers: [.command, .option])
             } label: {
-                Image(systemName: appearanceIcon)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
+                Label("Settings", systemImage: "gearshape")
+                    .font(.system(size: 12.5, weight: .medium))
+                    .padding(.horizontal, 10)
+                    .frame(height: 32)
+                    .background(OpenLoopVisualSystem.selectionInactive, in: RoundedRectangle(cornerRadius: 9))
             }
             .menuStyle(.borderlessButton)
-            .help("Appearance · \(model.appearanceMode.displayName)")
-
-            Button {
-                model.setAdvancedModeEnabled(!model.isAdvancedModeEnabled)
-            } label: {
-                Image(systemName: "slider.horizontal.3")
-                    .foregroundStyle(model.isAdvancedModeEnabled
-                        ? OpenLoopVisualSystem.accent
-                        : OpenLoopVisualSystem.muted)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .keyboardShortcut("i", modifiers: [.command, .option])
-            .help("Advanced system details · ⌥⌘I")
+            .fixedSize()
         }
-        .padding(.horizontal, 14)
-        .frame(height: 46)
+        .padding(.horizontal, 16)
+        .frame(height: 54)
         .background(OpenLoopVisualSystem.canvas.opacity(0.96))
         .animation(.spring(response: 0.28, dampingFraction: 0.9), value: model.shortcutFeedback)
     }
 
-    private var appearanceIcon: String {
-        switch model.appearanceMode {
+    private func appearanceIcon(for mode: OpenLoopAppearanceMode) -> String {
+        switch mode {
         case .system: "circle.lefthalf.filled"
         case .light: "sun.max"
         case .dark: "moon"
         }
+    }
+
+    private var destinationDetail: String {
+        switch destination.id {
+        case .now: "What needs your attention"
+        case .transcripts: "Recordings and transcripts"
+        case .act: "Work you chose to do"
+        case .ask: "Search your private memory"
+        case .upcoming: "Work with a date"
+        case .someday: "Ideas without a deadline"
+        case .inbox: "Notes that need one decision"
+        case .later: "Useful, not urgent"
+        case .return: "Continue where you stopped"
+        case .context: "People, projects, and decisions"
+        case .emerging: "Repeated topics and questions"
+        }
+    }
+}
+
+private struct ListeningTopBarControl: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        Button {
+            model.showShortcutFeedback(ShortcutFeedback(
+                kind: .recording,
+                title: isRecording ? "Finishing voice note" : "Listening started",
+                shortcut: "⌃⌥R"
+            ))
+            model.toggleVoiceCapture()
+        } label: {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(isRecording ? OpenLoopVisualSystem.recording : OpenLoopVisualSystem.muted.opacity(0.55))
+                    .frame(width: 7, height: 7)
+                Image(systemName: model.meetingJob.captureSource.systemImage)
+                    .font(.system(size: 11.5, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 12.5, weight: .semibold))
+            }
+            .foregroundStyle(isRecording ? OpenLoopVisualSystem.recording : .primary)
+            .padding(.horizontal, 11)
+            .frame(height: 32)
+            .background(
+                isRecording
+                    ? OpenLoopVisualSystem.recording.opacity(0.11)
+                    : OpenLoopVisualSystem.selectionInactive,
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(
+                        isRecording ? OpenLoopVisualSystem.recording.opacity(0.35) : OpenLoopVisualSystem.hairline,
+                        lineWidth: 0.75
+                    )
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isSystemDictationActive || (model.meetingJob.isActive && !isRecording))
+        .help(isRecording ? "Stop and transcribe · ⌃⌥R" : "Start a voice note · ⌃⌥R")
+    }
+
+    private var isRecording: Bool {
+        model.meetingJob.stage == .recording && !model.isSystemDictationActive
+    }
+
+    private var title: String {
+        if isRecording { return "Listening · \(model.meetingJob.captureSource.shortTitle)" }
+        if model.meetingJob.isActive { return "Transcribing…" }
+        return "Start listening · \(model.audioCaptureSource.shortTitle)"
     }
 }
 
@@ -147,7 +249,7 @@ struct OpenLoopCaptureDock: View {
                     .foregroundStyle(OpenLoopVisualSystem.accent)
                     .frame(width: 28, height: 28)
 
-                TextField("Capture a thought…", text: $text)
+                TextField("Write something to remember…", text: $text)
                     .textFieldStyle(.plain)
                     .font(OpenLoopVisualSystem.rowTitle)
                     .focused($textFocused)
@@ -165,7 +267,7 @@ struct OpenLoopCaptureDock: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(model.isSaving)
-                    .help("Save thought · Return")
+                    .help("Save note · Return")
                 }
 
                 Rectangle()
@@ -192,7 +294,7 @@ struct OpenLoopCaptureDock: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(recordDisabled)
-                .help("Record and transcribe · ⌃⌥R")
+                .help("Record a voice note and save its transcript · ⌃⌥R")
 
                 Button {
                     model.showShortcutFeedback(ShortcutFeedback(
@@ -204,11 +306,16 @@ struct OpenLoopCaptureDock: View {
                     ))
                     model.toggleSystemDictation()
                 } label: {
-                    Image(systemName: model.isSystemDictationActive ? "stop.fill" : "waveform")
+                    Label(
+                        model.isSystemDictationActive ? "Stop typing" : "Type by voice",
+                        systemImage: model.isSystemDictationActive ? "stop.fill" : "waveform"
+                    )
+                        .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(model.isSystemDictationActive
                             ? OpenLoopVisualSystem.recording
                             : OpenLoopVisualSystem.accent)
-                        .frame(width: 32, height: 32)
+                        .padding(.horizontal, 9)
+                        .frame(height: 32)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -216,12 +323,12 @@ struct OpenLoopCaptureDock: View {
                 .help("Dictate into the active app · ⌃⌥Space")
 
                 Menu {
-                    Button("Import audio…", systemImage: "waveform.badge.plus") {
+                    Button("Transcribe a file…", systemImage: "waveform.badge.plus") {
                         presentMeetingImporter()
                     }
                     .disabled(model.meetingJob.isActive)
                     Divider()
-                    Picker("Voice style", selection: Binding(
+                    Picker("Writing style", selection: Binding(
                         get: { model.voiceMode },
                         set: { model.setVoiceMode($0) }
                     )) {
@@ -230,15 +337,22 @@ struct OpenLoopCaptureDock: View {
                         }
                     }
                 } label: {
-                    Image(systemName: "ellipsis")
-                        .frame(width: 28, height: 28)
+                    Label("More", systemImage: "ellipsis")
+                        .font(.system(size: 12.5, weight: .medium))
+                        .frame(height: 28)
                         .contentShape(Rectangle())
                 }
                 .menuStyle(.borderlessButton)
-                .help("More capture options")
+                .help("Transcribe a file or change the writing style")
             }
             .padding(.horizontal, 12)
-            .frame(minHeight: 56)
+            .frame(minHeight: 54)
+
+            Text("Voice note saves here · Type by voice writes in the active app")
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(OpenLoopVisualSystem.tertiaryText)
+                .padding(.leading, 48)
+                .padding(.bottom, 10)
         }
         .frame(maxWidth: 760)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -296,13 +410,15 @@ struct OpenLoopCaptureDock: View {
     }
 
     private var statusDetail: String {
-        if model.meetingJob.stage == .recording { return "LIVE · LOCAL" }
+        if model.meetingJob.stage == .recording {
+            return "LIVE · \(model.meetingJob.captureSource.shortTitle.uppercased()) · LOCAL"
+        }
         if model.meetingJob.isActive { return "\(Int(model.meetingJob.fraction * 100))%" }
         return model.meetingJob.stage == .ready ? "READY" : "LOCAL"
     }
 
     private var recordButtonTitle: String {
-        model.meetingJob.stage == .recording && !model.isSystemDictationActive ? "Stop" : "Record"
+        model.meetingJob.stage == .recording && !model.isSystemDictationActive ? "Stop" : "Voice note"
     }
 
     private var recordButtonIcon: String {
@@ -351,7 +467,7 @@ private struct CaptureWaveform: View {
         }
         .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32, alignment: .leading)
         .animation(.easeOut(duration: 0.09), value: decibels)
-        .accessibilityLabel("Microphone level")
+        .accessibilityLabel("Audio input level")
         .accessibilityValue(decibels.map { "\(Int($0.rounded())) decibels" } ?? "Waiting")
     }
 

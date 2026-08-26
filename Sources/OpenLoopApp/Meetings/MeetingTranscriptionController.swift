@@ -21,6 +21,7 @@ struct MeetingJobPresentation: Equatable, Sendable {
     var recordingDuration: TimeInterval?
     var recordingPeakDecibels: Float?
     var capturePurpose = AudioCapturePurpose.meeting
+    var captureSource = AudioCaptureSource.microphone
 
     var isActive: Bool {
         guard let stage else { return false }
@@ -178,7 +179,10 @@ final class MeetingTranscriptionController: ObservableObject {
         languagePreference = preference
     }
 
-    func toggleRecording(purpose: AudioCapturePurpose = .meeting) async {
+    func toggleRecording(
+        purpose: AudioCapturePurpose = .meeting,
+        source requestedSource: AudioCaptureSource = .microphone
+    ) async {
         guard let recorder else {
             job = MeetingJobPresentation(
                 stage: .failed,
@@ -193,7 +197,7 @@ final class MeetingTranscriptionController: ObservableObject {
             if let streamingPreparation {
                 await streamingPreparation.value
             }
-            guard let url = recorder.stop() else {
+            guard let url = await recorder.stop() else {
                 cancelStreamingPreparation()
                 streamingFramePump?.cancel()
                 streamingFramePump = nil
@@ -219,7 +223,8 @@ final class MeetingTranscriptionController: ObservableObject {
                 recordingDuration: recordedDuration,
                 recordingPeakDecibels: recordedPeak,
                 initialPreviewText: streamingSnapshot?.transcript.visibleText,
-                purpose: job.capturePurpose
+                purpose: job.capturePurpose,
+                captureSource: job.captureSource
             )
             return
         }
@@ -230,15 +235,20 @@ final class MeetingTranscriptionController: ObservableObject {
         streamingSnapshot = nil
         job = MeetingJobPresentation(
             stage: .requestingMicrophone,
-            message: "Requesting microphone access",
+            message: requestedSource.includesSystemAudio
+                ? "Requesting access to this Mac's audio"
+                : "Requesting microphone access",
             startedAt: .now,
             modelIdentifier: transcriber(for: purpose).modelIdentifier,
-            capturePurpose: purpose
+            capturePurpose: purpose,
+            captureSource: requestedSource
         )
         recordEvent(stage: .requestingMicrophone, message: job.message, fraction: 0)
-        guard await recorder.requestPermission() else {
+        guard await recorder.requestPermission(for: requestedSource) else {
             job.stage = .failed
-            job.message = "Microphone access is off. Enable OpenLoop in System Settings, or import an audio file with no permission."
+            job.message = requestedSource.includesSystemAudio
+                ? "Mac audio access is off. Enable Screen Recording for OpenLoop in System Settings, then reopen OpenLoop once."
+                : "Microphone access is off. Enable OpenLoop in System Settings, or transcribe a file with no permission."
             recordEvent(stage: .failed, message: job.message, fraction: 0)
             return
         }
@@ -251,21 +261,23 @@ final class MeetingTranscriptionController: ObservableObject {
             let url = stagingDirectory
                 .appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("m4a")
-            try recorder.start(at: url)
             pendingStreamingFrames = []
             recorder.onPCMFrame = { [weak self] frame in
                 self?.acceptStreamingFrame(frame)
             }
+            try await recorder.start(at: url, source: requestedSource)
             let startedAt = Date.now
             recordingStartedAt = startedAt
             job = MeetingJobPresentation(
                 stage: .recording,
                 sourceName: MeetingTitleNaming.provisionalTitle(createdAt: startedAt),
-                message: "Recording locally. Press Stop to transcribe.",
+                message: "Listening to " + requestedSource.title
+                    + " locally. Stop when you want the final transcript.",
                 startedAt: startedAt,
                 modelIdentifier: transcriber(for: purpose).modelIdentifier,
                 stagedAudioURL: url,
-                capturePurpose: purpose
+                capturePurpose: purpose,
+                captureSource: requestedSource
             )
             recordEvent(stage: .recording, message: job.message, fraction: 0)
             beginStreamingPreparation()
@@ -278,7 +290,9 @@ final class MeetingTranscriptionController: ObservableObject {
             streamingSession = nil
             recordingDecibels = nil
             job.stage = .failed
-            job.message = "Recording could not start. Check the selected microphone or import an audio file."
+            job.message = requestedSource.includesSystemAudio
+                ? "Mac audio could not start. Check Screen Recording access, then reopen OpenLoop once."
+                : "Recording could not start. Check the selected microphone or transcribe a file."
             recordEvent(stage: .failed, message: job.message, fraction: 0)
         }
     }
@@ -291,7 +305,8 @@ final class MeetingTranscriptionController: ObservableObject {
             recordingDuration: job.recordingDuration,
             recordingPeakDecibels: job.recordingPeakDecibels,
             replacingTranscriptID: job.completedTranscriptID,
-            purpose: job.capturePurpose
+            purpose: job.capturePurpose,
+            captureSource: job.captureSource
         )
     }
 
@@ -492,7 +507,8 @@ final class MeetingTranscriptionController: ObservableObject {
         recordingPeakDecibels: Float? = nil,
         replacingTranscriptID: UUID? = nil,
         initialPreviewText: String? = nil,
-        purpose: AudioCapturePurpose = .meeting
+        purpose: AudioCapturePurpose = .meeting,
+        captureSource: AudioCaptureSource = .microphone
     ) {
         let activeTranscriber = transcriber(for: purpose)
         job = MeetingJobPresentation(
@@ -507,7 +523,8 @@ final class MeetingTranscriptionController: ObservableObject {
             requestedLanguage: languagePreference,
             recordingDuration: recordingDuration,
             recordingPeakDecibels: recordingPeakDecibels,
-            capturePurpose: purpose
+            capturePurpose: purpose,
+            captureSource: captureSource
         )
         job.previewText = initialPreviewText?.isEmpty == false ? initialPreviewText : nil
         recordEvent(stage: .waitingForModel, message: job.message, fraction: 0)

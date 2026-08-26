@@ -4,6 +4,13 @@ All notable changes are recorded here. Releases follow semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.9] — 2026-08-26
+
+- Added local recording from the microphone, audio playing on this Mac, or both together.
+- Added a visible listening control, live source status, input levels, and an optional Keep listening session.
+- Simplified the default workspace to Home, Voice notes, Tasks, and Ask OpenLoop; specialist organization and memory views now appear in Advanced mode.
+- Replaced ambiguous capture and dictation labels with plain descriptions of where the result goes.
+
 ## [1.0.8] — 2026-08-26
 
 - Added local Speaker A/B/C separation with encrypted voice fingerprints, conservative cross-recording identity matching, and durable user aliases.
@@ -65,7 +72,8 @@ All notable changes are recorded here. Releases follow semantic versioning.
 - Added encrypted local storage, permission-aware capture and advanced diagnostics.
 - Established the native visual system and global capture shortcuts.
 
-[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.8...HEAD
+[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.9...HEAD
+[1.0.9]: https://github.com/dhrvrm/openloop/compare/v1.0.8...v1.0.9
 [1.0.8]: https://github.com/dhrvrm/openloop/compare/v1.0.7...v1.0.8
 [1.0.7]: https://github.com/dhrvrm/openloop/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/dhrvrm/openloop/compare/v1.0.5...v1.0.6

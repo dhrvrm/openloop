@@ -101,34 +101,34 @@ enum OpenLoopVisualSystem {
 
     static func icon(forSurfaceTitle title: String) -> String {
         switch title {
-        case "Now": "star.fill"
-        case "Upcoming": "calendar"
-        case "Someday": "archivebox.fill"
-        case "Inbox": "tray.fill"
-        case "Later": "archivebox.fill"
-        case "Return": "arrow.uturn.backward.circle.fill"
-        case "Transcripts": "waveform.and.mic"
-        case "Context": "point.3.connected.trianglepath.dotted"
-        case "Emerging": "sparkles"
-        case "Ask your context": "text.magnifyingglass"
-        case "Act": "bolt.fill"
+        case "Home": "house.fill"
+        case "Scheduled": "calendar"
+        case "Ideas": "lightbulb.fill"
+        case "Needs review": "tray.fill"
+        case "Saved for later": "archivebox.fill"
+        case "Pick up again": "arrow.uturn.backward.circle.fill"
+        case "Voice notes": "waveform"
+        case "Connections": "point.3.connected.trianglepath.dotted"
+        case "Patterns": "sparkles"
+        case "Ask OpenLoop": "magnifyingglass"
+        case "Tasks": "checkmark.circle.fill"
         default: "circle.fill"
         }
     }
 
     static func tint(forSurfaceTitle title: String) -> Color {
         switch title {
-        case "Now": today
-        case "Upcoming": today
-        case "Someday": later
-        case "Inbox": inbox
-        case "Later": later
-        case "Return": returnColor
-        case "Transcripts": accent
-        case "Context": context
-        case "Emerging": emerging
-        case "Ask your context": ask
-        case "Act": act
+        case "Home": today
+        case "Scheduled": today
+        case "Ideas": later
+        case "Needs review": inbox
+        case "Saved for later": later
+        case "Pick up again": returnColor
+        case "Voice notes": accent
+        case "Connections": context
+        case "Patterns": emerging
+        case "Ask OpenLoop": ask
+        case "Tasks": act
         default: accent
         }
     }

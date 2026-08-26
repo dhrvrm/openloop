@@ -89,6 +89,14 @@ private struct MainView: View {
                 Task { await model.refreshSemanticGraph() }
             }
         }
+        .onChange(of: model.isAdvancedModeEnabled) { _, enabled in
+            if !enabled,
+               !WorkspaceOrientation.primarySection.destinations.contains(where: {
+                   $0.id == selection
+               }) {
+                selection = .now
+            }
+        }
         .sheet(isPresented: interruptionPresented) {
             if let item = interruptionItem {
                 InterruptionSheet(model: model, item: item) {
@@ -126,13 +134,13 @@ private struct MainView: View {
         case .upcoming: scheduledTaskView(
             destination: .upcoming,
             eyebrow: "Plan",
-            title: "Upcoming",
+            title: "Scheduled",
             detail: "Work you have deliberately scheduled for later."
         )
         case .someday: scheduledTaskView(
             destination: .someday,
             eyebrow: "Possibilities",
-            title: "Someday",
+            title: "Ideas",
             detail: "Ideas worth keeping without making them urgent."
         )
         case .now: nowView
@@ -163,9 +171,11 @@ private struct MainView: View {
             .padding(.bottom, 24)
 
             VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space4) {
-                ForEach(WorkspaceOrientation.sections) { section in
+                ForEach(WorkspaceOrientation.visibleSections(
+                    advanced: model.isAdvancedModeEnabled
+                )) { section in
                     VStack(alignment: .leading, spacing: 1) {
-                        if section.id != .focus {
+                        if !section.title.isEmpty {
                             Text(section.title)
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(OpenLoopVisualSystem.tertiaryText)
@@ -199,19 +209,19 @@ private struct MainView: View {
                 Button {
                     quickFindPresented = true
                 } label: {
-                    Label("Quick Find", systemImage: "magnifyingglass")
+                    Label("Find anything", systemImage: "magnifyingglass")
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, OpenLoopVisualSystem.space2)
                         .frame(height: OpenLoopVisualSystem.compactRowMinimumHeight)
                 }
                 .buttonStyle(OpenLoopNavigationButtonStyle())
                 .keyboardShortcut("f", modifiers: .command)
-                .help("Travel to any list or task · ⌘F")
+                .help("Find a note, task, recording, or view · ⌘F")
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("⌘⇧Space  Quick Capture", systemImage: "keyboard")
-                    Label("⌃⌥R  Record", systemImage: "record.circle")
-                    Label("⌃⌥Space  Dictate", systemImage: "waveform")
+                    Label("⌘⇧Space  Write a note", systemImage: "keyboard")
+                    Label("⌃⌥R  Voice note", systemImage: "record.circle")
+                    Label("⌃⌥Space  Type by voice", systemImage: "waveform")
                 }
                 .font(.system(size: 10.5, weight: .medium).monospaced())
                 .foregroundStyle(OpenLoopVisualSystem.tertiaryText)
@@ -275,7 +285,7 @@ private struct MainView: View {
             LazyVStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(
                     eyebrow: "Focus",
-                    title: "Now",
+                    title: "Home",
                     detail: "Pick one thing to do now. Everything else stays saved."
                 )
 
@@ -528,7 +538,7 @@ private struct MainView: View {
         VStack(alignment: .leading, spacing: OpenLoopVisualSystem.space3) {
             ScreenHeader(
                 eyebrow: "RECOVERY",
-                title: "Return",
+                title: "Pick up again",
                 detail: "Pick up where you stopped, with the details you need."
             )
             if let error = model.commandError {
@@ -556,15 +566,15 @@ private struct MainView: View {
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(
-                    eyebrow: "Capture",
-                    title: "Inbox",
-                    detail: "New notes and recordings wait here until you decide where they belong."
+                    eyebrow: "ORGANIZE",
+                    title: "Needs review",
+                    detail: "Notes that need one decision before OpenLoop can place them."
                 )
                 if needsDecision.isEmpty {
                     ContentUnavailableView(
-                        "Inbox is clear",
+                        "Nothing needs review",
                         systemImage: "tray",
-                        description: Text("New notes and recordings appear here first.")
+                            description: Text("OpenLoop only puts a note here when its meaning is unclear.")
                     )
                     .frame(maxWidth: .infinity, minHeight: 220)
                 } else {
@@ -586,8 +596,8 @@ private struct MainView: View {
             LazyVStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(
                     eyebrow: "Focus",
-                    title: "Later",
-                    detail: "Things you saved but are not doing now."
+                    title: "Saved for later",
+                    detail: "Useful notes and possible work with no pressure to act now."
                 )
 
                 if let error = model.reviewError {
@@ -643,7 +653,7 @@ private struct MainView: View {
                 LazyVStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(
                     eyebrow: "QUERY",
-                    title: "Ask your context",
+                    title: "Ask OpenLoop",
                     detail: "Search your notes and recordings. Open a result to see where it came from."
                 )
 
@@ -658,7 +668,7 @@ private struct MainView: View {
                 privacySection
 
                 HStack(spacing: OpenLoopVisualSystem.space2) {
-                    TextField("Search captures, decisions, return points, and corrections", text: $model.recallQuery)
+                    TextField("Search notes, decisions, voice notes, and corrections", text: $model.recallQuery)
                         .openLoopTextField()
                         .font(OpenLoopVisualSystem.rowTitle)
                         .focused($recallFieldFocused)
@@ -728,8 +738,8 @@ private struct MainView: View {
                 LazyVStack(alignment: .leading, spacing: 20) {
                     ScreenHeader(
                         eyebrow: "VOICE EVIDENCE",
-                        title: "Transcripts",
-                        detail: "Recordings, exact words, summaries, decisions, and possible next steps stay together."
+                        title: "Voice notes",
+                        detail: "Listen, read the exact words, and review summaries or next steps from each recording."
                     )
                     meetingTranscriptSection { evidenceID in
                         withAnimation(.easeOut(duration: 0.2)) {
@@ -804,8 +814,8 @@ private struct MainView: View {
             LazyVStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(
                     eyebrow: "Understanding",
-                    title: "Context",
-                    detail: "See the people, projects, questions, and decisions connected to your notes."
+                    title: "Connections",
+                    detail: "See how people, projects, questions, and decisions relate across your notes."
                 )
                 Picker("Context presentation", selection: $contextPresentation) {
                     ForEach(ContextPresentation.allCases, id: \.self) { presentation in
@@ -863,8 +873,8 @@ private struct MainView: View {
             LazyVStack(alignment: .leading, spacing: 16) {
                 ScreenHeader(
                     eyebrow: "PATTERNS",
-                    title: "Emerging",
-                    detail: "See topics and open questions that keep coming up. Nothing becomes a task unless you choose it."
+                    title: "Patterns",
+                    detail: "See repeated topics and unanswered questions. OpenLoop never turns them into tasks on its own."
                 )
                 if model.emergingThreads.isEmpty && model.unresolvedSemanticNodes.isEmpty {
                     ContentUnavailableView(
@@ -903,15 +913,15 @@ private struct MainView: View {
     private var actView: some View {
         VStack(alignment: .leading, spacing: 16) {
             ScreenHeader(
-                eyebrow: "EXECUTION",
-                title: "Act",
-                detail: "Choose what to do next. OpenLoop never acts without your approval."
+                eyebrow: "YOUR WORK",
+                title: "Tasks",
+                detail: "Choose what to do now, schedule it, or keep it for later."
             )
             Picker("Action workspace", selection: $actSection) {
                 Text("Ready").tag(0)
-                Text("Return").tag(1)
-                Text("Review").tag(2)
-                Text("Tools").tag(3)
+                Text("Pick up again").tag(1)
+                Text("Saved").tag(2)
+                Text("Connected tools").tag(3)
             }
             .pickerStyle(.segmented)
 

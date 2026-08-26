@@ -29,12 +29,16 @@ struct V1ReliabilityTests {
     }
 
     @Test func workspaceOrientationMakesNavigationAndCaptureShortcutsExplicit() {
-        #expect(WorkspaceOrientation.sections.map(\.title) == ["Focus", "Intelligence"])
-        #expect(WorkspaceOrientation.sections[0].destinations.map(\.title) == [
-            "Now", "Upcoming", "Someday", "Inbox", "Later", "Return",
+        #expect(WorkspaceOrientation.visibleSections(advanced: false).map(\.title) == [""])
+        #expect(WorkspaceOrientation.primarySection.destinations.map(\.title) == [
+            "Home", "Voice notes", "Tasks", "Ask OpenLoop",
         ])
-        #expect(WorkspaceOrientation.sections[1].destinations.map(\.title) == [
-            "Transcripts", "Context", "Emerging", "Ask", "Act",
+        #expect(WorkspaceOrientation.advancedSections.map(\.title) == ["Organize", "Memory"])
+        #expect(WorkspaceOrientation.advancedSections[0].destinations.map(\.title) == [
+            "Scheduled", "Ideas", "Needs review", "Saved for later", "Pick up again",
+        ])
+        #expect(WorkspaceOrientation.advancedSections[1].destinations.map(\.title) == [
+            "Connections", "Patterns",
         ])
         #expect(Set(WorkspaceOrientation.destinations.map(\.id)).count == 11)
         #expect(Set(WorkspaceOrientation.destinations.map(\.icon)).count == 11)

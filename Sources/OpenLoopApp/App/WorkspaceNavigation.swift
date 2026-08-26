@@ -22,8 +22,9 @@ struct WorkspaceDestination: Equatable, Identifiable, Sendable {
 
 struct WorkspaceSection: Equatable, Identifiable, Sendable {
     enum ID: String, Sendable {
-        case focus
-        case intelligence
+        case primary
+        case organize
+        case memory
     }
 
     let id: ID
@@ -32,46 +33,58 @@ struct WorkspaceSection: Equatable, Identifiable, Sendable {
 }
 
 enum WorkspaceOrientation {
-    static let sections = [
+    static let primarySection = WorkspaceSection(
+        id: .primary,
+        title: "",
+        destinations: [
+            WorkspaceDestination(id: .now, title: "Home", icon: "house"),
+            WorkspaceDestination(id: .transcripts, title: "Voice notes", icon: "waveform"),
+            WorkspaceDestination(id: .act, title: "Tasks", icon: "checkmark.circle"),
+            WorkspaceDestination(id: .ask, title: "Ask OpenLoop", icon: "magnifyingglass"),
+        ]
+    )
+
+    static let advancedSections = [
         WorkspaceSection(
-            id: .focus,
-            title: "Focus",
+            id: .organize,
+            title: "Organize",
             destinations: [
-                WorkspaceDestination(id: .now, title: "Now", icon: "scope"),
-                WorkspaceDestination(id: .upcoming, title: "Upcoming", icon: "calendar"),
-                WorkspaceDestination(id: .someday, title: "Someday", icon: "archivebox"),
-                WorkspaceDestination(id: .inbox, title: "Inbox", icon: "tray"),
-                WorkspaceDestination(id: .later, title: "Later", icon: "tray.full"),
-                WorkspaceDestination(id: .return, title: "Return", icon: "arrow.uturn.backward"),
+                WorkspaceDestination(id: .upcoming, title: "Scheduled", icon: "calendar"),
+                WorkspaceDestination(id: .someday, title: "Ideas", icon: "lightbulb"),
+                WorkspaceDestination(id: .inbox, title: "Needs review", icon: "tray"),
+                WorkspaceDestination(id: .later, title: "Saved for later", icon: "archivebox"),
+                WorkspaceDestination(id: .return, title: "Pick up again", icon: "arrow.uturn.backward"),
             ]
         ),
         WorkspaceSection(
-            id: .intelligence,
-            title: "Intelligence",
+            id: .memory,
+            title: "Memory",
             destinations: [
-                WorkspaceDestination(id: .transcripts, title: "Transcripts", icon: "waveform.and.mic"),
                 WorkspaceDestination(
                     id: .context,
-                    title: "Context",
+                    title: "Connections",
                     icon: "point.3.connected.trianglepath.dotted"
                 ),
-                WorkspaceDestination(id: .emerging, title: "Emerging", icon: "sparkles"),
-                WorkspaceDestination(id: .ask, title: "Ask", icon: "text.magnifyingglass"),
-                WorkspaceDestination(id: .act, title: "Act", icon: "bolt"),
+                WorkspaceDestination(id: .emerging, title: "Patterns", icon: "sparkles"),
             ]
         ),
     ]
 
+    static let sections = [primarySection] + advancedSections
     static let destinations = sections.flatMap(\.destinations)
     static let legacyTabOrder: [WorkspaceDestination.ID] = [.now, .context, .emerging, .ask, .act]
-    static let quickCaptureShortcut = "⌘⇧Space  Quick Capture"
-    static let voiceCaptureShortcut = "⌃⌥Space  Dictate & insert"
-    static let meetingRecordShortcut = "⌃⌥R  Record & transcribe"
-    static let emptyCaptureGuidance = "Use the capture bar below, or press Command-Shift-Space from anywhere."
+    static let quickCaptureShortcut = "⌘⇧Space  Write a note"
+    static let voiceCaptureShortcut = "⌃⌥Space  Type by voice"
+    static let meetingRecordShortcut = "⌃⌥R  Voice note"
+    static let emptyCaptureGuidance = "Write a note below, or press Command-Shift-Space from anywhere."
+
+    static func visibleSections(advanced: Bool) -> [WorkspaceSection] {
+        advanced ? sections : [primarySection]
+    }
 
     static func destination(_ id: WorkspaceDestination.ID) -> WorkspaceDestination {
         destinations.first(where: { $0.id == id })
-            ?? WorkspaceDestination(id: .now, title: "Now", icon: "scope")
+            ?? WorkspaceDestination(id: .now, title: "Home", icon: "house")
     }
 
     static func destination(atLegacyTab index: Int) -> WorkspaceDestination.ID {

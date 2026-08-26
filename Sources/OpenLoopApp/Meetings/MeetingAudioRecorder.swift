@@ -1,14 +1,47 @@
 import AVFoundation
 import Foundation
 
+enum AudioCaptureSource: String, CaseIterable, Codable, Equatable, Sendable {
+    case microphone
+    case thisMac
+    case microphoneAndMac
+
+    var title: String {
+        switch self {
+        case .microphone: "Microphone"
+        case .thisMac: "This Mac"
+        case .microphoneAndMac: "Mic + Mac"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .microphone: "Mic"
+        case .thisMac: "Mac"
+        case .microphoneAndMac: "Mic + Mac"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .microphone: "mic"
+        case .thisMac: "macbook"
+        case .microphoneAndMac: "person.wave.2"
+        }
+    }
+
+    var includesMicrophone: Bool { self != .thisMac }
+    var includesSystemAudio: Bool { self != .microphone }
+}
+
 @MainActor
 protocol MeetingAudioRecording: AnyObject {
     var isRecording: Bool { get }
     var onDecibelUpdate: ((Float?) -> Void)? { get set }
     var onPCMFrame: (@MainActor @Sendable (StreamingVoiceFrame) -> Void)? { get set }
-    func requestPermission() async -> Bool
-    func start(at url: URL) throws
-    func stop() -> URL?
+    func requestPermission(for source: AudioCaptureSource) async -> Bool
+    func start(at url: URL, source: AudioCaptureSource) async throws
+    func stop() async -> URL?
     func cancel()
 }
 
@@ -137,7 +170,7 @@ final class MeetingAudioRecorder: NSObject, MeetingAudioRecording, AVAudioRecord
         meterTimer?.invalidate()
     }
 
-    func requestPermission() async -> Bool {
+    func requestPermission(for source: AudioCaptureSource) async -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized:
             return true
@@ -152,7 +185,7 @@ final class MeetingAudioRecorder: NSObject, MeetingAudioRecording, AVAudioRecord
         }
     }
 
-    func start(at url: URL) throws {
+    func start(at url: URL, source: AudioCaptureSource) async throws {
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVSampleRateKey: 44_100,
@@ -179,7 +212,7 @@ final class MeetingAudioRecorder: NSObject, MeetingAudioRecording, AVAudioRecord
         startMetering()
     }
 
-    func stop() -> URL? {
+    func stop() async -> URL? {
         guard let recorder, recorder.isRecording else { return nil }
         stopMetering()
         stopPCMStreaming()
@@ -266,6 +299,60 @@ final class MeetingAudioRecorder: NSObject, MeetingAudioRecording, AVAudioRecord
         recorder.updateMeters()
         let decibels = min(0, max(-60, recorder.averagePower(forChannel: 0)))
         onDecibelUpdate?(decibels)
+    }
+}
+
+@MainActor
+final class MeetingAudioRecorderRouter: MeetingAudioRecording {
+    private let microphoneRecorder: any MeetingAudioRecording
+    private let systemRecorder: any MeetingAudioRecording
+    private var activeRecorder: (any MeetingAudioRecording)?
+
+    var onDecibelUpdate: ((Float?) -> Void)? {
+        didSet {
+            microphoneRecorder.onDecibelUpdate = onDecibelUpdate
+            systemRecorder.onDecibelUpdate = onDecibelUpdate
+        }
+    }
+    var onPCMFrame: (@MainActor @Sendable (StreamingVoiceFrame) -> Void)? {
+        didSet {
+            microphoneRecorder.onPCMFrame = onPCMFrame
+            systemRecorder.onPCMFrame = onPCMFrame
+        }
+    }
+
+    var isRecording: Bool { activeRecorder?.isRecording == true }
+
+    init(
+        microphoneRecorder: any MeetingAudioRecording = MeetingAudioRecorder(),
+        systemRecorder: any MeetingAudioRecording = SystemAudioRecorder()
+    ) {
+        self.microphoneRecorder = microphoneRecorder
+        self.systemRecorder = systemRecorder
+    }
+
+    func requestPermission(for source: AudioCaptureSource) async -> Bool {
+        await recorder(for: source).requestPermission(for: source)
+    }
+
+    func start(at url: URL, source: AudioCaptureSource) async throws {
+        let recorder = recorder(for: source)
+        activeRecorder = recorder
+        try await recorder.start(at: url, source: source)
+    }
+
+    func stop() async -> URL? {
+        defer { activeRecorder = nil }
+        return await activeRecorder?.stop()
+    }
+
+    func cancel() {
+        activeRecorder?.cancel()
+        activeRecorder = nil
+    }
+
+    private func recorder(for source: AudioCaptureSource) -> any MeetingAudioRecording {
+        source == .microphone ? microphoneRecorder : systemRecorder
     }
 }
 

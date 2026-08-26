@@ -74,6 +74,8 @@ final class AppModel: ObservableObject {
     @Published var voiceQualityAudit: VoiceQualityCorpusAudit?
     @Published var voiceQualityAuditError: String?
     @Published var voiceMode: VoiceMode
+    @Published var audioCaptureSource: AudioCaptureSource
+    @Published var keepListeningEnabled: Bool
     @Published var lastDictationDelivery: VoiceDictationDelivery?
     @Published var isDeliveringDictation = false
     @Published var dictationProcessingMessage: String?
@@ -106,6 +108,8 @@ final class AppModel: ObservableObject {
     private let appearanceModeKey: String
     private let voiceModeKey: String
     private let voiceContextKey: String
+    private let audioCaptureSourceKey: String
+    private let keepListeningKey: String
     private var recallGeneration = 0
     private var voiceController: VoiceTranscriptionController?
     private var voiceObservation: AnyCancellable?
@@ -140,7 +144,9 @@ final class AppModel: ObservableObject {
         advancedModeKey: String = "OpenLoopAdvancedMode",
         appearanceModeKey: String = "OpenLoopAppearanceMode",
         voiceModeKey: String = "OpenLoopVoiceMode",
-        voiceContextKey: String = "OpenLoopVoiceContextEnabled"
+        voiceContextKey: String = "OpenLoopVoiceContextEnabled",
+        audioCaptureSourceKey: String = "OpenLoopAudioCaptureSource",
+        keepListeningKey: String = "OpenLoopKeepListening"
     ) {
         self.loop = loop
         self.readModels = readModels
@@ -156,6 +162,8 @@ final class AppModel: ObservableObject {
         self.appearanceModeKey = appearanceModeKey
         self.voiceModeKey = voiceModeKey
         self.voiceContextKey = voiceContextKey
+        self.audioCaptureSourceKey = audioCaptureSourceKey
+        self.keepListeningKey = keepListeningKey
         isAdvancedModeEnabled = defaults.bool(forKey: advancedModeKey)
         appearanceMode = defaults.string(forKey: appearanceModeKey)
             .flatMap(OpenLoopAppearanceMode.init(rawValue:)) ?? .system
@@ -163,6 +171,9 @@ final class AppModel: ObservableObject {
         meetingLanguagePreference = .automatic
         voiceMode = defaults.string(forKey: voiceModeKey)
             .flatMap(VoiceMode.init(rawValue:)) ?? .polished
+        audioCaptureSource = defaults.string(forKey: audioCaptureSourceKey)
+            .flatMap(AudioCaptureSource.init(rawValue:)) ?? .microphone
+        keepListeningEnabled = defaults.bool(forKey: keepListeningKey)
         isVoiceContextEnabled = defaults.object(forKey: voiceContextKey) == nil
             ? true
             : defaults.bool(forKey: voiceContextKey)
@@ -187,7 +198,17 @@ final class AppModel: ObservableObject {
 
     func toggleVoiceCapture() {
         if let meetingController {
-            Task { await meetingController.toggleRecording(purpose: .meeting) }
+            if meetingJob.stage == .recording, keepListeningEnabled {
+                keepListeningEnabled = false
+                defaults.set(false, forKey: keepListeningKey)
+            }
+            let source = audioCaptureSource
+            Task {
+                await meetingController.toggleRecording(
+                    purpose: .meeting,
+                    source: source
+                )
+            }
             return
         }
         guard let voiceController else {
@@ -217,9 +238,14 @@ final class AppModel: ObservableObject {
         }
         if meetingJob.stage == .recording {
             if isSystemDictationActive {
-                Task { await meetingController.toggleRecording(purpose: .dictation) }
+                Task {
+                    await meetingController.toggleRecording(
+                        purpose: .dictation,
+                        source: .microphone
+                    )
+                }
             } else {
-                commandError = "A meeting recording is already active. Stop it from Now before dictating."
+                commandError = "A voice note is already listening. Stop it from Home before using Type by voice."
             }
             return
         }
@@ -237,7 +263,12 @@ final class AppModel: ObservableObject {
         dictationActionNotice = nil
         dictationProcessingMessage = "Listening for system-wide dictation"
         commandError = nil
-        Task { await meetingController.toggleRecording(purpose: .dictation) }
+        Task {
+            await meetingController.toggleRecording(
+                purpose: .dictation,
+                source: .microphone
+            )
+        }
     }
 
     func cancelVoiceCapture() {
@@ -257,6 +288,10 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             meetingJob = job
             handleDictationJob(job)
+            if job.stage == .failed, keepListeningEnabled {
+                keepListeningEnabled = false
+                defaults.set(false, forKey: keepListeningKey)
+            }
         }
         meetingTranscriptObservation = controller.$transcripts.sink { [weak self] transcripts in
             guard let self else { return }
@@ -278,7 +313,18 @@ final class AppModel: ObservableObject {
         meetingStreamingObservation = controller.$streamingSnapshot.sink { [weak self] in
             self?.streamingVoiceSession = $0
         }
-        Task { await controller.refresh() }
+        Task { [weak self] in
+            await controller.refresh()
+            guard let self,
+                  keepListeningEnabled,
+                  !controller.job.isActive,
+                  controller.job.stage != .recording
+            else { return }
+            await controller.toggleRecording(
+                purpose: .meeting,
+                source: audioCaptureSource
+            )
+        }
     }
 
     private func semanticizeNewMeetingTranscripts(_ transcripts: [MeetingTranscript]) {
@@ -464,6 +510,39 @@ final class AppModel: ObservableObject {
     func setVoiceContextEnabled(_ enabled: Bool) {
         isVoiceContextEnabled = enabled
         defaults.set(enabled, forKey: voiceContextKey)
+    }
+
+    func setAudioCaptureSource(_ source: AudioCaptureSource) {
+        guard !meetingJob.isActive else { return }
+        audioCaptureSource = source
+        defaults.set(source.rawValue, forKey: audioCaptureSourceKey)
+    }
+
+    func setKeepListeningEnabled(_ enabled: Bool) {
+        guard let meetingController else {
+            commandError = "Listening is unavailable."
+            return
+        }
+        keepListeningEnabled = enabled
+        defaults.set(enabled, forKey: keepListeningKey)
+        if enabled {
+            guard !meetingJob.isActive else { return }
+            let source = audioCaptureSource
+            Task {
+                await meetingController.toggleRecording(
+                    purpose: .meeting,
+                    source: source
+                )
+            }
+        } else if meetingJob.stage == .recording,
+                  meetingJob.capturePurpose == .meeting {
+            Task {
+                await meetingController.toggleRecording(
+                    purpose: .meeting,
+                    source: meetingJob.captureSource
+                )
+            }
+        }
     }
 
     func confirmPendingVoiceCommand() {
