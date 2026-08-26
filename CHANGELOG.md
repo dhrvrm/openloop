@@ -4,6 +4,12 @@ All notable changes are recorded here. Releases follow semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.10] — 2026-08-26
+
+- Reduced the menu-bar interface to Open OpenLoop, Start Voice Note, Type by Voice, Keep Listening, and Quit.
+- Added live Listening, Typing, Transcribing, and Writing state directly to the macOS menu bar.
+- Removed workspace navigation, focus controls, and privacy terminology from the status menu.
+
 ## [1.0.9] — 2026-08-26
 
 - Added local recording from the microphone, audio playing on this Mac, or both together.
@@ -72,7 +78,8 @@ All notable changes are recorded here. Releases follow semantic versioning.
 - Added encrypted local storage, permission-aware capture and advanced diagnostics.
 - Established the native visual system and global capture shortcuts.
 
-[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.9...HEAD
+[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.10...HEAD
+[1.0.10]: https://github.com/dhrvrm/openloop/compare/v1.0.9...v1.0.10
 [1.0.9]: https://github.com/dhrvrm/openloop/compare/v1.0.8...v1.0.9
 [1.0.8]: https://github.com/dhrvrm/openloop/compare/v1.0.7...v1.0.8
 [1.0.7]: https://github.com/dhrvrm/openloop/compare/v1.0.6...v1.0.7

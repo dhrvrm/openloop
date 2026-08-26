@@ -1,6 +1,7 @@
 import ADHDCore
 import AppKit
 import Carbon
+import Combine
 import Darwin
 import Foundation
 import LocalStore
@@ -84,8 +85,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
     private var meetingRecordHotKey: GlobalHotKey?
     private var voiceCaptureWindow: VoiceCaptureWindowController?
     private var model: AppModel?
-    private var pauseMenuItem: NSMenuItem?
-    private var privateModeMenuItem: NSMenuItem?
+    private var voiceNoteMenuItem: NSMenuItem?
+    private var voiceTypingMenuItem: NSMenuItem?
+    private var keepListeningMenuItem: NSMenuItem?
+    private var statusObservation: AnyCancellable?
     private var contextProvider: FrontmostApplicationReferenceProvider?
     private var applicationContextObserver: ApplicationContextObserver?
     private var workspaceLifecycle: WorkspaceLifecycle?
@@ -321,7 +324,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 self?.presentWorkspace(tab: tab)
             }
             self.workspaceLifecycle = workspaceLifecycle
-            configureMenu(quickCapture: quickCapture, mainWindow: mainWindow)
+            configureMenu()
             await contextProvider.snapshot()
             await model.refreshContext(await contextProvider.currentContext())
             await model.refreshContextTrail()
@@ -840,28 +843,35 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         )
     }
 
-    @objc private func showCapture() { quickCapture?.show() }
-    @objc private func toggleVoiceCapture() { model?.toggleSystemDictation() }
-    @objc private func showLive() { presentWorkspace(tab: 0) }
-    @objc private func showContext() { mainWindow?.show(tab: 1) }
-    @objc private func showEmerging() { mainWindow?.show(tab: 2) }
-    @objc private func showAsk() { mainWindow?.show(tab: 3) }
-    @objc private func showAct() { mainWindow?.show(tab: 4) }
-    @objc private func pauseOrContinue() {
-        guard let model, let item = model.now, let focus = item.focus else { return }
-        Task {
-            if focus.state == .paused {
-                await model.continueFocus(item.intentionID)
-            } else if focus.state == .active {
-                await model.pauseFocus(item.intentionID)
-            }
-        }
+    @objc private func openOpenLoop() { presentWorkspace(tab: 0) }
+    @objc private func toggleVoiceNote() {
+        guard let model else { return }
+        model.showShortcutFeedback(ShortcutFeedback(
+            kind: .recording,
+            title: model.meetingJob.stage == .recording
+                && model.meetingJob.capturePurpose == .meeting
+                ? "Finishing voice note"
+                : "Listening started",
+            shortcut: "⌃⌥R"
+        ))
+        model.toggleVoiceCapture()
+    }
+    @objc private func toggleVoiceTyping() {
+        guard let model else { return }
+        model.showShortcutFeedback(ShortcutFeedback(
+            kind: .dictation,
+            title: model.isSystemDictationActive
+                ? "Finishing voice typing"
+                : "Voice typing started",
+            shortcut: "⌃⌥Space"
+        ))
+        model.toggleSystemDictation()
+    }
+    @objc private func toggleKeepListening() {
+        guard let model else { return }
+        model.setKeepListeningEnabled(!model.keepListeningEnabled)
     }
     @objc private func quit() { NSApp.terminate(nil) }
-    @objc private func toggleContextTrail() {
-        guard let model else { return }
-        Task { await model.setContextTrailEnabled(!model.contextTrailSettings.isEnabled) }
-    }
 
     func applicationWillTerminate(_ notification: Notification) {
         applicationContextObserver?.stop()
@@ -885,73 +895,97 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
         workspaceLifecycle?.restoreWorkspace(hasVisibleWindows: flag) ?? false
     }
 
-    private func configureMenu(
-        quickCapture: QuickCaptureController,
-        mainWindow: MainWindowController
-    ) {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "circle.circle", accessibilityDescription: "OpenLoop")
+    private func configureMenu() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         let menu = NSMenu()
         menu.delegate = self
-        menu.addItem(withTitle: "Write a Note", action: #selector(showCapture), keyEquivalent: "")
-        let voiceItem = menu.addItem(
+
+        let openItem = menu.addItem(
+            withTitle: "Open OpenLoop",
+            action: #selector(openOpenLoop),
+            keyEquivalent: ""
+        )
+        openItem.image = NSImage(systemSymbolName: "macwindow", accessibilityDescription: nil)
+
+        let voiceNoteItem = menu.addItem(
+            withTitle: "Start Voice Note",
+            action: #selector(toggleVoiceNote),
+            keyEquivalent: "r"
+        )
+        voiceNoteItem.keyEquivalentModifierMask = [.control, .option]
+        voiceNoteItem.image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: nil)
+        voiceNoteMenuItem = voiceNoteItem
+
+        let voiceTypingItem = menu.addItem(
             withTitle: "Type by Voice",
-            action: #selector(toggleVoiceCapture),
+            action: #selector(toggleVoiceTyping),
             keyEquivalent: " "
         )
-        voiceItem.keyEquivalentModifierMask = [.control, .option]
-        menu.addItem(withTitle: "Home", action: #selector(showLive), keyEquivalent: "")
-        let pauseItem = menu.addItem(
-            withTitle: "Pause",
-            action: #selector(pauseOrContinue),
+        voiceTypingItem.keyEquivalentModifierMask = [.control, .option]
+        voiceTypingItem.image = NSImage(systemSymbolName: "text.cursor", accessibilityDescription: nil)
+        voiceTypingMenuItem = voiceTypingItem
+
+        let keepListeningItem = menu.addItem(
+            withTitle: "Keep Listening",
+            action: #selector(toggleKeepListening),
             keyEquivalent: ""
         )
-        pauseItem.isEnabled = false
-        pauseMenuItem = pauseItem
-        menu.addItem(withTitle: "Connections", action: #selector(showContext), keyEquivalent: "")
-        menu.addItem(withTitle: "Patterns", action: #selector(showEmerging), keyEquivalent: "")
-        let recallItem = menu.addItem(
-            withTitle: "Ask OpenLoop",
-            action: #selector(showAsk),
-            keyEquivalent: "f"
-        )
-        recallItem.keyEquivalentModifierMask = [.command, .shift]
-        menu.addItem(withTitle: "Tasks", action: #selector(showAct), keyEquivalent: "")
-        menu.addItem(.separator())
-        let privateMode = NSMenuItem(
-            title: ContextTrailMenuPresentation.title(for: .privateMode),
-            action: #selector(toggleContextTrail),
-            keyEquivalent: ""
-        )
-        privateMode.state = .on
-        privateModeMenuItem = privateMode
-        menu.addItem(privateMode)
+        keepListeningItem.image = NSImage(systemSymbolName: "ear", accessibilityDescription: nil)
+        keepListeningMenuItem = keepListeningItem
+
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit OpenLoop", action: #selector(quit), keyEquivalent: "q")
         menu.items.forEach { $0.target = self }
         item.menu = menu
         statusItem = item
+
+        if let model {
+            statusObservation = Publishers.CombineLatest4(
+                model.$meetingJob,
+                model.$isSystemDictationActive,
+                model.$isDeliveringDictation,
+                model.$keepListeningEnabled
+            )
+            .sink { [weak self] job, dictation, delivery, continuous in
+                self?.applyStatusMenuPresentation(.make(
+                    job: job,
+                    isSystemDictationActive: dictation,
+                    isDeliveringDictation: delivery,
+                    keepListeningEnabled: continuous
+                ))
+            }
+        }
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
-        if let model, let privateModeMenuItem {
-            privateModeMenuItem.title = ContextTrailMenuPresentation.title(
-                for: model.contextTrailSettings.mode
-            )
-            privateModeMenuItem.isEnabled = !model.isUpdatingContextTrail
-        }
-        guard let pauseMenuItem else { return }
-        switch model?.now?.focus?.state {
-        case .active:
-            pauseMenuItem.title = "Pause"
-            pauseMenuItem.isEnabled = true
-        case .paused:
-            pauseMenuItem.title = "Continue"
-            pauseMenuItem.isEnabled = true
-        default:
-            pauseMenuItem.title = "Pause"
-            pauseMenuItem.isEnabled = false
-        }
+        guard let model else { return }
+        applyStatusMenuPresentation(.make(
+            job: model.meetingJob,
+            isSystemDictationActive: model.isSystemDictationActive,
+            isDeliveringDictation: model.isDeliveringDictation,
+            keepListeningEnabled: model.keepListeningEnabled
+        ))
+    }
+
+    private func applyStatusMenuPresentation(_ presentation: StatusMenuPresentation) {
+        voiceNoteMenuItem?.title = presentation.voiceNoteTitle
+        voiceNoteMenuItem?.isEnabled = presentation.voiceNoteEnabled
+        voiceTypingMenuItem?.title = presentation.voiceTypingTitle
+        voiceTypingMenuItem?.isEnabled = presentation.voiceTypingEnabled
+        keepListeningMenuItem?.title = presentation.keepListeningTitle
+        keepListeningMenuItem?.state = presentation.keepListeningEnabled ? .on : .off
+
+        guard let button = statusItem?.button else { return }
+        button.image = NSImage(
+            systemSymbolName: presentation.statusSymbolName,
+            accessibilityDescription: "OpenLoop"
+        )
+        button.imagePosition = presentation.statusTitle.isEmpty ? .imageOnly : .imageLeading
+        button.title = presentation.statusTitle
+        button.toolTip = presentation.statusTitle.isEmpty
+            ? "OpenLoop"
+            : "OpenLoop — \(presentation.statusTitle)"
+        button.setAccessibilityLabel(button.toolTip ?? "OpenLoop")
     }
 
     private func dataDirectory() -> URL {
