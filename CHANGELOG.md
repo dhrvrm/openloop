@@ -4,9 +4,16 @@ All notable changes are recorded here. Releases follow semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.8] — 2026-08-26
+
 - Added local Speaker A/B/C separation with encrypted voice fingerprints, conservative cross-recording identity matching, and durable user aliases.
 - Made speaker-separation failure visible and preserved speaker identity through accuracy-first transcript fusion and corrections.
 - Added one-edit phrase learning so minimal corrections such as `tit-for-tat` → `tip for tap` are applied to future meeting and dictation transcripts.
+
+## [1.0.7] — 2026-08-25
+
+- Added quality-first global dictation with local Qwen recognition and Whisper cross-checking.
+- Added headless quality verification for dictation delivery without opening the application.
 
 ## [1.0.6] — 2026-08-23
 
@@ -58,7 +65,9 @@ All notable changes are recorded here. Releases follow semantic versioning.
 - Added encrypted local storage, permission-aware capture and advanced diagnostics.
 - Established the native visual system and global capture shortcuts.
 
-[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.6...HEAD
+[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.8...HEAD
+[1.0.8]: https://github.com/dhrvrm/openloop/compare/v1.0.7...v1.0.8
+[1.0.7]: https://github.com/dhrvrm/openloop/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/dhrvrm/openloop/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/dhrvrm/openloop/compare/v1.0.4...v1.0.5
 [1.0.4]: https://github.com/dhrvrm/openloop/compare/v1.0.3...v1.0.4

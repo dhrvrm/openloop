@@ -66,5 +66,5 @@
 - Modify: `docs/VOICE_PLATFORM.md`
 
 - [x] **Step 1: Document fingerprint locality, conservative matching, aliases, failure visibility, and correction behavior.**
-- [ ] **Step 2: Run focused builds/tests without launching the app, then run the full Xcode CI suite.**
-- [ ] **Step 3: Push the verified commits to the feature branch and `main`; do not open OpenLoop automatically.**
+- [x] **Step 2: Run focused builds/tests without launching the app, then run the full Xcode CI suite.**
+- [x] **Step 3: Push the verified commits to the feature branch and `main`; do not open OpenLoop automatically.**
