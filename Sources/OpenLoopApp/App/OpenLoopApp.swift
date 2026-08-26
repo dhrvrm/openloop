@@ -261,19 +261,27 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                     (try? await voiceLearning.vocabulary(limit: 80)) ?? []
                 }
             )
-            let meetingTranscriber = AccuracyFirstTranscriber(
+            let accuracyMeetingTranscriber = AccuracyFirstTranscriber(
                 primary: whisperTranscriber,
                 witness: qualityQwenTranscriber,
                 expectedDomainTerms: {
                     (try? await voiceLearning.vocabulary(limit: 80)) ?? []
                 }
             )
-            let dictationTranscriber = AccuracyFirstTranscriber(
+            let accuracyDictationTranscriber = AccuracyFirstTranscriber(
                 primary: qualityQwenTranscriber,
                 witness: whisperTranscriber,
                 expectedDomainTerms: {
                     (try? await voiceLearning.vocabulary(limit: 80)) ?? []
                 }
+            )
+            let meetingTranscriber = TranscriptNormalizingTranscriber(
+                base: accuracyMeetingTranscriber,
+                rules: { (try? await voiceLearning.normalizationRules()) ?? [] }
+            )
+            let dictationTranscriber = TranscriptNormalizingTranscriber(
+                base: accuracyDictationTranscriber,
+                rules: { (try? await voiceLearning.normalizationRules()) ?? [] }
             )
             model.attachVoiceQualityAudit(
                 VoiceQualityCorpusAuditor(repository: repository),

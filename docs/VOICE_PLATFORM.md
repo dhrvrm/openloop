@@ -19,6 +19,20 @@ Whisper owns the canonical meeting timeline because it provides the word timesta
 
 Automatic language detection remains the default. Hindi and English can occur in the same recording and in the same sentence. Qwen receives only a bounded tail of accepted prior text, labelled as context that must not be repeated, so a long meeting can keep names and language continuity without treating the whole transcript as a prompt.
 
+## Speaker identity
+
+SpeakerKit emits a centroid embedding for each voice cluster. OpenLoop keeps that observation with the encrypted transcript and resolves it against prior local observations using cosine distance, an ambiguity margin, and one-profile-per-speaker assignment. A close but ambiguous match is treated as a new voice; the application does not guess a person's identity merely because two voices sound similar.
+
+New voices appear as Speaker A, Speaker B, Speaker C, and so on. Selecting a speaker label lets the user assign an alias such as Dhruv. The alias is attached to the stable local profile and updates prior transcripts carrying that profile; future recordings reuse it only when the fingerprint match clears both confidence gates. The interface explicitly says when speaker separation was unavailable, rather than presenting an unlabeled transcript as successful diarization.
+
+Fingerprint observations are model-derived vectors, not playable audio and not an authentication credential. They remain inside the same encrypted local vault as the transcript. Deleting the connected transcripts removes their observations; no enrollment or voice data is uploaded.
+
+## Correction learning
+
+An explicit transcript edit becomes local evidence after one save. The learning layer compares the recognized and corrected token sequences, removes matching sentence context, and stores the smallest changed phrase. For example, editing `It was tit-for-tat in the meeting` to `It was tip for tap in the meeting` teaches only `tit for tat` → `tip for tap`, not the complete sentence.
+
+Learned rules are token-boundary aware, tolerate space and hyphen variants, and run after recognizer fusion for meetings and dictation. Timing, speaker profile, language, and competing recognizer evidence remain unchanged. This is deterministic terminology correction, not semantic rewriting; ambiguous wording stays reviewable.
+
 ## Acoustic behavior
 
 The durable source file is never overwritten. Inference uses a conditioned copy with:

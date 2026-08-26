@@ -4,25 +4,36 @@ import Foundation
 import SpeakerKit
 import WhisperKit
 
+struct LocalSpeakerFingerprint: Equatable, Sendable {
+    let localSpeakerLabel: String
+    let embedding: [Float]
+}
+
 struct LocalTranscriptionOutput: Equatable, Sendable {
     let duration: TimeInterval
     let detectedLanguage: String?
     let modelIdentifier: String
     let segments: [TranscriptSegment]
     let fusionEvidence: TranscriptFusionResult?
+    let speakerSeparation: SpeakerSeparationState
+    let speakerFingerprints: [LocalSpeakerFingerprint]
 
     init(
         duration: TimeInterval,
         detectedLanguage: String?,
         modelIdentifier: String,
         segments: [TranscriptSegment],
-        fusionEvidence: TranscriptFusionResult? = nil
+        fusionEvidence: TranscriptFusionResult? = nil,
+        speakerSeparation: SpeakerSeparationState = .notRequested,
+        speakerFingerprints: [LocalSpeakerFingerprint] = []
     ) {
         self.duration = duration
         self.detectedLanguage = detectedLanguage
         self.modelIdentifier = modelIdentifier
         self.segments = segments
         self.fusionEvidence = fusionEvidence
+        self.speakerSeparation = speakerSeparation
+        self.speakerFingerprints = speakerFingerprints
     }
 }
 
@@ -200,15 +211,23 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         await callbackGate.invalidateAndDrain()
         try Task.checkCancellation()
         let mapped: (segments: [TranscriptSegment], language: String?)
+        var speakerSeparation = SpeakerSeparationState.notRequested
+        var speakerFingerprints: [LocalSpeakerFingerprint] = []
         if speakerDiarizationEnabled {
             do {
-                mapped = try await diarize(
+                let diarized = try await diarize(
                     audio: audio,
                     transcription: windows,
                     progress: progress
                 )
+                mapped = (diarized.segments, diarized.language)
+                speakerSeparation = .complete(speakerCount: diarized.speakerCount)
+                speakerFingerprints = diarized.fingerprints
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 mapped = try Self.map(windows)
+                speakerSeparation = .unavailable
                 await progress(.init(
                     stage: .diarizing,
                     fraction: 1,
@@ -230,7 +249,9 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
                 segments: mapped.segments
             ),
             modelIdentifier: modelIdentifier,
-            segments: mapped.segments
+            segments: mapped.segments,
+            speakerSeparation: speakerSeparation,
+            speakerFingerprints: speakerFingerprints
         )
     }
 
@@ -391,7 +412,12 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         audio: [Float],
         transcription: [TranscriptionResult],
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
-    ) async throws -> (segments: [TranscriptSegment], language: String?) {
+    ) async throws -> (
+        segments: [TranscriptSegment],
+        language: String?,
+        speakerCount: Int,
+        fingerprints: [LocalSpeakerFingerprint]
+    ) {
         await progress(.init(
             stage: .diarizing,
             fraction: 0,
@@ -426,7 +452,7 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         let segments = try aligned.compactMap { value -> TranscriptSegment? in
             let text = value.text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
             guard !text.isEmpty else { return nil }
-            let speaker = value.speaker.speakerId.map { "Speaker \($0 + 1)" }
+            let speaker = value.speaker.speakerId.map(Self.speakerLabel)
             return try TranscriptSegment(
                 start: TimeInterval(value.startTime),
                 end: TimeInterval(value.endTime),
@@ -436,7 +462,27 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         }
         guard !segments.isEmpty else { throw MeetingTranscriptionError.emptyTranscript }
         let language = Self.languageSummary(transcription.map(\.language))
-        return (segments, language)
+        let fingerprints = result.speakerCentroidEmbeddings.keys.sorted().compactMap {
+            speakerID -> LocalSpeakerFingerprint? in
+            guard let embedding = result.speakerCentroidEmbeddings[speakerID],
+                  !embedding.isEmpty else { return nil }
+            return LocalSpeakerFingerprint(
+                localSpeakerLabel: Self.speakerLabel(speakerID),
+                embedding: embedding
+            )
+        }
+        return (segments, language, result.speakerCount, fingerprints)
+    }
+
+    static func speakerLabel(_ zeroBasedID: Int) -> String {
+        var value = max(0, zeroBasedID)
+        var letters = ""
+        repeat {
+            let scalar = UnicodeScalar(65 + value % 26)!
+            letters.insert(Character(scalar), at: letters.startIndex)
+            value = value / 26 - 1
+        } while value >= 0
+        return "Speaker \(letters)"
     }
 
     private func loadPipeline(

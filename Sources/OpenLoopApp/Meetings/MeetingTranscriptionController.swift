@@ -53,6 +53,7 @@ final class MeetingTranscriptionController: ObservableObject {
     private let streamingBuilder: (any StreamingVoiceSessionBuilding)?
     private let intelligenceProvider: any MeetingIntelligenceProviding
     private let titleProvider: any MeetingTitleProviding
+    private let speakerIdentityResolver: SpeakerIdentityResolver
     private var work: Task<Void, Never>?
     private var interpretationWork: [UUID: Task<Void, Never>] = [:]
     private var interpretationGeneration: [UUID: UUID] = [:]
@@ -74,7 +75,8 @@ final class MeetingTranscriptionController: ObservableObject {
         recorder: (any MeetingAudioRecording)? = nil,
         streamingBuilder: (any StreamingVoiceSessionBuilding)? = nil,
         intelligenceProvider: any MeetingIntelligenceProviding = DeterministicMeetingIntelligenceProvider(),
-        titleProvider: any MeetingTitleProviding = DeterministicMeetingTitleProvider()
+        titleProvider: any MeetingTitleProviding = DeterministicMeetingTitleProvider(),
+        speakerIdentityResolver: SpeakerIdentityResolver = SpeakerIdentityResolver()
     ) {
         self.repository = repository
         self.transcriber = transcriber
@@ -84,6 +86,7 @@ final class MeetingTranscriptionController: ObservableObject {
         self.streamingBuilder = streamingBuilder
         self.intelligenceProvider = intelligenceProvider
         self.titleProvider = titleProvider
+        self.speakerIdentityResolver = speakerIdentityResolver
         recorder?.onDecibelUpdate = { [weak self] value in
             self?.recordingDecibels = value
             if let value {
@@ -143,7 +146,9 @@ final class MeetingTranscriptionController: ObservableObject {
             modelIdentifier: transcript.modelIdentifier,
             segments: transcript.segments,
             sourceAudioFileName: retainedURL?.lastPathComponent ?? transcript.sourceAudioFileName,
-            fusionEvidence: transcript.fusionEvidence
+            fusionEvidence: transcript.fusionEvidence,
+            speakerSeparation: transcript.speakerSeparation,
+            speakerFingerprints: transcript.speakerFingerprints
         ) else { return transcript }
         do {
             try await repository.save(meetingTranscript: renamed)
@@ -379,7 +384,8 @@ final class MeetingTranscriptionController: ObservableObject {
                 start: segment.start,
                 end: segment.end,
                 text: correction.corrected,
-                speaker: segment.speaker
+                speaker: segment.speaker,
+                speakerProfileID: segment.speakerProfileID
             )
             let corrected = try MeetingTranscript(
                 id: transcript.id,
@@ -390,7 +396,9 @@ final class MeetingTranscriptionController: ObservableObject {
                 modelIdentifier: transcript.modelIdentifier,
                 segments: segments,
                 sourceAudioFileName: transcript.sourceAudioFileName,
-                fusionEvidence: transcript.fusionEvidence
+                fusionEvidence: transcript.fusionEvidence,
+                speakerSeparation: transcript.speakerSeparation,
+                speakerFingerprints: transcript.speakerFingerprints
             )
             try await repository.save(
                 meetingTranscript: corrected,
@@ -405,6 +413,68 @@ final class MeetingTranscriptionController: ObservableObject {
         } catch VoiceLearningError.unchangedText {
             return true
         } catch {
+            return false
+        }
+    }
+
+    @discardableResult
+    func renameSpeaker(
+        transcriptID: UUID,
+        segmentID: UUID,
+        alias: String
+    ) async -> Bool {
+        let normalizedAlias = alias.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedAlias.isEmpty,
+              normalizedAlias.count <= 60,
+              let transcript = transcripts.first(where: { $0.id == transcriptID }),
+              let segment = transcript.segments.first(where: { $0.id == segmentID }),
+              let profileID = segment.speakerProfileID else { return false }
+        do {
+            let replacements = try transcripts.map { stored -> MeetingTranscript in
+                guard stored.segments.contains(where: { $0.speakerProfileID == profileID }) else {
+                    return stored
+                }
+                let segments = try stored.segments.map { existing in
+                    guard existing.speakerProfileID == profileID else { return existing }
+                    return try TranscriptSegment(
+                        id: existing.id,
+                        start: existing.start,
+                        end: existing.end,
+                        text: existing.text,
+                        speaker: normalizedAlias,
+                        speakerProfileID: profileID
+                    )
+                }
+                return try MeetingTranscript(
+                    id: stored.id,
+                    sourceName: stored.sourceName,
+                    createdAt: stored.createdAt,
+                    duration: stored.duration,
+                    detectedLanguage: stored.detectedLanguage,
+                    modelIdentifier: stored.modelIdentifier,
+                    segments: segments,
+                    sourceAudioFileName: stored.sourceAudioFileName,
+                    fusionEvidence: stored.fusionEvidence,
+                    speakerSeparation: stored.speakerSeparation,
+                    speakerFingerprints: stored.speakerFingerprints
+                )
+            }
+            for replacement in replacements where replacement != transcripts.first(where: { $0.id == replacement.id }) {
+                try await repository.save(meetingTranscript: replacement)
+            }
+            transcripts = replacements
+            if let completedID = job.completedTranscriptID,
+               let completed = replacements.first(where: { $0.id == completedID }) {
+                job.previewText = completed.text
+            }
+            for replacement in replacements where replacement.segments.contains(where: {
+                $0.speakerProfileID == profileID
+            }) {
+                scheduleInterpretation(for: replacement)
+            }
+            return true
+        } catch {
+            transcripts = (try? await repository.meetingTranscripts()) ?? transcripts
             return false
         }
     }
@@ -463,6 +533,11 @@ final class MeetingTranscriptionController: ObservableObject {
                     transcripts.first { $0.id == replacementID }
                 }
                 let createdAt = replacedTranscript?.createdAt ?? .now
+                let identity = try speakerIdentityResolver.resolve(
+                    segments: output.segments,
+                    fingerprints: output.speakerFingerprints,
+                    history: transcripts
+                )
                 let draft = try MeetingTranscript(
                     id: replacingTranscriptID ?? UUID(),
                     sourceName: sourceName,
@@ -470,9 +545,11 @@ final class MeetingTranscriptionController: ObservableObject {
                     duration: output.duration,
                     detectedLanguage: output.detectedLanguage,
                     modelIdentifier: output.modelIdentifier,
-                    segments: output.segments,
+                    segments: identity.segments,
                     sourceAudioFileName: stagedURL.lastPathComponent,
-                    fusionEvidence: output.fusionEvidence
+                    fusionEvidence: output.fusionEvidence,
+                    speakerSeparation: output.speakerSeparation,
+                    speakerFingerprints: identity.fingerprints
                 )
                 let humanTitle = await titleProvider.title(for: draft)
                 let retainedURL = (try? renameStagedAudio(
@@ -487,9 +564,11 @@ final class MeetingTranscriptionController: ObservableObject {
                     duration: output.duration,
                     detectedLanguage: output.detectedLanguage,
                     modelIdentifier: output.modelIdentifier,
-                    segments: output.segments,
+                    segments: identity.segments,
                     sourceAudioFileName: retainedURL.lastPathComponent,
-                    fusionEvidence: output.fusionEvidence
+                    fusionEvidence: output.fusionEvidence,
+                    speakerSeparation: output.speakerSeparation,
+                    speakerFingerprints: identity.fingerprints
                 )
                 job.sourceName = humanTitle
                 job.stagedAudioURL = retainedURL
@@ -500,7 +579,14 @@ final class MeetingTranscriptionController: ObservableObject {
                 transcripts = try await repository.meetingTranscripts()
                 job.stage = .ready
                 job.fraction = 1
-                job.message = "Transcript ready below. Source audio is kept locally for retranscription."
+                switch transcript.speakerSeparation {
+                case let .complete(speakerCount):
+                    job.message = "Transcript ready with \(speakerCount) locally separated speaker\(speakerCount == 1 ? "" : "s")."
+                case .unavailable:
+                    job.message = "Transcript ready. Speaker separation was unavailable for this audio; the words were kept."
+                case .notRequested:
+                    job.message = "Transcript ready below. Source audio is kept locally for retranscription."
+                }
                 engineDiagnostics = await activeTranscriber.diagnostics()
                 recordEvent(stage: .ready, message: job.message, fraction: 1)
                 work = nil

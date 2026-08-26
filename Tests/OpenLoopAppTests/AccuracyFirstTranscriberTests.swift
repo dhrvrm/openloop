@@ -134,6 +134,7 @@ private actor FusionTestTranscriber: MeetingTranscribing {
 
 @Test func accuracyFirstPreservesCanonicalSpeakerTimelineWhenWitnessCorrectsText() async throws {
     let canonicalID = UUID()
+    let speakerProfileID = UUID()
     let primary = FusionTestTranscriber(
         modelIdentifier: "whisper-large-v3",
         segments: [try TranscriptSegment(
@@ -141,7 +142,8 @@ private actor FusionTestTranscriber: MeetingTranscribing {
             start: 4,
             end: 7,
             text: "Ship the SGVC release",
-            speaker: "Speaker 2"
+            speaker: "Speaker B",
+            speakerProfileID: speakerProfileID
         )]
     )
     let witness = FusionTestTranscriber(
@@ -166,7 +168,8 @@ private actor FusionTestTranscriber: MeetingTranscribing {
     #expect(segment.id == canonicalID)
     #expect(segment.start == 4)
     #expect(segment.end == 7)
-    #expect(segment.speaker == "Speaker 2")
+    #expect(segment.speaker == "Speaker B")
+    #expect(segment.speakerProfileID == speakerProfileID)
     #expect(segment.text == "Ship the SGLC release")
 }
 

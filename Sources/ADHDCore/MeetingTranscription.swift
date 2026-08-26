@@ -51,19 +51,47 @@ public enum MeetingTranscriptionError: Error, Equatable, Sendable {
     case persistenceUnsupported
 }
 
+public enum SpeakerSeparationState: Codable, Equatable, Sendable {
+    case notRequested
+    case complete(speakerCount: Int)
+    case unavailable
+}
+
+public struct SpeakerFingerprintObservation: Codable, Equatable, Identifiable, Sendable {
+    public let id: UUID
+    public let profileID: UUID
+    public let localSpeakerLabel: String
+    public let embedding: [Float]
+
+    public init(
+        id: UUID = UUID(),
+        profileID: UUID,
+        localSpeakerLabel: String,
+        embedding: [Float]
+    ) {
+        self.id = id
+        self.profileID = profileID
+        self.localSpeakerLabel = localSpeakerLabel
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        self.embedding = embedding.allSatisfy(\.isFinite) ? embedding : []
+    }
+}
+
 public struct TranscriptSegment: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public let start: TimeInterval
     public let end: TimeInterval
     public let text: String
     public let speaker: String?
+    public let speakerProfileID: UUID?
 
     public init(
         id: UUID = UUID(),
         start: TimeInterval,
         end: TimeInterval,
         text: String,
-        speaker: String? = nil
+        speaker: String? = nil,
+        speakerProfileID: UUID? = nil
     ) throws {
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { throw MeetingTranscriptionError.emptySegment }
@@ -75,6 +103,7 @@ public struct TranscriptSegment: Codable, Equatable, Identifiable, Sendable {
         self.end = end
         self.text = normalized
         self.speaker = speaker?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.speakerProfileID = speakerProfileID
     }
 }
 
@@ -88,6 +117,8 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
     public let segments: [TranscriptSegment]
     public let sourceAudioFileName: String?
     public let fusionEvidence: TranscriptFusionResult?
+    public let speakerSeparation: SpeakerSeparationState
+    public let speakerFingerprints: [SpeakerFingerprintObservation]
 
     public init(
         id: UUID = UUID(),
@@ -98,7 +129,9 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
         modelIdentifier: String,
         segments: [TranscriptSegment],
         sourceAudioFileName: String? = nil,
-        fusionEvidence: TranscriptFusionResult? = nil
+        fusionEvidence: TranscriptFusionResult? = nil,
+        speakerSeparation: SpeakerSeparationState = .notRequested,
+        speakerFingerprints: [SpeakerFingerprintObservation] = []
     ) throws {
         let ordered = segments.sorted {
             if $0.start == $1.start { return $0.id.uuidString < $1.id.uuidString }
@@ -114,6 +147,8 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
         self.segments = ordered
         self.sourceAudioFileName = try Self.validatedSourceAudioFileName(sourceAudioFileName)
         self.fusionEvidence = fusionEvidence
+        self.speakerSeparation = speakerSeparation
+        self.speakerFingerprints = speakerFingerprints
     }
 
     public var text: String { segments.map(\.text).joined(separator: "\n") }
@@ -140,6 +175,8 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
         case segments
         case sourceAudioFileName
         case fusionEvidence
+        case speakerSeparation
+        case speakerFingerprints
     }
 
     public init(from decoder: Decoder) throws {
@@ -156,7 +193,15 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
             fusionEvidence: values.decodeIfPresent(
                 TranscriptFusionResult.self,
                 forKey: .fusionEvidence
-            )
+            ),
+            speakerSeparation: values.decodeIfPresent(
+                SpeakerSeparationState.self,
+                forKey: .speakerSeparation
+            ) ?? .notRequested,
+            speakerFingerprints: values.decodeIfPresent(
+                [SpeakerFingerprintObservation].self,
+                forKey: .speakerFingerprints
+            ) ?? []
         )
     }
 
@@ -171,6 +216,8 @@ public struct MeetingTranscript: Codable, Equatable, Identifiable, Sendable {
         try values.encode(segments, forKey: .segments)
         try values.encodeIfPresent(sourceAudioFileName, forKey: .sourceAudioFileName)
         try values.encodeIfPresent(fusionEvidence, forKey: .fusionEvidence)
+        try values.encode(speakerSeparation, forKey: .speakerSeparation)
+        try values.encode(speakerFingerprints, forKey: .speakerFingerprints)
     }
 }
 

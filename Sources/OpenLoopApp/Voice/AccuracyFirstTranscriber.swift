@@ -169,7 +169,8 @@ actor AccuracyFirstTranscriber: MeetingTranscribing {
                     start: segment.start,
                     end: segment.end,
                     text: text,
-                    speaker: segment.speaker
+                    speaker: segment.speaker,
+                    speakerProfileID: segment.speakerProfileID
                   ) else { return segment }
             return replacement
         }
@@ -178,7 +179,9 @@ actor AccuracyFirstTranscriber: MeetingTranscribing {
             detectedLanguage: primary.detectedLanguage,
             modelIdentifier: modelIdentifier,
             segments: segments,
-            fusionEvidence: fusion
+            fusionEvidence: fusion,
+            speakerSeparation: primary.speakerSeparation,
+            speakerFingerprints: primary.speakerFingerprints
         )
     }
 }

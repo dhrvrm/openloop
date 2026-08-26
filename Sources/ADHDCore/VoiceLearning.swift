@@ -13,6 +13,16 @@ public enum VocabularyScope: String, Codable, CaseIterable, Sendable {
     case personal
 }
 
+public struct LearnedTranscriptionReplacement: Equatable, Sendable {
+    public let recognized: String
+    public let corrected: String
+
+    public init(recognized: String, corrected: String) {
+        self.recognized = recognized
+        self.corrected = corrected
+    }
+}
+
 public struct TranscriptionCorrection: Codable, Equatable, Identifiable, Sendable {
     public let id: UUID
     public let recognized: String
@@ -46,12 +56,44 @@ public struct TranscriptionCorrection: Codable, Equatable, Identifiable, Sendabl
     public var learnedPhrases: [String] {
         let correctedTokens = Self.tokens(in: corrected)
         let recognizedSet = Set(Self.tokens(in: recognized).map(Self.key(for:)))
-        var phrases: [String] = correctedTokens.count > 1 ? [corrected] : []
+        var phrases: [String] = correctedTokens.count > 1 && correctedTokens.count <= 6
+            ? [corrected]
+            : []
+        if let learnedReplacement {
+            phrases.append(learnedReplacement.corrected)
+        }
         phrases.append(contentsOf: correctedTokens.filter {
             !recognizedSet.contains(Self.key(for: $0))
         })
         if phrases.isEmpty { phrases = [corrected] }
         return Self.unique(phrases)
+    }
+
+    /// The smallest changed token window, excluding matching sentence context.
+    /// A full-segment edit such as "open tit-for-tat now" -> "open tip for tap now"
+    /// therefore teaches only "tit for tat" -> "tip for tap".
+    public var learnedReplacement: LearnedTranscriptionReplacement? {
+        let before = Self.tokens(in: recognized)
+        let after = Self.tokens(in: corrected)
+        guard !before.isEmpty, !after.isEmpty else { return nil }
+        var prefix = 0
+        while prefix < min(before.count, after.count),
+              Self.key(for: before[prefix]) == Self.key(for: after[prefix]) {
+            prefix += 1
+        }
+        var suffix = 0
+        while suffix < min(before.count - prefix, after.count - prefix),
+              Self.key(for: before[before.count - 1 - suffix])
+                == Self.key(for: after[after.count - 1 - suffix]) {
+            suffix += 1
+        }
+        let recognizedEnd = before.count - suffix
+        let correctedEnd = after.count - suffix
+        guard prefix < recognizedEnd, prefix < correctedEnd else { return nil }
+        return LearnedTranscriptionReplacement(
+            recognized: before[prefix..<recognizedEnd].joined(separator: " "),
+            corrected: after[prefix..<correctedEnd].joined(separator: " ")
+        )
     }
 
     private static func tokens(in text: String) -> [String] {
@@ -175,7 +217,7 @@ public struct PersonalVocabulary: Sendable {
     }
 
     public func normalizationRules(
-        minimumEvidence: Int = 2,
+        minimumEvidence: Int = 1,
         maximumRecognizedTokens: Int = 5,
         scopes: Set<VocabularyScope> = Set(VocabularyScope.allCases),
         projectIdentifier: String? = nil
@@ -190,17 +232,20 @@ public struct PersonalVocabulary: Sendable {
         for correction in filteredCorrections(
             scopes: scopes,
             projectIdentifier: projectIdentifier
-        ) where Self.tokenCount(correction.recognized) <= max(1, maximumRecognizedTokens) {
+        ) {
+            guard let replacement = correction.learnedReplacement,
+                  Self.tokenCount(replacement.recognized) <= max(1, maximumRecognizedTokens)
+            else { continue }
             let key = RuleKey(
-                recognized: TranscriptionCorrection.key(for: correction.recognized),
-                corrected: correction.corrected,
+                recognized: TranscriptionCorrection.key(for: replacement.recognized),
+                corrected: replacement.corrected,
                 scope: correction.scope,
                 projectIdentifier: correction.projectIdentifier
             )
             counts[key, default: 0] += 1
         }
         return counts.compactMap { key, count in
-            guard count >= max(2, minimumEvidence) else { return nil }
+            guard count >= max(1, minimumEvidence) else { return nil }
             return TranscriptionNormalizationRule(
                 recognized: key.recognized,
                 corrected: key.corrected,
@@ -246,7 +291,8 @@ public enum DeterministicTranscriptNormalizer {
         in text: String
     ) -> String {
         let escaped = NSRegularExpression.escapedPattern(for: recognized)
-            .replacingOccurrences(of: "\\ ", with: "\\s+")
+            .replacingOccurrences(of: "\\ ", with: "[\\s\\-–—]+")
+            .replacingOccurrences(of: " ", with: "[\\s\\-–—]+")
         guard let expression = try? NSRegularExpression(
             pattern: "(?<![\\p{L}\\p{N}])\(escaped)(?![\\p{L}\\p{N}])",
             options: [.caseInsensitive]
@@ -291,7 +337,7 @@ public struct VoiceLearningLoop: Sendable {
 
 
     public func normalizationRules(
-        minimumEvidence: Int = 2,
+        minimumEvidence: Int = 1,
         projectIdentifier: String? = nil
     ) async throws -> [TranscriptionNormalizationRule] {
         PersonalVocabulary(corrections: try await repository.transcriptionCorrections())

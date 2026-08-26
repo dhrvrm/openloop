@@ -40,6 +40,20 @@ completed work, blocker, references, and capture time.
 An atomic fact, decision, commitment, preference, question, correction, or
 learned personal pattern with evidence, time, confidence, and supersession.
 
+### Transcription evidence
+
+A meeting transcript keeps timestamped text, language evidence, recognizer
+disagreements, speaker labels, and the retained local audio reference. When
+speaker separation succeeds, it also keeps the diarizer's centroid observation
+and a random local profile identifier. The centroid is used only to reconnect a
+user-assigned speaker alias across recordings; it is not an authentication
+credential. These observations are encrypted with the transcript and disappear
+when the connected transcript is deleted.
+
+Explicit text corrections are append-only learning evidence. OpenLoop derives
+the smallest changed phrase for future deterministic normalization while keeping
+the original recognized and corrected segment available for audit.
+
 ## Storage capacity
 
 At 16 kHz mono 16-bit PCM, audio consumes about 115 MB per hour. Opus at 24–32

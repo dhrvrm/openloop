@@ -110,6 +110,82 @@ import Testing
 }
 
 @MainActor
+@Test func diarizedImportPersistsSpeakerFingerprintAndShowsSeparationResult() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let audio = root.appendingPathComponent("conversation.m4a")
+    try Data("audio fixture".utf8).write(to: audio)
+    let repository = MeetingRepository()
+    let controller = MeetingTranscriptionController(
+        repository: repository,
+        transcriber: DiarizedMeetingTranscriber(),
+        stagingDirectory: root.appendingPathComponent("staging")
+    )
+
+    controller.importAudio(audio)
+    await controller.waitUntilSettledForTesting()
+
+    let transcript = try #require(controller.transcripts.first)
+    let segment = try #require(transcript.segments.first)
+    #expect(segment.speaker == "Speaker A")
+    #expect(segment.speakerProfileID != nil)
+    #expect(transcript.speakerFingerprints.first?.profileID == segment.speakerProfileID)
+    #expect(transcript.speakerSeparation == .complete(speakerCount: 1))
+    #expect(controller.job.message == "Transcript ready with 1 locally separated speaker.")
+}
+
+@MainActor
+@Test func renamingVoiceAliasUpdatesEveryTranscriptWithThatFingerprintProfile() async throws {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let repository = MeetingRepository()
+    let profileID = UUID()
+    for index in 0..<2 {
+        try await repository.save(meetingTranscript: MeetingTranscript(
+            sourceName: "Conversation \(index + 1)",
+            createdAt: Date(timeIntervalSince1970: Double(index)),
+            duration: 1,
+            modelIdentifier: "local",
+            segments: [try TranscriptSegment(
+                start: 0,
+                end: 1,
+                text: "hello",
+                speaker: "Speaker A",
+                speakerProfileID: profileID
+            )],
+            speakerSeparation: .complete(speakerCount: 1),
+            speakerFingerprints: [SpeakerFingerprintObservation(
+                profileID: profileID,
+                localSpeakerLabel: "Speaker A",
+                embedding: [1, 0]
+            )]
+        ))
+    }
+    let controller = MeetingTranscriptionController(
+        repository: repository,
+        transcriber: SuccessfulMeetingTranscriber(),
+        stagingDirectory: root.appendingPathComponent("staging")
+    )
+    await controller.refresh()
+    let transcript = try #require(controller.transcripts.first)
+    let segment = try #require(transcript.segments.first)
+
+    let renamed = await controller.renameSpeaker(
+        transcriptID: transcript.id,
+        segmentID: segment.id,
+        alias: "Dhruv"
+    )
+
+    #expect(renamed)
+    #expect(controller.transcripts.flatMap(\.segments).map(\.speaker) == ["Dhruv", "Dhruv"])
+    let stored = await repository.storedValues()
+    #expect(stored.flatMap(\.segments).map(\.speaker) == ["Dhruv", "Dhruv"])
+}
+
+@MainActor
 @Test func dismissingCompletedJobExplicitlyDiscardsRetainedAudio() async throws {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -540,6 +616,32 @@ private actor SuccessfulMeetingTranscriber: MeetingTranscribing {
 
     func latestLanguageCode() -> String? {
         languageCodes.last ?? nil
+    }
+}
+
+private actor DiarizedMeetingTranscriber: MeetingTranscribing {
+    nonisolated let modelIdentifier = "local-diarized-test-model"
+
+    func transcribe(
+        audioURL: URL,
+        progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
+    ) async throws -> LocalTranscriptionOutput {
+        LocalTranscriptionOutput(
+            duration: 2,
+            detectedLanguage: "en",
+            modelIdentifier: modelIdentifier,
+            segments: [try TranscriptSegment(
+                start: 0,
+                end: 2,
+                text: "Speaker identity test",
+                speaker: "Speaker A"
+            )],
+            speakerSeparation: .complete(speakerCount: 1),
+            speakerFingerprints: [LocalSpeakerFingerprint(
+                localSpeakerLabel: "Speaker A",
+                embedding: [1, 0]
+            )]
+        )
     }
 }
 

@@ -3,6 +3,13 @@ import Testing
 import WhisperKit
 @testable import OpenLoopApp
 
+@Test func speakerLabelsUseStableAlphabeticAliases() {
+    #expect(WhisperKitMeetingTranscriber.speakerLabel(0) == "Speaker A")
+    #expect(WhisperKitMeetingTranscriber.speakerLabel(1) == "Speaker B")
+    #expect(WhisperKitMeetingTranscriber.speakerLabel(25) == "Speaker Z")
+    #expect(WhisperKitMeetingTranscriber.speakerLabel(26) == "Speaker AA")
+}
+
 @Test func whisperProgressEstimateIsBoundedForLongMeetings() {
     #expect(WhisperKitMeetingTranscriber.estimatedFraction(
         windowID: 0,

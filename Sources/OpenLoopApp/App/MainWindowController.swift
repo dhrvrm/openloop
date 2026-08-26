@@ -2053,6 +2053,8 @@ private struct MeetingTranscriptRow: View {
     @State private var selectedEvidenceID: UUID?
     @State private var editingSegmentID: UUID?
     @State private var correctionDraft = ""
+    @State private var editingSpeakerSegmentID: UUID?
+    @State private var speakerAliasDraft = ""
 
     init(
         model: AppModel,
@@ -2098,9 +2100,51 @@ private struct MeetingTranscriptRow: View {
                                     .frame(width: 44, alignment: .trailing)
                                 VStack(alignment: .leading, spacing: 2) {
                                     if let speaker = segment.speaker {
-                                        Text(speaker)
-                                            .font(.system(size: 12, weight: .medium))
+                                        if editingSpeakerSegmentID == segment.id {
+                                            HStack(spacing: 7) {
+                                                TextField("Speaker name", text: $speakerAliasDraft)
+                                                    .textFieldStyle(.plain)
+                                                    .font(.system(size: 12, weight: .medium))
+                                                    .padding(.horizontal, 9)
+                                                    .padding(.vertical, 6)
+                                                    .background(
+                                                        Color(nsColor: .textBackgroundColor).opacity(0.62),
+                                                        in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                    )
+                                                    .frame(maxWidth: 180)
+                                                Button("Save") {
+                                                    Task {
+                                                        if await model.renameMeetingSpeaker(
+                                                            transcriptID: transcript.id,
+                                                            segmentID: segment.id,
+                                                            alias: speakerAliasDraft
+                                                        ) {
+                                                            editingSpeakerSegmentID = nil
+                                                        }
+                                                    }
+                                                }
+                                                .disabled(speakerAliasDraft.trimmingCharacters(
+                                                    in: .whitespacesAndNewlines
+                                                ).isEmpty)
+                                                Button("Cancel") { editingSpeakerSegmentID = nil }
+                                            }
+                                            .buttonStyle(.borderless)
+                                        } else if segment.speakerProfileID != nil {
+                                            Button {
+                                                speakerAliasDraft = speaker
+                                                editingSpeakerSegmentID = segment.id
+                                            } label: {
+                                                Label(speaker, systemImage: "pencil")
+                                                    .font(.system(size: 12, weight: .medium))
+                                            }
+                                            .buttonStyle(.borderless)
                                             .foregroundStyle(.secondary)
+                                            .help("Rename this voice everywhere it is recognized")
+                                        } else {
+                                            Text(speaker)
+                                                .font(.system(size: 12, weight: .medium))
+                                                .foregroundStyle(.secondary)
+                                        }
                                     }
                                     if editingSegmentID == segment.id {
                                         TextEditor(text: $correctionDraft)
@@ -2177,6 +2221,11 @@ private struct MeetingTranscriptRow: View {
                     Text("\(duration(transcript.duration)) · \(transcript.detectedLanguage?.capitalized ?? "Auto detected") · \(transcript.createdAt.formatted(date: .abbreviated, time: .shortened))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if let speakerStatus {
+                        Label(speakerStatus.text, systemImage: speakerStatus.icon)
+                            .font(.caption2)
+                            .foregroundStyle(speakerStatus.isWarning ? .orange : .secondary)
+                    }
                     Text(expanded
                         ? MeetingIntelligencePresentation.countLabel(for: intelligence)
                         : "Open for local meeting brief")
@@ -2188,6 +2237,17 @@ private struct MeetingTranscriptRow: View {
         .padding(.vertical, OpenLoopVisualSystem.space2)
         .openLoopInteractiveRow()
         .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private var speakerStatus: (text: String, icon: String, isWarning: Bool)? {
+        switch transcript.speakerSeparation {
+        case let .complete(count):
+            return ("\(count) speaker\(count == 1 ? "" : "s") separated", "person.2.wave.2", false)
+        case .unavailable:
+            return ("Speaker separation unavailable", "exclamationmark.triangle", true)
+        case .notRequested:
+            return nil
+        }
     }
 
     private func fusionReview(_ fusion: TranscriptFusionResult) -> some View {

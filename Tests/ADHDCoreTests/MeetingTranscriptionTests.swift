@@ -87,7 +87,43 @@ import Testing
 
     #expect(decoded.sourceAudioFileName == nil)
     #expect(decoded.fusionEvidence == nil)
+    #expect(decoded.speakerSeparation == .notRequested)
+    #expect(decoded.speakerFingerprints.isEmpty)
     #expect(decoded.text == "legacy")
+}
+
+@Test func transcriptPersistsSpeakerIdentityAndFingerprintEvidence() throws {
+    let profileID = UUID(uuidString: "00000000-0000-0000-0000-0000000000A1")!
+    let segment = try TranscriptSegment(
+        start: 0,
+        end: 2,
+        text: "Ship the release",
+        speaker: "Dhruv",
+        speakerProfileID: profileID
+    )
+    let fingerprint = SpeakerFingerprintObservation(
+        profileID: profileID,
+        localSpeakerLabel: "Speaker A",
+        embedding: [0.2, -0.3, 0.5]
+    )
+    let transcript = try MeetingTranscript(
+        sourceName: "identity.wav",
+        duration: 2,
+        modelIdentifier: "local",
+        segments: [segment],
+        speakerSeparation: .complete(speakerCount: 1),
+        speakerFingerprints: [fingerprint]
+    )
+
+    let decoded = try JSONDecoder().decode(
+        MeetingTranscript.self,
+        from: JSONEncoder().encode(transcript)
+    )
+
+    #expect(decoded.segments[0].speaker == "Dhruv")
+    #expect(decoded.segments[0].speakerProfileID == profileID)
+    #expect(decoded.speakerSeparation == .complete(speakerCount: 1))
+    #expect(decoded.speakerFingerprints == [fingerprint])
 }
 
 @Test func transcriptRetainsRawRecognizerDisagreementEvidence() throws {

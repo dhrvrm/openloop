@@ -96,7 +96,7 @@ import Testing
     ).contains("PostHog"))
 }
 
-@Test func normalizationRequiresRepeatedEvidenceAndTokenBoundaries() throws {
+@Test func explicitCorrectionImmediatelyCreatesMinimalTokenBoundedRule() throws {
     let first = try TranscriptionCorrection(
         recognized: "ex code",
         corrected: "Xcode",
@@ -117,13 +117,31 @@ import Testing
     let rules = PersonalVocabulary(corrections: [first, second, oneOff])
         .normalizationRules()
 
-    #expect(rules.count == 1)
+    #expect(rules.count == 2)
     #expect(rules[0].recognized == "ex code")
     #expect(rules[0].evidenceCount == 2)
     #expect(DeterministicTranscriptNormalizer.apply(
         rules,
         to: "Open ex code, then explain nextcode."
     ) == "Open Xcode, then explain nextcode.")
+}
+
+@Test func correctionLearnsOnlyChangedPhraseAndHandlesHyphenatedRecognition() throws {
+    let correction = try TranscriptionCorrection(
+        recognized: "It was tit-for-tat in the meeting",
+        corrected: "It was tip for tap in the meeting"
+    )
+
+    #expect(correction.learnedReplacement == LearnedTranscriptionReplacement(
+        recognized: "tit for tat",
+        corrected: "tip for tap"
+    ))
+    let rules = PersonalVocabulary(corrections: [correction]).normalizationRules()
+    #expect(rules.count == 1)
+    #expect(DeterministicTranscriptNormalizer.apply(
+        rules,
+        to: "They called it tit-for-tat yesterday."
+    ) == "They called it tip for tap yesterday.")
 }
 
 @Test func legacyCorrectionDefaultsToPersonalScope() throws {

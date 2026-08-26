@@ -573,6 +573,24 @@ final class AppModel: ObservableObject {
     }
 
     @discardableResult
+    func renameMeetingSpeaker(
+        transcriptID: UUID,
+        segmentID: UUID,
+        alias: String
+    ) async -> Bool {
+        guard let meetingController else { return false }
+        let saved = await meetingController.renameSpeaker(
+            transcriptID: transcriptID,
+            segmentID: segmentID,
+            alias: alias
+        )
+        if !saved {
+            commandError = "That speaker name could not be saved."
+        }
+        return saved
+    }
+
+    @discardableResult
     func captureMeetingTranscript(_ id: UUID) async -> Bool {
         guard let transcript = meetingTranscripts.first(where: { $0.id == id }) else {
             return false

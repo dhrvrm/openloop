@@ -4,7 +4,9 @@ All notable changes are recorded here. Releases follow semantic versioning.
 
 ## [Unreleased]
 
-- Nothing yet.
+- Added local Speaker A/B/C separation with encrypted voice fingerprints, conservative cross-recording identity matching, and durable user aliases.
+- Made speaker-separation failure visible and preserved speaker identity through accuracy-first transcript fusion and corrections.
+- Added one-edit phrase learning so minimal corrections such as `tit-for-tat` → `tip for tap` are applied to future meeting and dictation transcripts.
 
 ## [1.0.6] — 2026-08-23
 
