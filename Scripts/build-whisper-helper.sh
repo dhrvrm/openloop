@@ -37,8 +37,8 @@ fi
     -DGGML_NATIVE=OFF \
     -DGGML_METAL=ON \
     -DGGML_BLAS=ON \
-    -DGGML_BLAS_VENDOR=Apple
-"$cmake_bin" --build "$tool_root/build" --config Release -j 6 --target whisper-cli
+    -DGGML_BLAS_VENDOR=Apple >&2
+"$cmake_bin" --build "$tool_root/build" --config Release -j 6 --target whisper-cli >&2
 /bin/mkdir -p "${output:h}"
 /usr/bin/ditto "$tool_root/build/bin/whisper-cli" "$output"
 /bin/chmod 755 "$output"
