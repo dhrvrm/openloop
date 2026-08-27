@@ -212,10 +212,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 return
             }
             let quickCapture = QuickCaptureController(model: model)
-            let whisperTranscriber = WhisperKitMeetingTranscriber(
-                modelStorageURL: directory.appendingPathComponent("Models/WhisperKit", isDirectory: true)
-            )
             let voiceLearning = VoiceLearningLoop(repository: repository)
+            let accuracyTranscriber = WhisperCppMeetingTranscriber(
+                modelStorageURL: directory.appendingPathComponent(
+                    "Models/WhisperCpp",
+                    isDirectory: true
+                ),
+                contextProvider: {
+                    (try? await voiceLearning.vocabulary(limit: 80)) ?? []
+                }
+            )
             let textEditor = QwenLocalTextEditor { [weak model] message in
                 Task { @MainActor in
                     guard model?.isDeliveringDictation == true else { return }
@@ -241,54 +247,29 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate
                 )
             )
             model.attachVoiceDictation(dictationCoordinator)
-            let qualityQwenTranscriber = QwenMeetingTranscriber(
-                modelStorageURL: directory.appendingPathComponent(
-                    "Models/Qwen3-ASR-1.7B-8bit",
-                    isDirectory: true
-                ),
-                fallback: whisperTranscriber,
-                fallbackEnabled: false,
-                contextProvider: {
-                    (try? await voiceLearning.vocabulary(limit: 80)) ?? []
-                }
-            )
             let streamingQwenTranscriber = QwenMeetingTranscriber(
                 qwenModelID: QwenMeetingTranscriber.streamingModelID,
                 modelStorageURL: directory.appendingPathComponent(
                     "Models/Qwen3-ASR",
                     isDirectory: true
                 ),
-                fallback: whisperTranscriber,
+                fallback: accuracyTranscriber,
                 fallbackEnabled: false,
                 contextProvider: {
                     (try? await voiceLearning.vocabulary(limit: 80)) ?? []
                 }
             )
-            let accuracyMeetingTranscriber = AccuracyFirstTranscriber(
-                primary: whisperTranscriber,
-                witness: qualityQwenTranscriber,
-                expectedDomainTerms: {
-                    (try? await voiceLearning.vocabulary(limit: 80)) ?? []
-                }
-            )
-            let accuracyDictationTranscriber = AccuracyFirstTranscriber(
-                primary: qualityQwenTranscriber,
-                witness: whisperTranscriber,
-                expectedDomainTerms: {
-                    (try? await voiceLearning.vocabulary(limit: 80)) ?? []
-                }
-            )
             let meetingTranscriber = TranscriptNormalizingTranscriber(
-                base: accuracyMeetingTranscriber,
+                base: accuracyTranscriber,
                 rules: { (try? await voiceLearning.normalizationRules()) ?? [] }
             )
             let dictationTranscriber = TranscriptNormalizingTranscriber(
-                base: accuracyDictationTranscriber,
+                base: accuracyTranscriber,
                 rules: { (try? await voiceLearning.normalizationRules()) ?? [] }
             )
             model.attachVoiceQualityAudit(
                 VoiceQualityCorpusAuditor(repository: repository),
-                engineIdentifier: qualityQwenTranscriber.modelIdentifier
+                engineIdentifier: accuracyTranscriber.modelIdentifier
             )
             let meetingIntelligence = LocalMeetingIntelligenceProvider()
             let meetingController = MeetingTranscriptionController(

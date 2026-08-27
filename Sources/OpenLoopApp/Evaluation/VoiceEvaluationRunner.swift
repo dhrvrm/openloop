@@ -210,6 +210,7 @@ enum VoiceEvaluationEngine: String, CaseIterable, Sendable {
     case meeting
     case qwen
     case whisper
+    case whispercpp
 }
 
 struct VoiceEvaluationCommand: Sendable {
@@ -218,6 +219,8 @@ struct VoiceEvaluationCommand: Sendable {
     let dataDirectory: URL
     let engine: VoiceEvaluationEngine
     let languageCode: String?
+    let whisperModelIdentifier: String?
+    let whisperCppExecutableURL: URL?
 
     static func isRequested(_ arguments: [String]) -> Bool {
         arguments.contains("--voice-eval")
@@ -276,6 +279,12 @@ struct VoiceEvaluationCommand: Sendable {
         languageCode = language?.isEmpty == false && language?.lowercased() != "auto"
             ? language
             : nil
+        let whisperModel = values["--whisper-model"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        whisperModelIdentifier = whisperModel?.isEmpty == false ? whisperModel : nil
+        whisperCppExecutableURL = values["--whisper-cli"].map {
+            Self.resolvedURL($0, relativeTo: currentDirectory)
+        }
     }
 
     func run() async -> Int32 {
@@ -305,6 +314,8 @@ struct VoiceEvaluationCommand: Sendable {
 
     private func makeTranscriber(vocabulary: [String]) -> any MeetingTranscribing {
         let whisper = WhisperKitMeetingTranscriber(
+            modelIdentifier: whisperModelIdentifier
+                ?? WhisperKitMeetingTranscriber.defaultModelIdentifier,
             modelStorageURL: dataDirectory.appendingPathComponent(
                 "Models/WhisperKit",
                 isDirectory: true
@@ -319,11 +330,22 @@ struct VoiceEvaluationCommand: Sendable {
             fallbackEnabled: false,
             contextProvider: { vocabulary }
         )
+        let whisperCpp = WhisperCppMeetingTranscriber(
+            modelStorageURL: dataDirectory.appendingPathComponent(
+                "Models/WhisperCpp",
+                isDirectory: true
+            ),
+            executableURL: whisperCppExecutableURL
+                ?? WhisperCppMeetingTranscriber.bundledExecutableURL(),
+            contextProvider: { vocabulary }
+        )
         switch engine {
         case .qwen:
             return qwen
         case .whisper:
             return whisper
+        case .whispercpp:
+            return whisperCpp
         case .dictation:
             return AccuracyFirstTranscriber(
                 primary: qwen,

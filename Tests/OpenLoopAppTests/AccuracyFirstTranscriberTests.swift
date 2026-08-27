@@ -132,6 +132,24 @@ private actor FusionTestTranscriber: MeetingTranscribing {
     #expect(await witness.callCount() == 1)
 }
 
+@Test func accuracyFirstExposesWitnessFailureWithoutDiscardingPrimaryTimeline() async throws {
+    let primary = try FusionTestTranscriber(
+        modelIdentifier: "whisper",
+        text: "जो भी बोलता हूँ वो समझ नहीं आता है",
+        detectedLanguage: "hi"
+    )
+    let witness = try FusionTestTranscriber(modelIdentifier: "qwen", failure: true)
+    let transcriber = AccuracyFirstTranscriber(primary: primary, witness: witness)
+
+    let output = try await transcriber.transcribe(
+        audioURL: URL(fileURLWithPath: "/tmp/test.wav")
+    ) { _ in }
+
+    #expect(output.segments.map(\.text) == ["जो भी बोलता हूँ वो समझ नहीं आता है"])
+    #expect(output.fusionEvidence?.spans[0].resolution == .reviewRequired)
+    #expect(output.fusionEvidence?.spans[0].reasons == [.secondaryEvidenceMissing])
+}
+
 @Test func accuracyFirstPreservesCanonicalSpeakerTimelineWhenWitnessCorrectsText() async throws {
     let canonicalID = UUID()
     let speakerProfileID = UUID()

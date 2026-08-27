@@ -68,26 +68,39 @@ extension MeetingTranscribing {
     }
 }
 
+enum WhisperInputStrategy: Equatable, Sendable {
+    case originalFullContext
+    case conditionedLanguageChunks
+}
+
 actor WhisperKitMeetingTranscriber: MeetingTranscribing {
+    static let defaultModelIdentifier = "large-v3-v20240930"
+    static let defaultInputStrategy = WhisperInputStrategy.originalFullContext
+
     nonisolated let modelIdentifier: String
     private let modelStorageURL: URL
     private let speakerDiarizationEnabled: Bool
+    private let inputStrategy: WhisperInputStrategy
     private let audioConditioner = SpeechAudioConditioner()
     private var whisperKit: WhisperKit?
     private var speakerKit: SpeakerKit?
 
     init(
-        modelIdentifier: String = "large-v3-v20240930_626MB",
+        modelIdentifier: String = defaultModelIdentifier,
         modelStorageURL: URL,
-        speakerDiarizationEnabled: Bool = true
+        speakerDiarizationEnabled: Bool = true,
+        inputStrategy: WhisperInputStrategy = defaultInputStrategy
     ) {
         self.modelIdentifier = modelIdentifier
         self.modelStorageURL = modelStorageURL
         self.speakerDiarizationEnabled = speakerDiarizationEnabled
+        self.inputStrategy = inputStrategy
     }
 
     func diagnostics() async -> MeetingEngineDiagnostics {
-        let markerURL = modelStorageURL.appendingPathComponent("resolved-model-path")
+        let markerURL = modelStorageURL.appendingPathComponent(
+            Self.modelMarkerName(for: modelIdentifier)
+        )
         let isCached: Bool
         if let storedPath = try? String(contentsOf: markerURL, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines) {
@@ -116,11 +129,15 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
         languageCode: String?,
         progress: @escaping @Sendable (MeetingTranscriptionProgress) async -> Void
     ) async throws -> LocalTranscriptionOutput {
-        audioConditioner.reset()
-        let audio = audioConditioner.process(
-            try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path),
-            sampleRate: WhisperKit.sampleRate
-        )
+        let originalAudio = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path)
+        let audio: [Float]
+        switch inputStrategy {
+        case .originalFullContext:
+            audio = originalAudio
+        case .conditionedLanguageChunks:
+            audioConditioner.reset()
+            audio = audioConditioner.process(originalAudio, sampleRate: WhisperKit.sampleRate)
+        }
         guard !audio.isEmpty else { throw MeetingTranscriptionError.emptyTranscript }
         let assetDuration = await Self.audioDuration(audioURL)
         let duration = max(
@@ -138,7 +155,10 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
 
         let options = Self.decodingOptions(languageCode: languageCode)
         let windows: [TranscriptionResult]
-        if languageCode == nil, duration > 0, duration <= 45 {
+        if inputStrategy == .conditionedLanguageChunks,
+           languageCode == nil,
+           duration > 0,
+           duration <= 45 {
             let ranges = UtteranceAudioChunker.ranges(in: audio)
             let chunks = try await plannedAutomaticChunks(
                 audio: audio,
@@ -498,7 +518,9 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             at: modelStorageURL,
             withIntermediateDirectories: true
         )
-        let markerURL = modelStorageURL.appendingPathComponent("resolved-model-path")
+        let markerURL = modelStorageURL.appendingPathComponent(
+            Self.modelMarkerName(for: modelIdentifier)
+        )
         let folder: URL
         if let storedPath = try? String(contentsOf: markerURL, encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -543,6 +565,14 @@ actor WhisperKitMeetingTranscriber: MeetingTranscribing {
             message: "Local model ready"
         ))
         return value
+    }
+
+    static func modelMarkerName(for modelIdentifier: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+        let suffix = String(modelIdentifier.unicodeScalars.map {
+            allowed.contains($0) ? Character($0) : "_"
+        })
+        return "resolved-model-path-\(suffix)"
     }
 
     static func map(_ results: [TranscriptionResult]) throws

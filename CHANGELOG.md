@@ -4,6 +4,14 @@ All notable changes are recorded here. Releases follow semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.11] — 2026-08-27
+
+- Replaced unreliable final Qwen/WhisperKit wording with official whisper.cpp full large-v3 on the original audio.
+- Restored English-Hindi-English continuity on the retained failure recording and removed the false Portuguese result.
+- Added word-timed SpeakerKit alignment so language changes do not reset speaker identity.
+- Fixed Qwen's model-cache path and made a failed accuracy witness visible instead of silently claiming a cross-check.
+- Added a checksum-pinned speech helper, verified one-time model download, and headless engine comparison.
+
 ## [1.0.10] — 2026-08-26
 
 - Reduced the menu-bar interface to Open OpenLoop, Start Voice Note, Type by Voice, Keep Listening, and Quit.
@@ -78,7 +86,8 @@ All notable changes are recorded here. Releases follow semantic versioning.
 - Added encrypted local storage, permission-aware capture and advanced diagnostics.
 - Established the native visual system and global capture shortcuts.
 
-[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.10...HEAD
+[Unreleased]: https://github.com/dhrvrm/openloop/compare/v1.0.11...HEAD
+[1.0.11]: https://github.com/dhrvrm/openloop/compare/v1.0.10...v1.0.11
 [1.0.10]: https://github.com/dhrvrm/openloop/compare/v1.0.9...v1.0.10
 [1.0.9]: https://github.com/dhrvrm/openloop/compare/v1.0.8...v1.0.9
 [1.0.8]: https://github.com/dhrvrm/openloop/compare/v1.0.7...v1.0.8

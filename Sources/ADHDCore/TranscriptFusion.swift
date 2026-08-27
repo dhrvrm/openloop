@@ -123,7 +123,8 @@ public struct TranscriptFusionPolicy: Equatable, Sendable {
     public func fuse(
         primary: [TranscriptEvidence],
         secondary: [TranscriptEvidence],
-        expectedDomainTerms: [String] = []
+        expectedDomainTerms: [String] = [],
+        secondaryWasRequested: Bool = false
     ) -> TranscriptFusionResult {
         var unusedSecondary = secondary
         let spans = primary.map { primaryEvidence -> FusedTranscriptSpan in
@@ -139,15 +140,15 @@ public struct TranscriptFusionPolicy: Equatable, Sendable {
             let secondaryEvidence = secondaryIndex.map { unusedSecondary.remove(at: $0) }
 
             guard let secondaryEvidence else {
-                let needsReview = !escalationReasons.isEmpty
+                let needsReview = secondaryWasRequested || !escalationReasons.isEmpty
+                var reasons = escalationReasons
+                if needsReview { reasons.append(.secondaryEvidenceMissing) }
                 return FusedTranscriptSpan(
                     primary: primaryEvidence,
                     secondary: nil,
                     selectedText: primaryEvidence.text,
                     resolution: needsReview ? .reviewRequired : .primaryAccepted,
-                    reasons: needsReview
-                        ? escalationReasons + [.secondaryEvidenceMissing]
-                        : [.primaryOnly]
+                    reasons: needsReview ? reasons : [.primaryOnly]
                 )
             }
             if Self.normalized(primaryEvidence.text) == Self.normalized(secondaryEvidence.text) {

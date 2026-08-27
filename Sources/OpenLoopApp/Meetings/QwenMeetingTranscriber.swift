@@ -52,7 +52,8 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
         segmenter: LongFormAudioSegmenter = LongFormAudioSegmenter()
     ) {
         self.qwenModelID = qwenModelID
-        self.modelIdentifier = "\(qwenModelID.split(separator: "/").last.map(String.init) ?? qwenModelID) · Whisper fallback"
+        let modelName = qwenModelID.split(separator: "/").last.map(String.init) ?? qwenModelID
+        self.modelIdentifier = fallbackEnabled ? "\(modelName) · Whisper fallback" : modelName
         self.modelStorageURL = modelStorageURL
         self.fallback = fallback
         self.fallbackEnabled = fallbackEnabled
@@ -62,7 +63,11 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
     }
 
     func diagnostics() async -> MeetingEngineDiagnostics {
-        let weightsURL = modelStorageURL.appendingPathComponent("model.safetensors")
+        let repositoryURL = Self.repositoryDirectory(
+            modelID: qwenModelID,
+            below: modelStorageURL
+        )
+        let weightsURL = repositoryURL.appendingPathComponent("model.safetensors")
         return MeetingEngineDiagnostics(
             transcriptionModel: modelIdentifier,
             diarizationModel: "Whisper timestamps · SpeakerKit Pyannote fallback",
@@ -213,7 +218,11 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
             at: modelStorageURL,
             withIntermediateDirectories: true
         )
-        let loaded = try await modelLoader(qwenModelID, modelStorageURL) { fraction, status in
+        let repositoryURL = Self.repositoryDirectory(
+            modelID: qwenModelID,
+            below: modelStorageURL
+        )
+        let loaded = try await modelLoader(qwenModelID, repositoryURL) { fraction, status in
             await progress(.init(
                 stage: fraction < 0.8 ? .downloadingModel : .waitingForModel,
                 fraction: fraction,
@@ -240,6 +249,23 @@ actor QwenMeetingTranscriber: MeetingTranscribing, StreamingSpeechRecognizing {
             offlineMode: false
         ) { fraction, status in
             Task { await progress(fraction, status) }
+        }
+    }
+
+    static func repositoryDirectory(modelID: String, below root: URL) -> URL {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+        let components = modelID.split(separator: "/", omittingEmptySubsequences: true)
+        let safeComponents = components.map { raw -> String in
+            var value = String(raw.unicodeScalars.map {
+                allowed.contains($0) ? Character($0) : "_"
+            })
+            value = value.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            return value.isEmpty ? "model" : value
+        }
+        return safeComponents.reduce(
+            root.appendingPathComponent("models", isDirectory: true)
+        ) { directory, component in
+            directory.appendingPathComponent(component, isDirectory: true)
         }
     }
 

@@ -81,6 +81,8 @@ import Testing
             "--output", "results/candidate.jsonl",
             "--engine", "qwen",
             "--language", "auto",
+            "--whisper-model", "large-v3-v20240930",
+            "--whisper-cli", "tools/whisper-cli",
             "--data-directory", "models",
         ],
         currentDirectory: root
@@ -91,6 +93,9 @@ import Testing
     #expect(command.dataDirectory.path == "/tmp/openloop-eval/models")
     #expect(command.engine == .qwen)
     #expect(command.languageCode == nil)
+    #expect(command.whisperModelIdentifier == "large-v3-v20240930")
+    #expect(command.whisperCppExecutableURL?.path
+        == "/tmp/openloop-eval/tools/whisper-cli")
 }
 
 private actor VoiceEvaluationFixtureTranscriber: MeetingTranscribing {

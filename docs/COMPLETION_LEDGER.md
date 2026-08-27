@@ -23,11 +23,11 @@ verification.
 | Immediate lossless recording | Shipped | Durable audio starts before VAD or ASR model preparation. |
 | Red recording state and live dB feedback | Shipped | Main window and non-activating global HUD share the same recording state. |
 | Stable and partial text while speaking | Shipped | Streaming inference is coalesced and exposes stable plus partial regions. |
-| Automatic Hindi/English/Hinglish | Partial | Default is automatic, but real short-switch and romanized-Hinglish fixtures must pass. |
+| Automatic Hindi/English/Hinglish | Partial | The retained English-Hindi-English failure now passes with official full large-v3; Punjabi, Spanish, romanized-Hinglish, and a held-out corpus remain. |
 | Long meeting transcription | Partial | Recognition is bounded into timestamped spans; a representative 25-minute audio fixture is still required. |
-| Accuracy-first local ensemble | Partial | Disputed spans must be fused or shown for review instead of silently retaining Qwen. |
+| Accuracy-first local final | Partial | Official whisper.cpp full large-v3 owns final words and missing witnesses are visible; a human-confirmed held-out corpus remains. |
 | Personal and technical vocabulary | Shipped | Corrections persist and feed recognition/normalization. |
-| Audio conditioning | Shipped | Local inference uses DC removal, silence-aware gain, and a bounded limiter while retaining raw audio. |
+| Audio conditioning | Partial | Raw audio now owns final recognition after conditioning harmed the retained code-switch; conditioning remains an evaluated optional path. |
 | Raw, polished, code, email, casual, Markdown, bullets, JSON | Partial | Modes exist; JSON/code validation and distinct fast/deep editors remain. |
 | App-aware insertion | Partial | Context and three output routes exist; per-app policies and clipboard timing remain. |
 | Optional cloud route | Missing | Must be explicit, opt-in, and visibly separate from local mode. |

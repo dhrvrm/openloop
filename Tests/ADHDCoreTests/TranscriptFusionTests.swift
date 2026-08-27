@@ -87,6 +87,23 @@ private func evidence(
     #expect(result.spans[0].reasons == [.primaryOnly])
 }
 
+@Test func requestedButUnavailableSecondaryIsNeverReportedAsPrimaryOnly() {
+    let primary = evidence(
+        engine: "whisper",
+        text: "Clear words from one recognizer",
+        confidence: 0.95
+    )
+
+    let result = TranscriptFusionPolicy().fuse(
+        primary: [primary],
+        secondary: [],
+        secondaryWasRequested: true
+    )
+
+    #expect(result.spans[0].resolution == .reviewRequired)
+    #expect(result.spans[0].reasons == [.secondaryEvidenceMissing])
+}
+
 @Test func fusionAlignsWitnessSegmentsByTimestampOverlap() {
     let first = evidence(engine: "qwen", text: "one", start: 0, end: 2)
     let second = evidence(engine: "qwen", text: "two", start: 2, end: 4)

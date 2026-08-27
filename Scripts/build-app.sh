@@ -8,6 +8,15 @@ contents_dir="$app_bundle/Contents"
 sign_identity="${OPENLOOP_SIGN_IDENTITY:--}"
 allow_adhoc_release="${OPENLOOP_ALLOW_ADHOC_RELEASE:-0}"
 prebuilt_metallib="${OPENLOOP_PREBUILT_METALLIB:-}"
+whisper_helper="${OPENLOOP_WHISPER_HELPER:-}"
+
+if [[ -z "$whisper_helper" ]]; then
+    whisper_helper="$("$openloop_root/scripts/build-whisper-helper.sh")"
+fi
+if [[ ! -x "$whisper_helper" ]]; then
+    print -u2 -- "Missing executable whisper.cpp helper: $whisper_helper"
+    exit 1
+fi
 
 swift build --package-path "$openloop_root" -c release --arch arm64
 speech_swift_metallib="$openloop_root/.build/checkouts/speech-swift/scripts/build_mlx_metallib.sh"
@@ -47,6 +56,9 @@ if [[ ! -f "$mlx_metallib" ]]; then
     exit 1
 fi
 /usr/bin/ditto "$mlx_metallib" "$contents_dir/MacOS/mlx.metallib"
+/bin/mkdir -p "$contents_dir/Resources/Transcription"
+/usr/bin/ditto "$whisper_helper" "$contents_dir/Resources/Transcription/whisper-cli"
+/bin/chmod 755 "$contents_dir/Resources/Transcription/whisper-cli"
 if [[ "$sign_identity" == "-" ]]; then
     /usr/bin/codesign --force --deep --sign - "$app_bundle"
 else

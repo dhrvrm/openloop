@@ -243,7 +243,7 @@ this flow, preventing a background review from rewriting work already in motion.
 
 ## D-021 — WhisperKit plus SpeakerKit replaces Apple Speech in production
 
-Status: accepted.
+Status: superseded by D-024.
 
 Meeting transcription defaults to the local WhisperKit large-v3 Core ML model
 with automatic language detection, timestamps, incremental long-file loading,
@@ -265,7 +265,7 @@ Developer ID signing; an ad-hoc binary identity cannot be made stable in code.
 
 ## D-022 — Qwen3-ASR becomes accuracy-first for code-switched final text
 
-Status: accepted for the next local release, with corpus-wide quality gate unresolved.
+Status: superseded by D-024.
 
 On the retained 13.6-second English-Hindi-English recording, local Qwen3-ASR
 0.6B recovered the intended Hindi phrase, the English frame, and the SGLC acronym
@@ -281,6 +281,23 @@ independent recognition. Future fusion escalates uncertain spans instead of
 running every engine over every frame. Provider superiority is not claimed until
 the user-corrected Indian-English/Hindi/Hinglish corpus passes WER/CER, terminology,
 dropped-span, and stop-to-final latency gates.
+
+## D-024 — Official whisper.cpp full large-v3 owns final local words
+
+Status: accepted, with corpus-wide quality gate unresolved.
+
+The retained 27-second English-Hindi-English failure proved that neither the
+626 MB WhisperKit conversion, the full WhisperKit Core ML conversion, nor the
+third-party Qwen3-ASR MLX port was reliable enough for final text. Official
+whisper.cpp with the full large-v3 model recovered the Hindi switch and complete
+speech interval locally. It therefore owns final words and token timestamps.
+
+The helper is built from checksum-pinned commit `371b5a7`; the 3.1 GB model is
+downloaded once and verified with SHA-256. SpeakerKit assigns word groups to
+speaker turns and retains centroid fingerprints independently of language.
+Qwen small may provide disposable partial feedback but cannot overwrite final
+words. The durable original audio, not the conditioned derivative, enters the
+final decoder. See `docs/VOICE_QUALITY.md` for the evidence and remaining gate.
 
 ## D-023 — Semantic evidence, not tasks, is the primary product object
 

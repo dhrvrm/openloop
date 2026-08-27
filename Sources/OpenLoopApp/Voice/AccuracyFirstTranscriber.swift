@@ -76,7 +76,8 @@ actor AccuracyFirstTranscriber: MeetingTranscribing {
             let fusion = policy.fuse(
                 primary: primaryEvidence,
                 secondary: [],
-                expectedDomainTerms: terms
+                expectedDomainTerms: terms,
+                secondaryWasRequested: false
             )
             return Self.output(primaryOutput, fusion: fusion, modelIdentifier: modelIdentifier)
         }
@@ -100,7 +101,8 @@ actor AccuracyFirstTranscriber: MeetingTranscribing {
             let fusion = policy.fuse(
                 primary: primaryEvidence,
                 secondary: [],
-                expectedDomainTerms: terms
+                expectedDomainTerms: terms,
+                secondaryWasRequested: true
             )
             return Self.output(primaryOutput, fusion: fusion, modelIdentifier: modelIdentifier)
         }
@@ -112,7 +114,8 @@ actor AccuracyFirstTranscriber: MeetingTranscribing {
         let fusion = policy.fuse(
             primary: primaryEvidence,
             secondary: witnessEvidence,
-            expectedDomainTerms: terms
+            expectedDomainTerms: terms,
+            secondaryWasRequested: true
         )
         return Self.output(primaryOutput, fusion: fusion, modelIdentifier: modelIdentifier)
     }

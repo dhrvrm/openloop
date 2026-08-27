@@ -9,6 +9,23 @@ import Testing
     #expect(QwenMeetingTranscriber.streamingModelID == "aufklarer/Qwen3-ASR-0.6B-MLX-4bit")
 }
 
+@Test func qwenRepositoryDirectoryMatchesTheHubDownloadLayout() {
+    let root = URL(fileURLWithPath: "/tmp/OpenLoop/Qwen", isDirectory: true)
+    let resolved = QwenMeetingTranscriber.repositoryDirectory(
+        modelID: "aufklarer/Qwen3-ASR-1.7B-MLX-8bit",
+        below: root
+    )
+
+    #expect(resolved.path
+        == "/tmp/OpenLoop/Qwen/models/aufklarer/Qwen3-ASR-1.7B-MLX-8bit")
+
+    let hostile = QwenMeetingTranscriber.repositoryDirectory(
+        modelID: "../../outside",
+        below: root
+    ).standardizedFileURL.path
+    #expect(hostile.hasPrefix(root.standardizedFileURL.path + "/"))
+}
+
 @Test func qwenVocabularyContextIsBoundedDeduplicatedAndOptional() {
     #expect(QwenMeetingTranscriber.context(from: []) == nil)
     #expect(QwenMeetingTranscriber.context(from: [

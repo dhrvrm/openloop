@@ -7,17 +7,16 @@ OpenLoop treats a transcript as evidence. The recognizer may be uncertain; the s
 ```text
 microphone or imported audio
   → 16 kHz mono samples
-  → bounded high-pass, presence recovery, and automatic gain
-  → Whisper large-v3 with VAD chunking and word timestamps
+  → Qwen small disposable partial feedback
+  → official whisper.cpp full large-v3 on original audio
   → SpeakerKit/Pyannote turn alignment
-  → Qwen3-ASR witness with personal vocabulary and rolling context
-  → timestamp-safe fusion
+  → learned vocabulary and deterministic normalization
   → transcript, review evidence, summary, and semantic memory
 ```
 
-Whisper owns the canonical meeting timeline because it provides the word timestamps needed for speaker alignment. Qwen is a separate local witness: agreement increases confidence; a safe, time-aligned terminology correction can replace text; broad or mismatched evidence is retained for review and cannot overwrite a short speaker turn.
+Official whisper.cpp owns final words and token timestamps. Qwen small is limited to partial feedback while speech is still arriving; its output is replaceable and cannot overwrite the final transcript. Speaker turns and language changes are independent, so changing language does not create a new speaker.
 
-Automatic language detection remains the default. Hindi and English can occur in the same recording and in the same sentence. Qwen receives only a bounded tail of accepted prior text, labelled as context that must not be repeated, so a long meeting can keep names and language continuity without treating the whole transcript as a prompt.
+Automatic language detection remains the default. Hindi and English can occur in the same recording and in the same sentence. Learned names and terminology are supplied automatically as bounded vocabulary; the user does not choose a language or write a prompt for ordinary recording.
 
 ## Speaker identity
 
@@ -35,7 +34,7 @@ Learned rules are token-boundary aware, tolerate space and hyphen variants, and 
 
 ## Acoustic behavior
 
-The durable source file is never overwritten. Inference uses a conditioned copy with:
+The durable source file is never overwritten. Final recognition uses the original resampled audio. The existing conditioned copy is an experimental route with:
 
 - removal of DC and low-frequency rumble;
 - conservative presence recovery for muffled consonants;

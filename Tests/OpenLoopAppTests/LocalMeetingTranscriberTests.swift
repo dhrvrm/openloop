@@ -3,6 +3,18 @@ import Testing
 import WhisperKit
 @testable import OpenLoopApp
 
+@Test func accuracyWhisperUsesTheUncompressedLargeV3Variant() {
+    #expect(WhisperKitMeetingTranscriber.defaultModelIdentifier
+        == "large-v3-v20240930")
+    #expect(!WhisperKitMeetingTranscriber.defaultModelIdentifier.contains("626MB"))
+    #expect(WhisperKitMeetingTranscriber.modelMarkerName(
+        for: "large-v3-v20240930"
+    ) != WhisperKitMeetingTranscriber.modelMarkerName(
+        for: "large-v3-v20240930_626MB"
+    ))
+    #expect(WhisperKitMeetingTranscriber.defaultInputStrategy == .originalFullContext)
+}
+
 @Test func speakerLabelsUseStableAlphabeticAliases() {
     #expect(WhisperKitMeetingTranscriber.speakerLabel(0) == "Speaker A")
     #expect(WhisperKitMeetingTranscriber.speakerLabel(1) == "Speaker B")
