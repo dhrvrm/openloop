@@ -2,6 +2,21 @@
 
 OpenLoop does not treat a model name as evidence of accuracy. A release candidate must be decoded headlessly against retained audio, compared by timestamp coverage and literal words, and scored against a human-confirmed reference before any WER claim.
 
+## Teacher audit: 2026-08-27 retained recording
+
+The first teacher-consensus run used three independent local hypotheses: full
+Whisper large-v3 through whisper.cpp, full WhisperKit Core ML, and Qwen3-ASR
+1.7B MLX. Minimum pairwise token agreement was `0.34375`; the witnesses also
+disagreed on the language sequence (`en → hi → en` versus English-only output
+with Portuguese or Chinese hallucinations). The case therefore produced zero
+distillation labels and one review-required record.
+
+The gold comparison command rejected the case because its opening words remain
+unconfirmed. This is intentional: neither the best-looking hypothesis nor
+teacher consensus may become release truth without the speaker confirming the
+literal words. The recording can enter development after correction, but it
+cannot report WER or train a student in its current state.
+
 ## 2026-08-27 retained recording
 
 The private 27.17-second AAC source was intact: mono 44.1 kHz, peak -18.3 dBFS, RMS -36.3 dBFS, and no clipping. It was evaluated locally and was never uploaded.
