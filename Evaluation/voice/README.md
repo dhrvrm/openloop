@@ -128,3 +128,15 @@ Treat those values as internal targets, not proof of market leadership. A “bet
 ## Training boundary
 
 Do not fine-tune on the release evaluation split. Use separate training/development speakers, keep public license obligations with derived models, and first determine whether errors come from audio conditioning, recognition, language continuity, vocabulary, timestamp alignment, or diarization. Fine-tuning an ASR model cannot repair a broken microphone signal or discarded speaker timeline.
+
+Before a fine-tuning job, run `voice_corpus_guard.py`, generate conservative
+teacher labels with `teacher_consensus.py`, and export with
+`export_distillation_dataset.py`. The exporter accepts only `distill-train`
+rows from an `evaluation-approved` corpus whose allowed uses explicitly include
+fine-tuning, or private rows with `training_consent: true`. Human-confirmed text
+wins over teacher consensus. Release-test, review-required, ambiguous-license,
+and unconsented private rows are written to the exclusion ledger instead.
+
+Speaker turns remain a separate sidecar. The ASR student learns literal words
+and language continuity; it does not own diarization or persistent speaker
+identity.
