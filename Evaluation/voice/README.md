@@ -32,13 +32,30 @@ The source and license ledger is [`corpora.json`](corpora.json). Recommended evi
 - Microsoft DNS Challenge noise and room impulse responses to generate reproducible noisy, reverberant, speakerphone, and interfering-talker cases.
 - VoxConverse 0.3 dev audio and corrected RTTM annotations for speaker turns and overlap.
 
-Kaggle is optional. After accepting a dataset's terms and configuring the Kaggle CLI:
+Kaggle is optional. Authentication does not make a dataset suitable for training.
+Every candidate must first have an exact slug, observed version, license evidence,
+usage status, allowed uses, and forbidden uses in `corpora.json`. Catalog metadata
+without downloading audio:
 
 ```bash
-Scripts/evals/bootstrap_voice_corpora.sh --kaggle owner/dataset-slug
+OPENLOOP_KAGGLE_CLI=/path/to/kaggle \
+  Scripts/evals/bootstrap_voice_corpora.sh \
+  --kaggle owner/dataset-slug \
+  --catalog-only
 ```
 
-The dataset is placed under ignored `.eval-data/kaggle/`. Record its exact slug, version, license, and split in `corpora.json` before using it in a release comparison.
+Audio download is denied unless the catalog marks the exact dataset
+`evaluation-approved` and the caller repeats that status explicitly with
+`--allow-status evaluation-approved`. Pending, exploratory, or commercially
+excluded corpora cannot enter fine-tuning or release evaluation. Downloaded
+material stays under ignored `.eval-data/kaggle/`.
+
+The authenticated audit on 2026-08-27 found that the Kaggle Punjabi Shrutilipi
+mirror reports `other` through the API while its description says CC0; it remains
+pending license resolution. The YouTube-derived Indian-languages collection is
+excluded from commercial work. The InfoBay Hindi, Punjabi, and Spanish call-center
+samples have isolated speaker channels but no literal transcripts and conflicting
+commercial wording, so they are exploratory-only rather than WER or training data.
 
 ## Your private gold set
 
