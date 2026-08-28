@@ -194,7 +194,7 @@ actor WhisperCppMeetingTranscriber: MeetingTranscribing {
             fraction: 0.05,
             message: "Running the full multilingual accuracy pass"
         ))
-        let document = try await Self.run(
+        var document = try await Self.run(
             executableURL: executableURL,
             modelURL: modelURL,
             audioURL: waveURL,
@@ -202,6 +202,26 @@ actor WhisperCppMeetingTranscriber: MeetingTranscribing {
             languageCode: languageCode,
             prompt: Self.prompt(from: vocabulary)
         )
+        if languageCode == nil,
+           Self.shouldTryHindiAlternative(for: document) {
+            await progress(.init(
+                stage: .transcribing,
+                fraction: 0.75,
+                message: "Checking Hindi and Urdu script confidence"
+            ))
+            let hindiDocument = try await Self.run(
+                executableURL: executableURL,
+                modelURL: modelURL,
+                audioURL: waveURL,
+                outputPrefix: workspace.appendingPathComponent("transcript-hi"),
+                languageCode: "hi",
+                prompt: Self.prompt(from: vocabulary)
+            )
+            document = Self.preferredAutomaticDocument(
+                primary: document,
+                hindiAlternative: hindiDocument
+            )
+        }
         var segments = try document.transcription.compactMap { item -> TranscriptSegment? in
             let text = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty, item.offsets.to >= item.offsets.from else { return nil }
@@ -485,6 +505,24 @@ actor WhisperCppMeetingTranscriber: MeetingTranscribing {
         guard !terms.isEmpty else { return nil }
         return "Vocabulary and names: " + terms.prefix(limit).joined(separator: ", ")
     }
+
+    static func shouldTryHindiAlternative(for document: WhisperCppDocument) -> Bool {
+        document.result.language.lowercased() == "ur"
+    }
+
+    static func preferredAutomaticDocument(
+        primary: WhisperCppDocument,
+        hindiAlternative: WhisperCppDocument,
+        minimumConfidenceGain: Double = 0.01
+    ) -> WhisperCppDocument {
+        guard shouldTryHindiAlternative(for: primary),
+              hindiAlternative.result.language.lowercased() == "hi",
+              let primaryConfidence = primary.meanSpeechTokenConfidence,
+              let hindiConfidence = hindiAlternative.meanSpeechTokenConfidence,
+              hindiConfidence >= primaryConfidence + minimumConfidenceGain
+        else { return primary }
+        return hindiAlternative
+    }
 }
 
 struct WhisperCppDocument: Decodable, Equatable, Sendable {
@@ -494,6 +532,12 @@ struct WhisperCppDocument: Decodable, Equatable, Sendable {
         struct Token: Decodable, Equatable, Sendable {
             let text: String
             let offsets: Offsets
+            let probability: Double?
+
+            enum CodingKeys: String, CodingKey {
+                case text, offsets
+                case probability = "p"
+            }
         }
         let text: String
         let offsets: Offsets
@@ -502,4 +546,13 @@ struct WhisperCppDocument: Decodable, Equatable, Sendable {
 
     let result: Result
     let transcription: [Item]
+
+    var meanSpeechTokenConfidence: Double? {
+        let probabilities = transcription
+            .flatMap { $0.tokens ?? [] }
+            .filter { !$0.text.hasPrefix("[_") }
+            .compactMap(\.probability)
+        guard !probabilities.isEmpty else { return nil }
+        return probabilities.reduce(0, +) / Double(probabilities.count)
+    }
 }

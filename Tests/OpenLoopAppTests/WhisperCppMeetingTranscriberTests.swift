@@ -51,3 +51,36 @@ import Testing
     #expect(segments.map(\.text) == ["first turn", "second turn"])
     #expect(segments.map(\.speaker) == ["Speaker A", "Speaker B"])
 }
+
+@Test func whisperCppRetriesUrduDetectionAndKeepsHigherConfidenceHindiScript() throws {
+    let primary = try JSONDecoder().decode(
+        WhisperCppDocument.self,
+        from: Data(#"{"result":{"language":"ur"},"transcription":[{"text":" اردو","offsets":{"from":0,"to":1000},"tokens":[{"text":" اردو","offsets":{"from":0,"to":1000},"p":0.91}]}]}"#.utf8)
+    )
+    let hindi = try JSONDecoder().decode(
+        WhisperCppDocument.self,
+        from: Data(#"{"result":{"language":"hi"},"transcription":[{"text":" हिंदी","offsets":{"from":0,"to":1000},"tokens":[{"text":" हिंदी","offsets":{"from":0,"to":1000},"p":0.96}]}]}"#.utf8)
+    )
+
+    #expect(WhisperCppMeetingTranscriber.shouldTryHindiAlternative(for: primary))
+    #expect(WhisperCppMeetingTranscriber.preferredAutomaticDocument(
+        primary: primary,
+        hindiAlternative: hindi
+    ).result.language == "hi")
+}
+
+@Test func whisperCppKeepsGenuineHigherConfidenceUrdu() throws {
+    let primary = try JSONDecoder().decode(
+        WhisperCppDocument.self,
+        from: Data(#"{"result":{"language":"ur"},"transcription":[{"text":" اردو","offsets":{"from":0,"to":1000},"tokens":[{"text":" اردو","offsets":{"from":0,"to":1000},"p":0.98}]}]}"#.utf8)
+    )
+    let hindi = try JSONDecoder().decode(
+        WhisperCppDocument.self,
+        from: Data(#"{"result":{"language":"hi"},"transcription":[{"text":" हिंदी","offsets":{"from":0,"to":1000},"tokens":[{"text":" हिंदी","offsets":{"from":0,"to":1000},"p":0.95}]}]}"#.utf8)
+    )
+
+    #expect(WhisperCppMeetingTranscriber.preferredAutomaticDocument(
+        primary: primary,
+        hindiAlternative: hindi
+    ).result.language == "ur")
+}
