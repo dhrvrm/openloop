@@ -57,6 +57,24 @@ excluded from commercial work. The InfoBay Hindi, Punjabi, and Spanish call-cent
 samples have isolated speaker channels but no literal transcripts and conflicting
 commercial wording, so they are exploratory-only rather than WER or training data.
 
+Materialize a small, licensed FLEURS release-test slice without decoding through
+TorchCodec or FFmpeg:
+
+```bash
+python3 Scripts/evals/materialize_fleurs_slice.py \
+  --output-root .eval-data/fleurs/test-small \
+  --split test \
+  --per-language 3
+
+python3 Scripts/evals/voice_corpus_guard.py \
+  --manifest .eval-data/fleurs/test-small/manifest.jsonl \
+  --require-audio
+```
+
+The generated manifest freezes the original FLEURS transcripts as
+`human-confirmed`, assigns every row to `release-test`, and records an audio hash.
+It is evaluation evidence, never teacher or fine-tuning input.
+
 ## Your private gold set
 
 Public corpora will not reproduce your microphone, room, vocabulary, pace, or Hindi–English switching style. Keep at least 100 private, speaker-consented clips under `.eval-data/private/`:
@@ -92,6 +110,7 @@ Engine choices mirror the product paths:
 - `meeting` — timestamped Whisper primary, quality Qwen cross-check; the default for imported meetings.
 - `qwen` — isolate the quality multilingual recognizer.
 - `whisper` — isolate the timestamped recognizer and diarization path.
+- `whispercpp` — isolate the packaged full large-v3 whisper.cpp recognizer.
 
 `--language auto` is the default and is the correct setting for mixed Hindi and English. A manifest row may set `"language_hint":"hi"` or `"language_hint":"en"` only when the recording is intentionally single-language. `--data-directory` can point at an isolated model cache; otherwise the command reuses `~/Library/Application Support/OpenLoopADHD`.
 
